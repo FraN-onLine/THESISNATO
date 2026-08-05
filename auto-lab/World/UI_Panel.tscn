@@ -1,0 +1,140 @@
+[gd_scene format=3 uid="uid://b5gj205tvwy60"]
+
+[ext_resource type="Script" path="res://World/ui_panel.gd" id="1_script"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 44.0
+content_margin_top = 32.0
+content_margin_right = 44.0
+content_margin_bottom = 32.0
+bg_color = Color(0.06, 0.06, 0.12, 0.92)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_title"]
+content_margin_left = 26.0
+content_margin_top = 14.0
+content_margin_right = 26.0
+content_margin_bottom = 14.0
+bg_color = Color(0.2, 0.45, 1, 1)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
+bg_color = Color(0.16, 0.28, 0.62, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_pressed"]
+bg_color = Color(0.1, 0.19, 0.45, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_hover"]
+bg_color = Color(0.3, 0.48, 0.95, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_focus"]
+
+[node name="UI_Panel" type="Node3D" unique_id=343362384]
+script = ExtResource("1_script")
+
+[node name="SubViewport" type="SubViewport" parent="." unique_id=1709734943]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(800, 600)
+render_target_update_mode = 4
+
+[node name="Root" type="Control" parent="SubViewport" unique_id=1626632407]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="SubViewport/Root" unique_id=663933224]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="SubViewport/Root/Center" unique_id=180695644]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="SubViewport/Root/Center/Panel" unique_id=408760946]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleContainer" type="PanelContainer" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1869745976]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_title")
+
+[node name="Title" type="Label" parent="SubViewport/Root/Center/Panel/VBox/TitleContainer" unique_id=1646758593]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 48
+text = "AUTOLAB"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=734617099]
+custom_minimum_size = Vector2(420, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
+text = "Start Lab"
+
+[node name="SettingsButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1130738323]
+custom_minimum_size = Vector2(420, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
+text = "Settings"
+
+[node name="ExitButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=2040903818]
+custom_minimum_size = Vector2(420, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
+text = "Exit"
+
+[node name="Billboard" type="Sprite3D" parent="." unique_id=5861066]
+pixel_size = 0.002
+billboard = 1
