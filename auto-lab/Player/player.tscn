@@ -24,14 +24,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.31885153, 1.1049576, 0)
 [node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" unique_id=158534375]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.41287, -0.16621435, 0.034193337)
 
-[node name="XRController_left" type="XRController3D" parent="XROrigin3D" unique_id=6996086]
+[node name="XRController_left" type="XRController3D" parent="XROrigin3D" groups=["xr_controller"] unique_id=6996086]
 tracker = &"left_hand"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="XROrigin3D/XRController_left" unique_id=1749677841]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.27903685, -0.9475044, -0.2603796)
 mesh = SubResource("CapsuleMesh_qwc0f")
 
-[node name="XRController_right" type="XRController3D" parent="XROrigin3D" unique_id=2035881917]
+[node name="XRController_right" type="XRController3D" parent="XROrigin3D" groups=["xr_controller"] unique_id=2035881917]
 tracker = &"right_hand"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="XROrigin3D/XRController_right" unique_id=959447098]
