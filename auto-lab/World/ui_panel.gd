@@ -15,10 +15,12 @@ func _ready() -> void:
 	
 	# Connect button signals
 	var start_button: Button = viewport.get_node("Root/Center/Panel/VBox/StartButton")
+	var testing_button: Button = viewport.get_node("Root/Center/Panel/VBox/TestingButton")
 	var settings_button: Button = viewport.get_node("Root/Center/Panel/VBox/SettingsButton")
 	var exit_button: Button = viewport.get_node("Root/Center/Panel/VBox/ExitButton")
 	
 	start_button.pressed.connect(_on_start_pressed)
+	testing_button.pressed.connect(_on_testing_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 
@@ -177,6 +179,9 @@ func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 
 func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://Game/Game1.tscn")
+
+func _on_testing_pressed() -> void:
+	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
 
 func _on_settings_pressed() -> void:
 	# TODO: Implement settings menu

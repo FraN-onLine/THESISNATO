@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="AutoLab"
+config/name="Adapto: Automata"
 run/main_scene="uid://c326ospyjbb7v"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
