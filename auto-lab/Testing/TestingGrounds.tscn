@@ -124,6 +124,17 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stats"]
+content_margin_left = 18.0
+content_margin_top = 16.0
+content_margin_right = 18.0
+content_margin_bottom = 16.0
+bg_color = Color(0.04, 0.05, 0.1, 0.92)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
 [node name="TestingGrounds" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
@@ -144,7 +155,7 @@ script = ExtResource("1_script")
 [node name="SubViewport" type="SubViewport" parent="UI_Panel"]
 transparent_bg = true
 handle_input_locally = false
-size = Vector2i(1000, 700)
+size = Vector2i(1280, 900)
 render_target_update_mode = 4
 
 [node name="Root" type="Control" parent="UI_Panel/SubViewport"]
@@ -161,6 +172,7 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 320.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -301,9 +313,95 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Next"
 
+[node name="StatsPanel" type="PanelContainer" parent="UI_Panel/SubViewport/Root"]
+visible = true
+layout_mode = 1
+anchors_preset = 0
+anchor_top = 0.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 24.0
+offset_right = 296.0
+offset_bottom = -24.0
+grow_horizontal = 1
+grow_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_stats")
+
+[node name="StatsVBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/StatsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StatsTitle" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "SESSION STATS"
+horizontal_alignment = 1
+
+[node name="StatsMode" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "Mode: -"
+
+[node name="StatsAlgo" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "Algorithm: -"
+
+[node name="StatsPhase" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "Phase: -"
+
+[node name="StatsProgress" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "Progress: -"
+
+[node name="StatsScore" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 1, 0.7, 1)
+theme_override_font_sizes/font_size = 18
+text = "Score: -"
+
+[node name="StatsSkills" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.8, 0.95, 1)
+theme_override_font_sizes/font_size = 14
+text = "Skills:"
+autowrap_mode = 2
+
 [node name="Billboard" type="Sprite3D" parent="UI_Panel"]
 pixel_size = 0.002
 billboard = 1
+
+[node name="OverlayLayer" type="CanvasLayer" parent="UI_Panel"]
+; Full-screen overlay shown ONLY in desktop mode. It covers the whole window so
+; the Testing Grounds UI is easy to read/click without wearing a headset. In VR
+; mode this layer is hidden and the 3D Billboard above is used instead.
+layer = 10
+
+[node name="OverlayBG" type="ColorRect" parent="UI_Panel/OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.02, 0.07, 0.97)
+
+[node name="OverlayRect" type="TextureRect" parent="UI_Panel/OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 0
 
 [node name="AreaLight3D" type="AreaLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, -4)

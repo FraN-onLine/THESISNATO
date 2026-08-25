@@ -111,9 +111,9 @@ func _forward_hidden(input_vec: Array) -> Array:
 	var hidden := []
 	hidden.resize(HIDDEN_SIZE)
 	for j in range(HIDDEN_SIZE):
-		var sum := b1[j]
+		var sum: float = float(b1[j])
 		for i in range(INPUT_SIZE):
-			sum += input_vec[i] * w1[i][j]
+			sum += float(input_vec[i]) * float(w1[i][j])
 		hidden[j] = tanh(sum)
 	return hidden
 
@@ -122,9 +122,9 @@ func _forward_output(hidden: Array) -> Array:
 	var output := []
 	output.resize(OUTPUT_SIZE)
 	for j in range(OUTPUT_SIZE):
-		var sum := b2[j]
+		var sum: float = float(b2[j])
 		for i in range(HIDDEN_SIZE):
-			sum += hidden[i] * w2[i][j]
+			sum += float(hidden[i]) * float(w2[i][j])
 		output[j] = 1.0 / (1.0 + exp(-sum))
 	return output
 

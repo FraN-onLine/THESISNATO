@@ -18,6 +18,20 @@ const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 @onready var back_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/BackButton
 @onready var next_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/NextButton
 
+# Full-screen overlay references (desktop mode only)
+@onready var overlay_layer: CanvasLayer = $OverlayLayer
+@onready var overlay_rect: TextureRect = $OverlayLayer/OverlayRect
+
+# Statistics side-panel references
+@onready var stats_panel: PanelContainer = $SubViewport/Root/StatsPanel
+@onready var stats_title: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsTitle
+@onready var stats_algo: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsAlgo
+@onready var stats_phase: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsPhase
+@onready var stats_progress: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsProgress
+@onready var stats_score: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsScore
+@onready var stats_skills: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsSkills
+@onready var stats_mode: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsMode
+
 # Session manager
 var session: SessionManager
 
@@ -25,12 +39,17 @@ var session: SessionManager
 var _last_mouse_pos := Vector2(-1, -1)
 var _is_pressed := false
 var _lasers := {}
+var _desktop_mouse_down := false
 
 # Profile setup state
 var _profile_name: String = ""
 var _profile_gender: String = "Male"
 var _profile_age: int = 18
 var _profile_familiar: bool = false
+# The age is entered through an on-screen keypad. Because the keypad edits a
+# string (digits get appended / removed) we keep the raw text here and only
+# convert it to an int when the user presses Continue.
+var _profile_age_str: String = ""
 
 # Adaptive learning state
 var _learning_skill: String = ""
@@ -49,34 +68,68 @@ var _analysis_skills: Array = []
 var _results: Dictionary = {}
 
 func _ready() -> void:
+	# Hook the SubViewport's rendered texture to either the 3D Billboard (VR) or
+	# the full-screen OverlayRect (desktop). One of them shows the same UI.
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
-	
+	if overlay_rect:
+		overlay_rect.texture = viewport.get_texture()
+
+	# Desktop mode → show the full-screen overlay (hide the 3D billboard) and
+	# disable the walk-around player so WASD doesn't move while typing/clicking.
+	# VR mode → hide the overlay and keep the billboard + joystick locomotion.
+	if InputMode.is_desktop():
+		if overlay_layer:
+			overlay_layer.visible = true
+		if sprite:
+			sprite.visible = false
+		# Freeze the player body (a child of the scene root) so its desktop
+		# camera stays put behind the full-screen overlay.
+		var player := get_node_or_null("../CharacterBody3D")
+		if player:
+			player.set_physics_process(false)
+			player.set_process(false)
+	else:
+		if overlay_layer:
+			overlay_layer.visible = false
+		if sprite:
+			sprite.visible = true
+
 	# Connect buttons
 	back_button.pressed.connect(_on_back_pressed)
 	next_button.pressed.connect(_on_next_pressed)
-	
+
 	# Initialize session
 	session = SessionManager.new()
-	
+
 	# Show the main menu
 	_show_main_menu()
 
 func _process(_delta: float) -> void:
 	_update_pointer()
+	_update_stats_panel()
+
+func _input(event: InputEvent) -> void:
+	# Track the real left mouse button so Desktop mode can click the panel.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_desktop_mouse_down = event.pressed
+	# In desktop mode forward keyboard input to the SubViewport so text fields
+	# (e.g. the name LineEdit) can be typed normally on a physical keyboard.
+	if InputMode.is_desktop():
+		_forward_keyboard(event)
 
 # ===== UI NAVIGATION =====
 
 func _show_main_menu() -> void:
 	title_label.text = "TESTING GROUNDS"
 	_clear_content()
-	
+
 	question_label.text = "Welcome to the DFA Testing Grounds!\n\nThis system will guide you through:\n1. Pretest (30 questions)\n2. Knowledge Analysis\n3. Adaptive Learning\n4. Post Test\n\nSelect an algorithm to begin:"
 	question_label.visible = true
-	
+
 	# Create algorithm selection buttons
 	_create_algorithm_buttons()
-	
+
 	feedback_label.text = ""
 	progress_label.text = ""
 	back_button.visible = true
@@ -85,13 +138,13 @@ func _show_main_menu() -> void:
 
 func _create_algorithm_buttons() -> void:
 	_clear_options()
-	
+
 	var algorithms := [
 		{"name": "HMM (Hidden Markov Model)", "type": 0, "desc": "Tracks knowledge per skill using hidden states"},
 		{"name": "BKT (Bayesian Knowledge Tracing)", "type": 1, "desc": "Classic BKT with 4 parameters per skill"},
 		{"name": "DKT (Deep Knowledge Tracing)", "type": 2, "desc": "Neural network-based knowledge tracing"}
 	]
-	
+
 	for algo in algorithms:
 		var btn := Button.new()
 		btn.text = algo["name"] + "\n" + algo["desc"]
@@ -109,7 +162,7 @@ func _create_algorithm_buttons() -> void:
 
 func _on_algorithm_selected(algo_type: int) -> void:
 	session.set_algorithm_type(algo_type)
-	
+
 	if session.needs_profile_setup():
 		_show_profile_setup()
 	else:
@@ -120,18 +173,23 @@ func _on_algorithm_selected(algo_type: int) -> void:
 func _show_profile_setup() -> void:
 	title_label.text = "PROFILE SETUP"
 	_clear_content()
-	
+
+	# Reset the keypad state so a previously entered (partial) age doesn't leak
+	# in when the user opens the profile screen again.
+	_profile_age_str = ""
+	_profile_age = 18
+
 	question_label.text = "Please enter your details before starting the pretest:"
 	question_label.visible = true
 	_clear_options()
-	
+
 	# Name input
 	var name_label := Label.new()
 	name_label.text = "Name:"
 	name_label.add_theme_font_size_override("font_size", 18)
 	name_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	options_box.add_child(name_label)
-	
+
 	var name_input := LineEdit.new()
 	name_input.placeholder_text = "Enter your name"
 	name_input.custom_minimum_size = Vector2(800, 40)
@@ -140,18 +198,18 @@ func _show_profile_setup() -> void:
 	name_input.add_theme_stylebox_override("focus", _create_input_style())
 	name_input.text_changed.connect(func(text): _profile_name = text)
 	options_box.add_child(name_input)
-	
+
 	# Gender selection
 	var gender_label := Label.new()
 	gender_label.text = "Gender:"
 	gender_label.add_theme_font_size_override("font_size", 18)
 	gender_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	options_box.add_child(gender_label)
-	
+
 	var gender_box := HBoxContainer.new()
 	gender_box.add_theme_constant_override("separation", 10)
 	options_box.add_child(gender_box)
-	
+
 	var male_btn := Button.new()
 	male_btn.text = "Male"
 	male_btn.custom_minimum_size = Vector2(390, 40)
@@ -163,7 +221,7 @@ func _show_profile_setup() -> void:
 	male_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	male_btn.pressed.connect(func(): _profile_gender = "Male")
 	gender_box.add_child(male_btn)
-	
+
 	var female_btn := Button.new()
 	female_btn.text = "Female"
 	female_btn.custom_minimum_size = Vector2(390, 40)
@@ -175,45 +233,143 @@ func _show_profile_setup() -> void:
 	female_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	female_btn.pressed.connect(func(): _profile_gender = "Female")
 	gender_box.add_child(female_btn)
-	
-	# Age input
+
+	# --- Age input via an on-screen numeric keypad ---
+	# A SpinBox relies on keyboard focus which is awkward on a panel (and
+	# impossible in VR), so we build a real numeric keypad instead. Tapping the
+	# digit buttons builds the age string one digit at a time, with Del/Clear
+	# to fix mistakes, and a live readout label shows the current value.
 	var age_label := Label.new()
 	age_label.text = "Age:"
 	age_label.add_theme_font_size_override("font_size", 18)
 	age_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	options_box.add_child(age_label)
-	
-	var age_input := SpinBox.new()
-	age_input.min_value = 5
-	age_input.max_value = 100
-	age_input.value = 18
-	age_input.custom_minimum_size = Vector2(800, 40)
-	age_input.add_theme_font_size_override("font_size", 18)
-	age_input.value_changed.connect(func(value): _profile_age = int(value))
-	options_box.add_child(age_input)
-	
-	# Familiarity toggle
+
+	# Live readout of the age currently being typed on the keypad.
+	var age_display := Label.new()
+	age_display.text = "-"
+	age_display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	age_display.add_theme_font_size_override("font_size", 34)
+	age_display.add_theme_color_override("font_color", Color(0.7, 0.9, 1, 1))
+	age_display.custom_minimum_size = Vector2(800, 50)
+	age_display.add_theme_stylebox_override("normal", _create_input_style())
+	options_box.add_child(age_display)
+
+	# Refresh the readout label after every keypad press.
+	var refresh_age := func():
+		age_display.text = _profile_age_str if _profile_age_str != "" else "-"
+
+	# Append a digit (capped at 3 digits so the age stays inside 5–100).
+	var press_digit := func(digit: String):
+		if _profile_age_str.length() < 3:
+			_profile_age_str += digit
+		refresh_age.call()
+
+	# Remove the trailing digit ("Del" button).
+	var press_back := func():
+		if _profile_age_str.length() > 0:
+			_profile_age_str = _profile_age_str.substr(0, _profile_age_str.length() - 1)
+			refresh_age.call()
+
+	# Clear the whole age ("C" button).
+	var press_clear := func():
+		_profile_age_str = ""
+		refresh_age.call()
+
+	# Helper that builds a styled keypad button.
+	var make_key := func(label: String) -> Button:
+		var kb := Button.new()
+		kb.text = label
+		kb.custom_minimum_size = Vector2(120, 46)
+		kb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		kb.add_theme_font_size_override("font_size", 22)
+		kb.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		kb.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+		kb.add_theme_color_override("font_pressed_color", Color(0.8, 0.85, 1, 1))
+		kb.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
+		kb.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+		kb.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+		kb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		return kb
+
+	# GridContainer arranges the keys 3 per row, centered under the readout.
+	var keypad := GridContainer.new()
+	keypad.columns = 3
+	keypad.add_theme_constant_override("h_separation", 10)
+	keypad.add_theme_constant_override("v_separation", 10)
+	keypad.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	options_box.add_child(keypad)
+
+	# Digits 1–9.
+	for d in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+		var kb := make_key.call(d)
+		kb.pressed.connect(press_digit.bind(d))
+		keypad.add_child(kb)
+
+	# Last keypad row: Del (backspace) / 0 / Clear.
+	var back := make_key.call("Del")
+	back.pressed.connect(press_back)
+	keypad.add_child(back)
+
+	var zero := make_key.call("0")
+	zero.pressed.connect(press_digit.bind("0"))
+	keypad.add_child(zero)
+
+	var clear := make_key.call("C")
+	clear.pressed.connect(press_clear)
+	keypad.add_child(clear)
+
+	# --- Familiarity: two explicit buttons (Yes / No) ---
+	# Two separate buttons are clearer than a single toggling button.
 	var familiar_label := Label.new()
 	familiar_label.text = "Are you familiar with Automata Theory?"
 	familiar_label.add_theme_font_size_override("font_size", 18)
 	familiar_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	options_box.add_child(familiar_label)
-	
-	var familiar_btn := Button.new()
-	familiar_btn.text = "No"
-	familiar_btn.custom_minimum_size = Vector2(800, 40)
-	familiar_btn.add_theme_font_size_override("font_size", 18)
-	familiar_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	familiar_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
-	familiar_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
-	familiar_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
-	familiar_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	familiar_btn.pressed.connect(func():
-		_profile_familiar = not _profile_familiar
-		familiar_btn.text = "Yes" if _profile_familiar else "No"
+
+	var familiar_box := HBoxContainer.new()
+	familiar_box.add_theme_constant_override("separation", 10)
+	options_box.add_child(familiar_box)
+
+	# Style two buttons; the currently-selected choice gets a green highlight so
+	# the user can always see which answer is active.
+	var style_familiar := func(yes: Button, no: Button):
+		var green := Color(0.1, 0.55, 0.35, 1)
+		var blue := Color(0.16, 0.28, 0.62, 1)
+		yes.add_theme_stylebox_override("normal", _create_button_style(green if _profile_familiar else blue))
+		no.add_theme_stylebox_override("normal", _create_button_style(blue if _profile_familiar else green))
+
+	var yes_btn := Button.new()
+	yes_btn.text = "Yes, familiar"
+	yes_btn.custom_minimum_size = Vector2(390, 44)
+	yes_btn.add_theme_font_size_override("font_size", 18)
+	yes_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	yes_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+	yes_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+	yes_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	familiar_box.add_child(yes_btn)
+
+	var no_btn := Button.new()
+	no_btn.text = "No, not familiar"
+	no_btn.custom_minimum_size = Vector2(390, 44)
+	no_btn.add_theme_font_size_override("font_size", 18)
+	no_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	no_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+	no_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+	no_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	familiar_box.add_child(no_btn)
+
+	# Apply the initial highlight and wire the two-button selection.
+	style_familiar.call(yes_btn, no_btn)
+	yes_btn.pressed.connect(func():
+		_profile_familiar = true
+		style_familiar.call(yes_btn, no_btn)
 	)
-	options_box.add_child(familiar_btn)
-	
+	no_btn.pressed.connect(func():
+		_profile_familiar = false
+		style_familiar.call(yes_btn, no_btn)
+	)
+
 	# Continue button
 	var continue_btn := Button.new()
 	continue_btn.text = "Continue"
@@ -226,7 +382,7 @@ func _show_profile_setup() -> void:
 	continue_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	continue_btn.pressed.connect(_on_profile_continue)
 	options_box.add_child(continue_btn)
-	
+
 	feedback_label.text = ""
 	progress_label.text = ""
 	back_button.visible = true
@@ -234,11 +390,24 @@ func _show_profile_setup() -> void:
 	next_button.visible = false
 
 func _on_profile_continue() -> void:
+	# Validate the name first.
 	if _profile_name.is_empty():
 		feedback_label.text = "Please enter your name."
 		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		return
-	
+
+	# Validate the age that was typed on the keypad (must be 5–100).
+	if _profile_age_str.is_empty():
+		feedback_label.text = "Please enter your age using the keypad."
+		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
+		return
+	var parsed_age := _profile_age_str.to_int()
+	if parsed_age < 5 or parsed_age > 100:
+		feedback_label.text = "Age must be between 5 and 100."
+		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
+		return
+	_profile_age = parsed_age
+
 	session.save_profile(_profile_name, _profile_gender, _profile_age, _profile_familiar)
 	feedback_label.text = ""
 	_show_pretest_intro()
@@ -248,11 +417,11 @@ func _on_profile_continue() -> void:
 func _show_pretest_intro() -> void:
 	title_label.text = "PRETEST"
 	_clear_content()
-	
+
 	question_label.text = "You will now take a 30-question pretest on DFA (Deterministic Finite Automata).\n\nThe questions cover 7 skill areas:\n• Simulation\n• Identification of Diagrams\n• DFA Definition and Parts\n• DFA Building\n• DFA from Regex\n• DFA from Set Builder\n• DFA from List\n\nAnswer each question to the best of your ability. Your results will determine your adaptive learning path."
 	question_label.visible = true
 	_clear_options()
-	
+
 	var start_btn := Button.new()
 	start_btn.text = "Start Pretest"
 	start_btn.custom_minimum_size = Vector2(800, 50)
@@ -264,7 +433,7 @@ func _show_pretest_intro() -> void:
 	start_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	start_btn.pressed.connect(_on_start_pretest)
 	options_box.add_child(start_btn)
-	
+
 	feedback_label.text = ""
 	progress_label.text = ""
 	back_button.visible = true
@@ -278,11 +447,11 @@ func _on_start_pretest() -> void:
 func _show_question() -> void:
 	title_label.text = "PRETEST"
 	_clear_content()
-	
+
 	var question: Dictionary = session.get_current_question()
 	question_label.text = "Question %d/%d\n\n%s" % [session.get_current_question_number(), session.get_total_questions(), question["question"]]
 	question_label.visible = true
-	
+
 	_clear_options()
 	var options: Array = question["options"]
 	for i in range(options.size()):
@@ -299,7 +468,7 @@ func _show_question() -> void:
 		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		btn.pressed.connect(_on_answer_selected.bind(i))
 		options_box.add_child(btn)
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Question %d of %d" % [session.get_current_question_number(), session.get_total_questions()]
 	back_button.visible = false
@@ -307,7 +476,7 @@ func _show_question() -> void:
 
 func _on_answer_selected(selected_index: int) -> void:
 	var result: Dictionary = session.submit_answer(selected_index)
-	
+
 	if result["complete"]:
 		if session.state == SessionManager.SessionState.ANALYSIS:
 			_show_analysis()
@@ -321,15 +490,15 @@ func _on_answer_selected(selected_index: int) -> void:
 func _show_analysis() -> void:
 	title_label.text = "KNOWLEDGE ANALYSIS"
 	_clear_content()
-	
+
 	var summary: Dictionary = session.get_analysis_summary()
 	_analysis_skills = session.get_skills_by_weakness()
 	_analysis_skill_index = 0
-	
+
 	question_label.text = "Based on your pretest results, here is your knowledge analysis:\n\n"
 	question_label.visible = true
 	_clear_options()
-	
+
 	# Build skill summary text
 	var summary_text := ""
 	for skill in _analysis_skills:
@@ -341,9 +510,9 @@ func _show_analysis() -> void:
 			data["accuracy_percentage"],
 			data["mastery_percentage"]
 		]
-	
+
 	question_label.text += summary_text + "\n\nYour weakest skill is: %s\n\nClick Next to begin adaptive learning." % QuestionBank.get_skill_name(_analysis_skills[0])
-	
+
 	back_button.visible = true
 	back_button.text = "Back"
 	next_button.visible = true
@@ -364,7 +533,7 @@ func _start_adaptive_learning() -> void:
 
 func _show_learning_phase(phase: int) -> void:
 	var skill_name: String = QuestionBank.get_skill_name(_learning_skill)
-	
+
 	match phase:
 		0: # Learning Objective
 			title_label.text = "LEARNING OBJECTIVE - %s" % skill_name
@@ -393,7 +562,7 @@ func _show_learning_content(content: String, next_text: String) -> void:
 	question_label.text = content
 	question_label.visible = true
 	_clear_options()
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Skill: %s" % QuestionBank.get_skill_name(_learning_skill)
 	back_button.visible = true
@@ -404,20 +573,20 @@ func _show_learning_content(content: String, next_text: String) -> void:
 func _show_challenge() -> void:
 	title_label.text = "INTERACTIVE CHALLENGE - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
-	
+
 	var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
 	if _challenge_index >= challenges.size():
 		# All challenges done
 		_show_challenge_feedback()
 		return
-	
+
 	_current_challenge = challenges[_challenge_index]
 	_challenge_answered = false
-	
+
 	question_label.text = "Challenge %d/%d\n\n%s" % [_challenge_index + 1, challenges.size(), _current_challenge["question"]]
 	question_label.visible = true
 	_clear_options()
-	
+
 	var options: Array = _current_challenge["options"]
 	for i in range(options.size()):
 		var btn := Button.new()
@@ -433,7 +602,7 @@ func _show_challenge() -> void:
 		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		btn.pressed.connect(_on_challenge_answer.bind(i))
 		options_box.add_child(btn)
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Skill: %s | Challenge %d/%d" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size()]
 	back_button.visible = false
@@ -444,19 +613,19 @@ func _on_challenge_answer(selected_index: int) -> void:
 		return
 	_challenge_answered = true
 	_challenge_total += 1
-	
+
 	var correct: bool = selected_index == _current_challenge["correct"]
 	if correct:
 		_challenge_correct += 1
-	
+
 	# Record observation in the knowledge tracer
 	session.knowledge_tracer.record_observation(_learning_skill, correct)
-	
+
 	# Show feedback
 	feedback_label.text = "Correct!" if correct else "Incorrect."
 	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 	feedback_label.text += "\n\n" + _current_challenge["explanation"]
-	
+
 	# Show next button
 	next_button.visible = true
 	next_button.text = "Next Challenge"
@@ -465,14 +634,14 @@ func _on_challenge_answer(selected_index: int) -> void:
 func _show_challenge_feedback() -> void:
 	title_label.text = "CHALLENGE FEEDBACK - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
-	
+
 	var percentage: float = 0.0
 	if _challenge_total > 0:
 		percentage = float(_challenge_correct) / float(_challenge_total) * 100.0
-	
+
 	var knowledge: float = session.knowledge_tracer.get_mastery_percentage(_learning_skill)
 	var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
-	
+
 	question_label.text = "You answered %d/%d challenges correctly (%.1f%%).\n\nCurrent knowledge level: %.1f%%\n\n%s" % [
 		_challenge_correct,
 		_challenge_total,
@@ -482,7 +651,7 @@ func _show_challenge_feedback() -> void:
 	]
 	question_label.visible = true
 	_clear_options()
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Skill: %s" % QuestionBank.get_skill_name(_learning_skill)
 	back_button.visible = true
@@ -493,10 +662,10 @@ func _show_challenge_feedback() -> void:
 func _show_learning_end() -> void:
 	title_label.text = "SKILL COMPLETE - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
-	
+
 	var knowledge: float = session.knowledge_tracer.get_mastery_percentage(_learning_skill)
 	var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
-	
+
 	question_label.text = "You have completed the learning activity for %s.\n\nCurrent knowledge level: %.1f%%\n\n%s" % [
 		QuestionBank.get_skill_name(_learning_skill),
 		knowledge,
@@ -504,7 +673,7 @@ func _show_learning_end() -> void:
 	]
 	question_label.visible = true
 	_clear_options()
-	
+
 	# Check if there are more weak skills to learn
 	_analysis_skill_index += 1
 	if _analysis_skill_index < _analysis_skills.size():
@@ -519,7 +688,7 @@ func _show_learning_end() -> void:
 	else:
 		question_label.text += "\n\nAll skills have been covered."
 		next_button.text = "Proceed to Post Test"
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Adaptive Learning Progress"
 	back_button.visible = true
@@ -528,7 +697,7 @@ func _show_learning_end() -> void:
 
 func _on_learning_next() -> void:
 	var phase: int = session.get_learning_phase()
-	
+
 	match phase:
 		0, 1, 2, 3, 4:
 			session.advance_learning_phase()
@@ -568,11 +737,11 @@ func _start_posttest() -> void:
 func _show_posttest_question() -> void:
 	title_label.text = "POST TEST"
 	_clear_content()
-	
+
 	var question: Dictionary = session.get_current_question()
 	question_label.text = "Question %d/%d\n\n%s" % [session.get_current_question_number(), session.get_total_questions(), question["question"]]
 	question_label.visible = true
-	
+
 	_clear_options()
 	var options: Array = question["options"]
 	for i in range(options.size()):
@@ -589,7 +758,7 @@ func _show_posttest_question() -> void:
 		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		btn.pressed.connect(_on_posttest_answer.bind(i))
 		options_box.add_child(btn)
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Post Test: Question %d of %d" % [session.get_current_question_number(), session.get_total_questions()]
 	back_button.visible = false
@@ -597,7 +766,7 @@ func _show_posttest_question() -> void:
 
 func _on_posttest_answer(selected_index: int) -> void:
 	var result: Dictionary = session.submit_answer(selected_index)
-	
+
 	if result["complete"]:
 		_show_results()
 	else:
@@ -608,32 +777,32 @@ func _on_posttest_answer(selected_index: int) -> void:
 func _show_results() -> void:
 	title_label.text = "RESULTS"
 	_clear_content()
-	
+
 	_results = session.get_posttest_results()
 	session.save_session_data()
-	
+
 	var pretest: Dictionary = _results["pretest"]
 	var posttest: Dictionary = _results["posttest"]
-	
+
 	var text := "Pretest Results:\n"
 	text += "Score: %d/%d (%.1f%%)\n\n" % [pretest["correct"], pretest["total"], pretest["percentage"]]
-	
+
 	text += "Post Test Results:\n"
 	text += "Score: %d/%d (%.1f%%)\n\n" % [posttest["correct"], posttest["total"], posttest["percentage"]]
-	
+
 	var improvement: float = posttest["percentage"] - pretest["percentage"]
 	text += "Improvement: %+.1f%%\n\n" % improvement
-	
+
 	text += "Knowledge Summary:\n"
 	var summary: Dictionary = _results["knowledge_summary"]
 	for skill in summary:
 		var data: Dictionary = summary[skill]
 		text += "%s: %.1f%%\n" % [data["name"], data["mastery_percentage"]]
-	
+
 	question_label.text = text
 	question_label.visible = true
 	_clear_options()
-	
+
 	feedback_label.text = ""
 	progress_label.text = "Session Complete"
 	back_button.visible = true
@@ -646,7 +815,7 @@ func _on_back_pressed() -> void:
 	if back_button.text == "Back to Lab":
 		get_tree().change_scene_to_file("res://World/World.tscn")
 		return
-	
+
 	# Go back to main menu
 	_show_main_menu()
 
@@ -715,52 +884,186 @@ func _create_input_style() -> StyleBoxFlat:
 	style.content_margin_bottom = 8.0
 	return style
 
-# ===== VR POINTER =====
+# ===== UI POINTER =====
 
 func _update_pointer() -> void:
+	if InputMode.is_desktop():
+		_update_desktop_pointer()
+	else:
+		_update_vr_pointer()
+
+# ===== DESKTOP POINTER (mouse over the full-screen overlay) =====
+
+func _update_desktop_pointer() -> void:
+	# In desktop mode the Testing Grounds UI is drawn full-screen by the
+	# OverlayRect. We simply map the real OS mouse position into the SubViewport
+	# coordinate space through the overlay rectangle proportions, then push the
+	# equivalent mouse events so every button/option is directly clickable.
+	var mouse_screen := get_viewport().get_mouse_position()
+	var uv := Vector2(-1, -1)
+	if overlay_rect != null and overlay_rect.texture != null:
+		var rect := overlay_rect.get_global_rect()
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			var local := mouse_screen - rect.position
+			local.x = clampf(local.x, 0.0, rect.size.x)
+			local.y = clampf(local.y, 0.0, rect.size.y)
+			uv = Vector2(
+				local.x / rect.size.x * viewport.size.x,
+				local.y / rect.size.y * viewport.size.y
+			)
+
+	var on_panel := uv != Vector2(-1, -1)
+
+	if uv != _last_mouse_pos:
+		var motion := InputEventMouseMotion.new()
+		motion.position = uv
+		motion.global_position = uv
+		viewport.push_input(motion)
+		_last_mouse_pos = uv
+
+	if on_panel and _desktop_mouse_down and not _is_pressed:
+		var press := InputEventMouseButton.new()
+		press.button_index = MOUSE_BUTTON_LEFT
+		press.pressed = true
+		press.position = uv
+		press.global_position = uv
+		viewport.push_input(press)
+		_is_pressed = true
+	elif (not _desktop_mouse_down or not on_panel) and _is_pressed:
+		var release := InputEventMouseButton.new()
+		release.button_index = MOUSE_BUTTON_LEFT
+		release.pressed = false
+		release.position = uv
+		release.global_position = uv
+		viewport.push_input(release)
+		_is_pressed = false
+
+func _forward_keyboard(event: InputEvent) -> void:
+	# Route physical-keyboard typing into the SubViewport, but ONLY while a text
+	# field inside the UI has focus. This lets the user type their name normally
+	# while WASD/arrows are untouched everywhere else.
+	if not (event is InputEventKey):
+		return
+	var focus_owner: Control = viewport.gui_get_focus_owner()
+	if focus_owner == null:
+		return
+	if not (focus_owner is LineEdit or focus_owner is TextEdit):
+		return
+	viewport.push_input(event)
+
+func _update_stats_panel() -> void:
+	if stats_panel == null or session == null:
+		return
+	stats_panel.visible = true
+	stats_title.text = "SESSION STATS"
+	stats_mode.text = "Mode: %s" % InputMode.get_mode_name()
+
+	# --- Algorithm ---
+	var algo := "HMM"
+	if session.knowledge_tracer:
+		var at: int = session.knowledge_tracer.algorithm_type
+		if at == 1:
+			algo = "BKT"
+		elif at == 2:
+			algo = "DKT"
+	stats_algo.text = "Algorithm: %s" % algo
+
+	# --- Phase ---
+	var phase := "Main Menu"
+	match session.state:
+		SessionManager.SessionState.PROFILE_SETUP:
+			phase = "Profile Setup"
+		SessionManager.SessionState.PRETEST:
+			phase = "Pretest"
+		SessionManager.SessionState.ANALYSIS:
+			phase = "Knowledge Analysis"
+		SessionManager.SessionState.ADAPTIVE_LEARNING:
+			phase = "Adaptive Learning"
+		SessionManager.SessionState.POST_TEST:
+			phase = "Post Test"
+		SessionManager.SessionState.COMPLETE:
+			phase = "Complete"
+	stats_phase.text = "Phase: %s" % phase
+
+	# --- Progress ---
+	if session.state == SessionManager.SessionState.PRETEST or session.state == SessionManager.SessionState.POST_TEST:
+		stats_progress.text = "Progress: Q %d / %d" % [session.get_current_question_number(), session.get_total_questions()]
+	else:
+		stats_progress.text = "Progress: —"
+
+	# --- Score (accumulated correct answers) ---
+	var answered := 0
+	var correct := 0
+	for answer in session.pretest_answers:
+		answered += 1
+		if answer["correct"]:
+			correct += 1
+	for answer in session.posttest_answers:
+		answered += 1
+		if answer["correct"]:
+			correct += 1
+	var acc := 0.0
+	if answered > 0:
+		acc = float(correct) / float(answered) * 100.0
+	stats_score.text = "Score: %d/%d (%.0f%%)" % [correct, answered, acc]
+
+	# --- Per-skill accuracy ---
+	var summary: Dictionary = session.knowledge_tracer.get_full_summary() if session.knowledge_tracer else {}
+	var lines: Array[String] = []
+	for skill in summary:
+		var data: Dictionary = summary[skill]
+		lines.append("%s: %d/%d · %.0f%%" % [data["name"], data["correct"], data["total"], data["accuracy_percentage"]])
+	if lines.is_empty():
+		stats_skills.text = "Skills:\nNo data yet"
+	else:
+		stats_skills.text = "Skills (acc):\n" + "\n".join(lines)
+
+# ===== VR POINTER =====
+
+func _update_vr_pointer() -> void:
 	var controllers := get_tree().get_nodes_in_group("xr_controller")
 	var hit_any := false
 	var active_controller: XRController3D = null
 	var active_result: Dictionary = {}
-	
+
 	for controller in controllers:
 		if not (controller is XRController3D):
 			continue
-		
+
 		var laser := _ensure_laser(controller)
-		
+
 		if not controller.get_is_active():
 			laser.visible = false
 			continue
-		
+
 		var ray_origin: Vector3 = controller.global_position
 		var ray_dir: Vector3 = -controller.global_transform.basis.z
 		var result: Dictionary = _ray_intersect_sprite(ray_origin, ray_dir)
-		
+
 		if result.is_empty():
 			laser.visible = false
 			continue
-		
+
 		laser.visible = true
 		var distance: float = ray_origin.distance_to(result["hit"])
 		laser.position = Vector3(0, 0, -distance * 0.5)
 		laser.scale = Vector3(1, 1, distance)
-		
+
 		if not hit_any:
 			hit_any = true
 			active_controller = controller
 			active_result = result
-	
+
 	if hit_any and active_controller:
 		var mouse_pos := Vector2(active_result["uv"].x * viewport.size.x, active_result["uv"].y * viewport.size.y)
-		
+
 		if mouse_pos != _last_mouse_pos:
 			var motion := InputEventMouseMotion.new()
 			motion.position = mouse_pos
 			motion.global_position = mouse_pos
 			viewport.push_input(motion)
 			_last_mouse_pos = mouse_pos
-		
+
 		var trigger_down: bool = active_controller.is_button_pressed("trigger_click")
 		if trigger_down and not _is_pressed:
 			var press := InputEventMouseButton.new()
@@ -798,49 +1101,49 @@ func _update_pointer() -> void:
 func _ray_intersect_sprite(ray_origin: Vector3, ray_dir: Vector3) -> Dictionary:
 	if sprite == null or sprite.texture == null:
 		return {}
-	
+
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		return {}
-	
+
 	var sprite_pos: Vector3 = sprite.global_position
 	var plane_normal: Vector3 = (camera.global_position - sprite_pos).normalized()
 	var plane_point: Vector3 = sprite_pos
-	
+
 	var denom := plane_normal.dot(ray_dir)
 	if absf(denom) < 0.0001:
 		return {}
-	
+
 	var t := (plane_point - ray_origin).dot(plane_normal) / denom
 	if t < 0.0:
 		return {}
-	
+
 	var hit := ray_origin + ray_dir * t
 	var to_hit := hit - sprite_pos
-	
+
 	var camera_basis := camera.global_transform.basis
 	var right: Vector3 = camera_basis.x
 	var up: Vector3 = camera_basis.y
-	
+
 	var local_x := to_hit.dot(right)
 	var local_y := to_hit.dot(up)
-	
+
 	var tex_size := sprite.texture.get_size()
 	var quad_w := tex_size.x * sprite.pixel_size
 	var quad_h := tex_size.y * sprite.pixel_size
-	
+
 	if absf(local_x) > quad_w * 0.5 or absf(local_y) > quad_h * 0.5:
 		return {}
-	
+
 	var u := local_x / quad_w + 0.5
 	var v := 0.5 - local_y / quad_h
-	
+
 	return { "uv": Vector2(u, v), "hit": hit }
 
 func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 	if _lasers.has(controller):
 		return _lasers[controller]
-	
+
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.008, 0.008, 1.0)
