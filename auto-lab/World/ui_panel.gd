@@ -8,6 +8,8 @@ extends Node3D
 
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
+@onready var overlay_layer: CanvasLayer = $OverlayLayer
+@onready var overlay_rect: TextureRect = $OverlayLayer/OverlayRect
 
 var _last_mouse_pos := Vector2(-1, -1)
 var _is_pressed := false
@@ -17,16 +19,24 @@ var _desktop_mouse_down := false
 func _ready() -> void:
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
+	if overlay_rect:
+		overlay_rect.texture = viewport.get_texture()
+	if overlay_layer:
+		overlay_layer.visible = false
+	if sprite:
+		sprite.visible = true
 	
 	# Connect button signals
 	var start_button: Button = viewport.get_node("Root/Center/Panel/VBox/StartButton")
 	var testing_button: Button = viewport.get_node("Root/Center/Panel/VBox/TestingButton")
+	var workshop_button: Button = viewport.get_node("Root/Center/Panel/VBox/WorkshopButton")
 	var settings_button: Button = viewport.get_node("Root/Center/Panel/VBox/SettingsButton")
 	var mode_button: Button = viewport.get_node("Root/Center/Panel/VBox/ModeButton")
 	var exit_button: Button = viewport.get_node("Root/Center/Panel/VBox/ExitButton")
 	
 	start_button.pressed.connect(_on_start_pressed)
 	testing_button.pressed.connect(_on_testing_pressed)
+	workshop_button.pressed.connect(_on_workshop_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	if mode_button:
 		mode_button.pressed.connect(_on_mode_toggle_pressed)
@@ -39,6 +49,8 @@ func _input(event: InputEvent) -> void:
 		_desktop_mouse_down = event.pressed
 
 func _process(_delta: float) -> void:
+	if sprite:
+		sprite.rotation.y += _delta * 0.12
 	_update_pointer()
 
 func _update_mode_button_text(btn: Button) -> void:
@@ -105,6 +117,38 @@ func _update_desktop_pointer() -> void:
 		release.global_position = uv
 		viewport.push_input(release)
 		_is_pressed = false
+func _update_overlay_pointer() -> void:
+	var mouse_screen := get_viewport().get_mouse_position()
+	var uv := Vector2(-1, -1)
+	if overlay_rect and overlay_rect.visible:
+		var rect := overlay_rect.get_global_rect()
+		if rect.has_point(mouse_screen) and rect.size.x > 0.0 and rect.size.y > 0.0:
+			var local := mouse_screen - rect.position
+			uv = Vector2(local.x / rect.size.x * viewport.size.x, local.y / rect.size.y * viewport.size.y)
+	var on_panel := uv != Vector2(-1, -1)
+	if uv != _last_mouse_pos:
+		var motion := InputEventMouseMotion.new()
+		motion.position = uv
+		motion.global_position = uv
+		viewport.push_input(motion)
+		_last_mouse_pos = uv
+	if on_panel and _desktop_mouse_down and not _is_pressed:
+		var press := InputEventMouseButton.new()
+		press.button_index = MOUSE_BUTTON_LEFT
+		press.pressed = true
+		press.position = uv
+		press.global_position = uv
+		viewport.push_input(press)
+		_is_pressed = true
+	elif (not _desktop_mouse_down or not on_panel) and _is_pressed:
+		var release := InputEventMouseButton.new()
+		release.button_index = MOUSE_BUTTON_LEFT
+		release.pressed = false
+		release.position = uv
+		release.global_position = uv
+		viewport.push_input(release)
+		_is_pressed = false
+
 func _update_vr_pointer() -> void:
 	var controllers := get_tree().get_nodes_in_group("xr_controller")
 	var hit_any := false
@@ -260,6 +304,9 @@ func _on_start_pressed() -> void:
 
 func _on_testing_pressed() -> void:
 	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
+
+func _on_workshop_pressed() -> void:
+	get_tree().change_scene_to_file("res://Testing/AutomataWorkshopRoom.tscn")
 
 func _on_settings_pressed() -> void:
 	# TODO: Implement settings menu

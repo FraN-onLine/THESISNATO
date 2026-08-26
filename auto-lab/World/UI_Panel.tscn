@@ -65,7 +65,7 @@ script = ExtResource("1_script")
 [node name="SubViewport" type="SubViewport" parent="." unique_id=1709734943]
 transparent_bg = true
 handle_input_locally = false
-size = Vector2i(800, 600)
+size = Vector2i(2200, 1500)
 render_target_update_mode = 4
 
 [node name="Root" type="Control" parent="SubViewport" unique_id=1626632407]
@@ -104,17 +104,39 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
 theme_override_constants/shadow_offset_x = 2
 theme_override_constants/shadow_offset_y = 2
-theme_override_font_sizes/font_size = 40
+theme_override_font_sizes/font_size = 60
 text = "AUTOLAB"
 horizontal_alignment = 1
 
+[node name="Subtitle" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.82, 0.95, 1)
+theme_override_font_sizes/font_size = 24
+text = "DFA learning, simulation, and adaptive practice"
+horizontal_alignment = 1
+
+[node name="Topics" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 24
+text = "7 DFA TOPICS\nSimulation  |  Diagram Identification  |  Definition and Parts\nBuilding  |  From Regex  |  From Set Builder  |  From Lists"
+horizontal_alignment = 1
+
+[node name="MenuHint" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
+theme_override_font_sizes/font_size = 20
+text = "Choose Testing Grounds to begin the 30-question baseline and adaptive lesson path."
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="StartButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=734617099]
-custom_minimum_size = Vector2(480, 96)
+custom_minimum_size = Vector2(920, 112)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 46
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
@@ -122,25 +144,38 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Start Lab"
 
 [node name="TestingButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=734617100]
-custom_minimum_size = Vector2(480, 96)
+custom_minimum_size = Vector2(920, 92)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 46
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Testing Grounds"
 
-[node name="SettingsButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1130738323]
-custom_minimum_size = Vector2(480, 96)
+[node name="WorkshopButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(920, 92)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 34
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
+text = "Automata Workshop"
+
+[node name="SettingsButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1130738323]
+custom_minimum_size = Vector2(920, 92)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 46
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
@@ -148,12 +183,12 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Settings"
 
 [node name="ModeButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox"]
-custom_minimum_size = Vector2(480, 96)
+custom_minimum_size = Vector2(920, 72)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 26
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
@@ -161,12 +196,12 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Controls: Keyboard + Mouse (WASD)"
 
 [node name="ExitButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=2040903818]
-custom_minimum_size = Vector2(480, 96)
+custom_minimum_size = Vector2(920, 92)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 46
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
@@ -174,5 +209,25 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Exit"
 
 [node name="Billboard" type="Sprite3D" parent="." unique_id=5861066]
-pixel_size = 0.002
+pixel_size = 0.004
 billboard = 1
+
+[node name="OverlayLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="OverlayBG" type="ColorRect" parent="./OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.02, 0.07, 0.97)
+
+[node name="OverlayRect" type="TextureRect" parent="./OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 0

@@ -1,0 +1,138 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="StandardMaterial3D" id="mat_floor"]
+albedo_color = Color(0.08, 0.14, 0.2, 1)
+metallic = 0.25
+roughness = 0.7
+
+[sub_resource type="StandardMaterial3D" id="mat_station"]
+albedo_color = Color(0.1, 0.45, 0.55, 1)
+emission_enabled = true
+emission = Color(0.02, 0.2, 0.25, 1)
+emission_energy_multiplier = 1.5
+
+[sub_resource type="BoxMesh" id="mesh_floor"]
+size = Vector3(18, 0.2, 50)
+
+[node name="LessonRoom" type="Node3D"]
+
+[node name="Floor" type="CSGBox3D" parent="."]
+position = Vector3(0, -0.1, -20)
+size = Vector3(18, 0.2, 50)
+material = SubResource("mat_floor")
+use_collision = true
+
+[node name="AutomataStation" type="CSGBox3D" parent="."]
+position = Vector3(-4, 1.2, -5)
+size = Vector3(3.2, 2.4, 0.8)
+material = SubResource("mat_station")
+use_collision = true
+
+[node name="RegexStation" type="CSGBox3D" parent="."]
+position = Vector3(0, 1.2, -11)
+size = Vector3(3.2, 2.4, 0.8)
+material = SubResource("mat_station")
+use_collision = true
+
+[node name="SetBuilderStation" type="CSGBox3D" parent="."]
+position = Vector3(4, 1.2, -17)
+size = Vector3(3.2, 2.4, 0.8)
+material = SubResource("mat_station")
+use_collision = true
+
+[node name="WorkshopWall" type="CSGBox3D" parent="."]
+position = Vector3(0, 2.5, -8.35)
+size = Vector3(8.5, 5.0, 0.3)
+material = SubResource("mat_floor")
+use_collision = true
+
+[node name="RoomMarker" type="Label3D" parent="."]
+position = Vector3(0, 3.4, -2)
+text = "DFA LESSON HALL  |  FOLLOW THE TOPIC ORDER"
+font_size = 48
+outline_size = 12
+modulate = Color(0.7, 0.9, 1, 1)
+
+[node name="TopicSimulation" type="Label3D" parent="."]
+position = Vector3(-4, 3.2, -5)
+text = "01  SIMULATION"
+font_size = 34
+outline_size = 8
+
+[node name="TopicSimulationInfo" type="Label3D" parent="."]
+position = Vector3(-4, 2.7, -5)
+text = "Trace strings through states and decide accept or reject"
+font_size = 20
+outline_size = 5
+
+[node name="TopicIdentification" type="Label3D" parent="."]
+position = Vector3(0, 3.2, -11)
+text = "02  DIAGRAM IDENTIFICATION"
+font_size = 34
+outline_size = 8
+
+[node name="TopicIdentificationInfo" type="Label3D" parent="."]
+position = Vector3(0, 2.7, -11)
+text = "Recognize DFA structure and distinguish NFA choices"
+font_size = 20
+outline_size = 5
+
+[node name="TopicDefinition" type="Label3D" parent="."]
+position = Vector3(4, 3.2, -17)
+text = "03  DFA DEFINITION AND PARTS"
+font_size = 34
+outline_size = 8
+
+[node name="TopicDefinitionInfo" type="Label3D" parent="."]
+position = Vector3(4, 2.7, -17)
+text = "Learn Q, alphabet, delta, start state, and finals"
+font_size = 20
+outline_size = 5
+
+[node name="TopicBuilding" type="Label3D" parent="."]
+position = Vector3(-4, 3.2, -23)
+text = "04  DFA BUILDING"
+font_size = 34
+outline_size = 8
+
+[node name="TopicBuildingInfo" type="Label3D" parent="."]
+position = Vector3(-4, 2.7, -23)
+text = "Design states, transitions, and accepting behavior"
+font_size = 20
+outline_size = 5
+
+[node name="TopicRegex" type="Label3D" parent="."]
+position = Vector3(0, 3.2, -29)
+text = "05  DFA FROM REGEX"
+font_size = 34
+outline_size = 8
+
+[node name="TopicRegexInfo" type="Label3D" parent="."]
+position = Vector3(0, 2.7, -29)
+text = "Translate patterns into machines"
+font_size = 20
+outline_size = 5
+
+[node name="TopicSetBuilder" type="Label3D" parent="."]
+position = Vector3(4, 3.2, -35)
+text = "06  DFA FROM SET BUILDER"
+font_size = 34
+outline_size = 8
+
+[node name="TopicSetBuilderInfo" type="Label3D" parent="."]
+position = Vector3(4, 2.7, -35)
+text = "Turn language conditions into DFA rules"
+font_size = 20
+outline_size = 5
+
+[node name="TopicList" type="Label3D" parent="."]
+position = Vector3(0, 3.2, -41)
+text = "07  DFA FROM LISTS"
+font_size = 34
+outline_size = 8
+
+[node name="TopicListInfo" type="Label3D" parent="."]
+position = Vector3(0, 2.7, -41)
+text = "Infer the language hidden in accepted examples"
+font_size = 20
+outline_size = 5

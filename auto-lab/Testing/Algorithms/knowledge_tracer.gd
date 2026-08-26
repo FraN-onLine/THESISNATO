@@ -17,6 +17,7 @@ var dkt_model = null              # single DKT network
 
 # Per-skill question statistics
 var skill_stats: Dictionary = {}  # skill -> {correct: int, total: int}
+var learning_stats: Dictionary = {}  # skill -> {correct: int, total: int}
 
 func _init(algo_type: int = AlgorithmType.HMM) -> void:
 	algorithm_type = algo_type
@@ -26,11 +27,13 @@ func _initialize_models() -> void:
 	hmm_models.clear()
 	bkt_models.clear()
 	skill_stats.clear()
+	learning_stats.clear()
 	
 	for skill in SKILL_ORDER:
 		hmm_models[skill] = load("res://Testing/Algorithms/hmm.gd").new()
 		bkt_models[skill] = load("res://Testing/Algorithms/bkt.gd").new()
 		skill_stats[skill] = {"correct": 0, "total": 0}
+		learning_stats[skill] = {"correct": 0, "total": 0}
 	
 	dkt_model = load("res://Testing/Algorithms/dkt.gd").new()
 
@@ -55,6 +58,19 @@ func record_observation(skill: String, correct: bool) -> void:
 	if dkt_model:
 		dkt_model.update(skill, correct)
 
+## Mark the start of adaptive evidence for a skill without discarding its pretest model.
+func begin_learning(skill: String) -> void:
+	learning_stats[skill] = {"correct": 0, "total": 0}
+
+## Record an adaptive observation separately from the pretest baseline.
+func record_learning_observation(skill: String, correct: bool) -> void:
+	record_observation(skill, correct)
+	if not learning_stats.has(skill):
+		learning_stats[skill] = {"correct": 0, "total": 0}
+	learning_stats[skill]["total"] += 1
+	if correct:
+		learning_stats[skill]["correct"] += 1
+
 ## Get the knowledge probability for a skill using the active algorithm
 func get_knowledge_probability(skill: String) -> float:
 	match algorithm_type:
@@ -75,7 +91,10 @@ func get_mastery_percentage(skill: String) -> float:
 
 ## Check if a skill is learned
 func is_learned(skill: String, threshold: float = 0.7) -> bool:
-	return get_knowledge_probability(skill) >= threshold
+	# A correct response alone is not mastery. Require repeated adaptive evidence
+	# while still using the pretest observations as the model's starting point.
+	var evidence: Dictionary = learning_stats.get(skill, {"total": 0})
+	return evidence.get("total", 0) >= 3 and get_knowledge_probability(skill) >= threshold
 
 ## Get the expected accuracy for a skill
 func get_expected_accuracy(skill: String) -> float:
@@ -156,6 +175,7 @@ func to_dict() -> Dictionary:
 	var data := {
 		"algorithm_type": algorithm_type,
 		"skill_stats": skill_stats,
+			"learning_stats": learning_stats,
 		"hmm_models": {},
 		"bkt_models": {},
 		"dkt_model": null
@@ -176,11 +196,14 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	algorithm_type = data.get("algorithm_type", AlgorithmType.HMM)
 	skill_stats = data.get("skill_stats", {})
+	learning_stats = data.get("learning_stats", {})
 	
 	# Ensure all skills have stats
 	for skill in SKILL_ORDER:
 		if not skill_stats.has(skill):
 			skill_stats[skill] = {"correct": 0, "total": 0}
+		if not learning_stats.has(skill):
+			learning_stats[skill] = {"correct": 0, "total": 0}
 	
 	# Load HMM models
 	var hmm_data: Dictionary = data.get("hmm_models", {})

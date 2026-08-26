@@ -17,6 +17,7 @@ const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 @onready var progress_label: Label = $SubViewport/Root/Center/Panel/VBox/Content/ProgressLabel
 @onready var back_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/BackButton
 @onready var next_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/NextButton
+@onready var workshop: Node3D = $AutomataWorkshopWhiteboard
 
 # Full-screen overlay references (desktop mode only)
 @onready var overlay_layer: CanvasLayer = $OverlayLayer
@@ -63,49 +64,42 @@ var _handholding: bool = false
 # Analysis state
 var _analysis_skill_index: int = 0
 var _analysis_skills: Array = []
+var _adaptive_review_pass: bool = false
 
 # Results state
 var _results: Dictionary = {}
 
 func _ready() -> void:
-	# Hook the SubViewport's rendered texture to either the 3D Billboard (VR) or
-	# the full-screen OverlayRect (desktop). One of them shows the same UI.
+	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
 	if overlay_rect:
 		overlay_rect.texture = viewport.get_texture()
-
-	# Desktop mode → show the full-screen overlay (hide the 3D billboard) and
-	# disable the walk-around player so WASD doesn't move while typing/clicking.
-	# VR mode → hide the overlay and keep the billboard + joystick locomotion.
-	if InputMode.is_desktop():
-		if overlay_layer:
-			overlay_layer.visible = true
-		if sprite:
-			sprite.visible = false
-		# Freeze the player body (a child of the scene root) so its desktop
-		# camera stays put behind the full-screen overlay.
-		var player := get_node_or_null("../CharacterBody3D")
-		if player:
-			player.set_physics_process(false)
-			player.set_process(false)
-	else:
-		if overlay_layer:
-			overlay_layer.visible = false
-		if sprite:
-			sprite.visible = true
+	if overlay_layer:
+		overlay_layer.visible = false
+	if sprite:
+		sprite.visible = false
 
 	# Connect buttons
-	back_button.pressed.connect(_on_back_pressed)
-	next_button.pressed.connect(_on_next_pressed)
+	if back_button:
+		back_button.pressed.connect(_on_back_pressed)
+	if next_button:
+		next_button.pressed.connect(_on_next_pressed)
+	if workshop:
+		workshop.evaluated.connect(_on_workshop_evaluated)
+		workshop.visible = false
 
 	# Initialize session
 	session = SessionManager.new()
+	_enter_test_panel()
 
 	# Show the main menu
 	_show_main_menu()
 
 func _process(_delta: float) -> void:
+	if workshop and workshop.visible:
+		_update_stats_panel()
+		return
 	_update_pointer()
 	_update_stats_panel()
 
@@ -129,7 +123,6 @@ func _show_main_menu() -> void:
 
 	# Create algorithm selection buttons
 	_create_algorithm_buttons()
-
 	feedback_label.text = ""
 	progress_label.text = ""
 	back_button.visible = true
@@ -162,11 +155,8 @@ func _create_algorithm_buttons() -> void:
 
 func _on_algorithm_selected(algo_type: int) -> void:
 	session.set_algorithm_type(algo_type)
-
-	if session.needs_profile_setup():
-		_show_profile_setup()
-	else:
-		_show_pretest_intro()
+	# Collect current credentials for every run so the exported session data is complete.
+	_show_profile_setup()
 
 # ===== PROFILE SETUP =====
 
@@ -206,33 +196,48 @@ func _show_profile_setup() -> void:
 	gender_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	options_box.add_child(gender_label)
 
+	# GENDER: two explicit buttons. The currently-selected option is highlighted
+	# green so the user can always see which one is active (the previous version
+	# styled both buttons identically, making selection invisible/broken).
 	var gender_box := HBoxContainer.new()
 	gender_box.add_theme_constant_override("separation", 10)
 	options_box.add_child(gender_box)
 
 	var male_btn := Button.new()
-	male_btn.text = "Male"
-	male_btn.custom_minimum_size = Vector2(390, 40)
-	male_btn.add_theme_font_size_override("font_size", 18)
-	male_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	male_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
-	male_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
-	male_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
-	male_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	male_btn.pressed.connect(func(): _profile_gender = "Male")
-	gender_box.add_child(male_btn)
-
 	var female_btn := Button.new()
+	var gender_group := ButtonGroup.new()
+
+	# Recolour both buttons so the active gender is green and the other blue.
+	var style_gender := func():
+		var green := Color(0.1, 0.55, 0.35, 1)
+		var blue := Color(0.16, 0.28, 0.62, 1)
+		male_btn.add_theme_stylebox_override("normal", _create_button_style(green if _profile_gender == "Male" else blue))
+		female_btn.add_theme_stylebox_override("normal", _create_button_style(green if _profile_gender == "Female" else blue))
+
+	for btn in [male_btn, female_btn]:
+		btn.custom_minimum_size = Vector2(390, 44)
+		btn.toggle_mode = true
+		btn.button_group = gender_group
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+		btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+		btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		gender_box.add_child(btn)
+
+	male_btn.text = "Male"
 	female_btn.text = "Female"
-	female_btn.custom_minimum_size = Vector2(390, 40)
-	female_btn.add_theme_font_size_override("font_size", 18)
-	female_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	female_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
-	female_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
-	female_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
-	female_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	female_btn.pressed.connect(func(): _profile_gender = "Female")
-	gender_box.add_child(female_btn)
+	male_btn.button_pressed = true
+	style_gender.call()
+	male_btn.pressed.connect(func():
+		_profile_gender = "Male"
+		style_gender.call()
+	)
+	female_btn.pressed.connect(func():
+		_profile_gender = "Female"
+		style_gender.call()
+	)
 
 	# --- Age input via an on-screen numeric keypad ---
 	# A SpinBox relies on keyboard focus which is awkward on a panel (and
@@ -442,6 +447,7 @@ func _show_pretest_intro() -> void:
 
 func _on_start_pretest() -> void:
 	session.start_pretest()
+	session.save_session_data()
 	_show_question()
 
 func _show_question() -> void:
@@ -488,14 +494,19 @@ func _on_answer_selected(selected_index: int) -> void:
 # ===== ANALYSIS =====
 
 func _show_analysis() -> void:
+	_enter_learning_room()
 	title_label.text = "KNOWLEDGE ANALYSIS"
 	_clear_content()
 
 	var summary: Dictionary = session.get_analysis_summary()
-	_analysis_skills = session.get_skills_by_weakness()
+	# get_skills_by_weakness() returns ALL 7 skills sorted weakest-first. We keep
+	# that order so adaptive learning COVERS every topic but starts by prioritising
+	# the topics the user was weakest on in the pretest.
+	_analysis_skills = ["simulation", "identification", "definition", "building", "regex", "set_builder", "list"]
 	_analysis_skill_index = 0
+	_adaptive_review_pass = false
 
-	question_label.text = "Based on your pretest results, here is your knowledge analysis:\n\n"
+	question_label.text = "Based on your pretest results (used to drive knowledge-tracing), here is your analysis:\n\n"
 	question_label.visible = true
 	_clear_options()
 
@@ -503,7 +514,7 @@ func _show_analysis() -> void:
 	var summary_text := ""
 	for skill in _analysis_skills:
 		var data: Dictionary = summary[skill]
-		summary_text += "%s: %d/%d (%.1f%%) - Knowledge: %.1f%%\n" % [
+		summary_text += "%s: %d/%d (%.1f%% accurate) - Know: %.1f%%\n" % [
 			data["name"],
 			data["correct"],
 			data["total"],
@@ -511,7 +522,7 @@ func _show_analysis() -> void:
 			data["mastery_percentage"]
 		]
 
-	question_label.text += summary_text + "\n\nYour weakest skill is: %s\n\nClick Next to begin adaptive learning." % QuestionBank.get_skill_name(_analysis_skills[0])
+	question_label.text += summary_text + "\n\nAdaptive learning will now COVER ALL %d topics, starting with your weakest skill (%s) and using your pretest performance as the knowledge model's basis.\n\nClick Next to begin." % [_analysis_skills.size(), QuestionBank.get_skill_name(_analysis_skills[0])]
 
 	back_button.visible = true
 	back_button.text = "Back"
@@ -521,6 +532,7 @@ func _show_analysis() -> void:
 # ===== ADAPTIVE LEARNING =====
 
 func _start_adaptive_learning() -> void:
+	_enter_learning_room()
 	_analysis_skill_index = 0
 	_learning_skill = _analysis_skills[_analysis_skill_index]
 	_challenge_index = 0
@@ -559,6 +571,8 @@ func _show_learning_phase(phase: int) -> void:
 
 func _show_learning_content(content: String, next_text: String) -> void:
 	_clear_content()
+	if sprite:
+		sprite.visible = true
 	question_label.text = content
 	question_label.visible = true
 	_clear_options()
@@ -573,7 +587,17 @@ func _show_learning_content(content: String, next_text: String) -> void:
 func _show_challenge() -> void:
 	title_label.text = "INTERACTIVE CHALLENGE - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
-
+	if workshop and _learning_skill in ["building", "regex", "set_builder"]:
+		_enter_learning_room()
+		workshop.visible = true
+		if sprite:
+			sprite.visible = false
+		_set_player_paused(true)
+		question_label.text = "Interactive workshop: build and test the automaton on the whiteboard."
+		question_label.visible = true
+		back_button.visible = false
+		next_button.visible = false
+		return
 	var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
 	if _challenge_index >= challenges.size():
 		# All challenges done
@@ -618,8 +642,8 @@ func _on_challenge_answer(selected_index: int) -> void:
 	if correct:
 		_challenge_correct += 1
 
-	# Record observation in the knowledge tracer
-	session.knowledge_tracer.record_observation(_learning_skill, correct)
+	# Record adaptive evidence separately from the pretest baseline.
+	session.knowledge_tracer.record_learning_observation(_learning_skill, correct)
 
 	# Show feedback
 	feedback_label.text = "Correct!" if correct else "Incorrect."
@@ -629,6 +653,20 @@ func _on_challenge_answer(selected_index: int) -> void:
 	# Show next button
 	next_button.visible = true
 	next_button.text = "Next Challenge"
+	back_button.visible = false
+
+func _on_workshop_evaluated(correct: bool, message: String) -> void:
+	if _challenge_answered:
+		return
+	_challenge_answered = true
+	_challenge_total += 1
+	if correct:
+		_challenge_correct += 1
+	session.knowledge_tracer.record_learning_observation(_learning_skill, correct)
+	feedback_label.text = ("Correct! " if correct else "Keep trying. ") + message
+	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
+	next_button.visible = true
+	next_button.text = "Next Workshop Task"
 	back_button.visible = false
 
 func _show_challenge_feedback() -> void:
@@ -674,19 +712,23 @@ func _show_learning_end() -> void:
 	question_label.visible = true
 	_clear_options()
 
-	# Check if there are more weak skills to learn
+	# Check if there are more skills to cover. Adaptive learning walks through
+	# ALL topics (weakest-first) so nothing is skipped; the "next" step is simply
+	# the next skill in the pretest-derived priority order.
 	_analysis_skill_index += 1
 	if _analysis_skill_index < _analysis_skills.size():
 		var next_skill: String = _analysis_skills[_analysis_skill_index]
 		var next_knowledge: float = session.knowledge_tracer.get_mastery_percentage(next_skill)
-		if next_knowledge < 70.0:
-			question_label.text += "\n\nNext skill to learn: %s (%.1f%%)" % [QuestionBank.get_skill_name(next_skill), next_knowledge]
-			next_button.text = "Learn Next Skill"
-		else:
-			question_label.text += "\n\nAll weak skills have been addressed."
-			next_button.text = "Proceed to Post Test"
+		question_label.text += "\n\nNext topic to cover: %s (current knowledge %.1f%%)" % [QuestionBank.get_skill_name(next_skill), next_knowledge]
+		next_button.text = "Next Topic"
+	elif not _adaptive_review_pass:
+		_adaptive_review_pass = true
+		_analysis_skills = session.get_skills_by_weakness()
+		_analysis_skill_index = 0
+		question_label.text += "\n\nThe ordered DFA lesson is complete. Now adaptive review will revisit topics in pretest weakness order."
+		next_button.text = "Start Adaptive Review"
 	else:
-		question_label.text += "\n\nAll skills have been covered."
+		question_label.text += "\n\nAll seven topics and the adaptive review have now been covered."
 		next_button.text = "Proceed to Post Test"
 
 	feedback_label.text = ""
@@ -731,6 +773,7 @@ func _on_learning_next() -> void:
 # ===== POST TEST =====
 
 func _start_posttest() -> void:
+	_enter_test_panel()
 	session.start_posttest()
 	_show_posttest_question()
 
@@ -775,11 +818,13 @@ func _on_posttest_answer(selected_index: int) -> void:
 # ===== RESULTS =====
 
 func _show_results() -> void:
+	_enter_test_panel()
 	title_label.text = "RESULTS"
 	_clear_content()
 
 	_results = session.get_posttest_results()
 	session.save_session_data()
+	var report_path := session.generate_profile_pdf()
 
 	var pretest: Dictionary = _results["pretest"]
 	var posttest: Dictionary = _results["posttest"]
@@ -792,6 +837,7 @@ func _show_results() -> void:
 
 	var improvement: float = posttest["percentage"] - pretest["percentage"]
 	text += "Improvement: %+.1f%%\n\n" % improvement
+	text += "Profile report saved to: %s\n\n" % report_path
 
 	text += "Knowledge Summary:\n"
 	var summary: Dictionary = _results["knowledge_summary"]
@@ -826,7 +872,7 @@ func _on_next_pressed() -> void:
 		SessionManager.SessionState.ADAPTIVE_LEARNING:
 			if next_button.text == "Proceed to Post Test":
 				_start_posttest()
-			elif next_button.text == "Learn Next Skill":
+			elif next_button.text == "Learn Next Skill" or next_button.text == "Next Topic":
 				# Start learning the next weak skill
 				_learning_skill = _analysis_skills[_analysis_skill_index]
 				_challenge_index = 0
@@ -835,6 +881,7 @@ func _on_next_pressed() -> void:
 				_challenge_answered = false
 				_handholding = false
 				session.start_adaptive_learning(_learning_skill)
+				_enter_learning_room()
 				_show_learning_phase(0)
 			else:
 				_on_learning_next()
@@ -844,6 +891,9 @@ func _on_next_pressed() -> void:
 # ===== UI HELPERS =====
 
 func _clear_content() -> void:
+	if workshop:
+		workshop.visible = false
+	_set_player_paused(false)
 	question_label.text = ""
 	question_label.visible = false
 	_clear_options()
@@ -852,7 +902,37 @@ func _clear_content() -> void:
 
 func _clear_options() -> void:
 	for child in options_box.get_children():
+		options_box.remove_child(child)
 		child.queue_free()
+
+func _enter_learning_room() -> void:
+	# Learning happens in the walkable room. Only testing screens use the desktop overlay.
+	if overlay_layer:
+		overlay_layer.visible = false
+	if sprite:
+		sprite.visible = true
+	var player := get_node_or_null("../CharacterBody3D")
+	if player:
+		player.set_physics_process(true)
+		player.set_process(true)
+
+func _enter_test_panel() -> void:
+	if workshop:
+		workshop.visible = false
+	if overlay_layer:
+		overlay_layer.visible = true
+	if sprite:
+		sprite.visible = false
+	var player := get_node_or_null("../CharacterBody3D")
+	if player:
+		player.set_physics_process(false)
+		player.set_process(false)
+
+func _set_player_paused(paused: bool) -> void:
+	var player := get_node_or_null("../CharacterBody3D")
+	if player:
+		player.set_physics_process(not paused)
+		player.set_process(not paused)
 
 func _create_button_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -888,29 +968,59 @@ func _create_input_style() -> StyleBoxFlat:
 
 func _update_pointer() -> void:
 	if InputMode.is_desktop():
-		_update_desktop_pointer()
+		if overlay_layer and overlay_layer.visible:
+			_update_overlay_pointer()
+		else:
+			_update_desktop_pointer()
 	else:
 		_update_vr_pointer()
 
-# ===== DESKTOP POINTER (mouse over the full-screen overlay) =====
+# ===== DESKTOP POINTER =====
 
-func _update_desktop_pointer() -> void:
-	# In desktop mode the Testing Grounds UI is drawn full-screen by the
-	# OverlayRect. We simply map the real OS mouse position into the SubViewport
-	# coordinate space through the overlay rectangle proportions, then push the
-	# equivalent mouse events so every button/option is directly clickable.
+func _update_overlay_pointer() -> void:
 	var mouse_screen := get_viewport().get_mouse_position()
 	var uv := Vector2(-1, -1)
-	if overlay_rect != null and overlay_rect.texture != null:
+	if overlay_rect != null and overlay_rect.visible:
 		var rect := overlay_rect.get_global_rect()
-		if rect.size.x > 0.0 and rect.size.y > 0.0:
+		if rect.has_point(mouse_screen) and rect.size.x > 0.0 and rect.size.y > 0.0:
 			var local := mouse_screen - rect.position
-			local.x = clampf(local.x, 0.0, rect.size.x)
-			local.y = clampf(local.y, 0.0, rect.size.y)
-			uv = Vector2(
-				local.x / rect.size.x * viewport.size.x,
-				local.y / rect.size.y * viewport.size.y
-			)
+			uv = Vector2(local.x / rect.size.x * viewport.size.x, local.y / rect.size.y * viewport.size.y)
+	var on_panel := uv != Vector2(-1, -1)
+	if uv != _last_mouse_pos:
+		var motion := InputEventMouseMotion.new()
+		motion.position = uv
+		motion.global_position = uv
+		viewport.push_input(motion)
+		_last_mouse_pos = uv
+	if on_panel and _desktop_mouse_down and not _is_pressed:
+		var press := InputEventMouseButton.new()
+		press.button_index = MOUSE_BUTTON_LEFT
+		press.pressed = true
+		press.position = uv
+		press.global_position = uv
+		viewport.push_input(press)
+		_is_pressed = true
+	elif (not _desktop_mouse_down or not on_panel) and _is_pressed:
+		var release := InputEventMouseButton.new()
+		release.button_index = MOUSE_BUTTON_LEFT
+		release.pressed = false
+		release.position = uv
+		release.global_position = uv
+		viewport.push_input(release)
+		_is_pressed = false
+
+# ===== IN-ROOM DESKTOP POINTER (mouse ray-cast onto the billboard) =====
+
+func _update_desktop_pointer() -> void:
+	# Convert the desktop cursor into a camera ray and intersect the visible
+	# billboard, keeping interaction consistent with the VR controller ray.
+	var mouse_screen := get_viewport().get_mouse_position()
+	var uv := Vector2(-1, -1)
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	if camera != null and sprite != null and sprite.texture != null:
+		var result := _ray_intersect_sprite(camera.project_ray_origin(mouse_screen), camera.project_ray_normal(mouse_screen))
+		if not result.is_empty():
+			uv = Vector2(result["uv"].x * viewport.size.x, result["uv"].y * viewport.size.y)
 
 	var on_panel := uv != Vector2(-1, -1)
 

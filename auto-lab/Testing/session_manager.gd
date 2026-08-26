@@ -101,9 +101,11 @@ func submit_answer(selected_index: int) -> Dictionary:
 		pretest_answers.append(answer)
 		# Record observation in the knowledge tracer
 		knowledge_tracer.record_observation(skill, correct)
+		save_session_data()
 	elif state == SessionState.POST_TEST:
 		posttest_answers.append(answer)
 		knowledge_tracer.record_observation(skill, correct)
+		save_session_data()
 	
 	# Advance to next question
 	current_question_index += 1
@@ -140,6 +142,8 @@ func start_adaptive_learning(skill: String) -> void:
 	state = SessionState.ADAPTIVE_LEARNING
 	current_learning_skill = skill
 	learning_phase = 0
+	# Keep pretest evidence in the model, but start a fresh mastery evidence window.
+	knowledge_tracer.begin_learning(skill)
 
 ## Get the current learning phase
 func get_learning_phase() -> int:
@@ -239,6 +243,65 @@ func save_session_data() -> void:
 	if file:
 		file.store_string(JSON.stringify(data, "\t"))
 		file.close()
+	_write_json("user://pretest_data.json", {"profile": profile_manager.get_profile(), "answers": pretest_answers})
+	_write_json("user://posttest_data.json", {"profile": profile_manager.get_profile(), "answers": posttest_answers})
+
+func _write_json(path: String, data: Dictionary) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data, "\t"))
+		file.close()
+
+## Write a simple portable PDF report after the post-test is complete.
+func generate_profile_pdf() -> String:
+	var profile: Dictionary = profile_manager.get_profile()
+	var pretest := _calculate_test_results(pretest_answers)
+	var posttest := _calculate_test_results(posttest_answers)
+	var lines: Array[String] = [
+		"AUTOLAB PROFILE REPORT",
+		"Name: %s" % profile.get("name", ""),
+		"Gender: %s" % profile.get("gender", ""),
+		"Age: %s" % profile.get("age", ""),
+		"Familiar with automata: %s" % ("Yes" if profile.get("familiar_with_automata", false) else "No"),
+		"",
+		"Pretest: %d/%d (%.1f%%)" % [pretest["correct"], pretest["total"], pretest["percentage"]],
+		"Post-test: %d/%d (%.1f%%)" % [posttest["correct"], posttest["total"], posttest["percentage"]],
+		"",
+		"Skill summary:"
+	]
+	for skill in knowledge_tracer.SKILL_ORDER:
+		var stats: Dictionary = knowledge_tracer.get_skill_stats(skill)
+		var accuracy := float(stats["correct"]) / float(stats["total"]) * 100.0 if stats["total"] > 0 else 0.0
+		lines.append("%s: %d/%d (%.1f%%)" % [QuestionBank.get_skill_name(skill), stats["correct"], stats["total"], accuracy])
+
+	var content := "BT\n/F1 12 Tf\n50 760 Td\n"
+	for index in range(lines.size()):
+		var escaped := lines[index].replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+		content += "(%s) Tj\n0 -18 Td\n" % escaped
+	content += "ET\n"
+	var objects: Array[String] = [
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Length %d >>\nstream\n%sendstream" % [content.length(), content]
+	]
+	var pdf := "%PDF-1.4\n"
+	var offsets: Array[int] = [0]
+	for index in range(objects.size()):
+		offsets.append(pdf.to_utf8_buffer().size())
+		pdf += "%d 0 obj\n%s\nendobj\n" % [index + 1, objects[index]]
+	var xref_offset := pdf.to_utf8_buffer().size()
+	pdf += "xref\n0 %d\n0000000000 65535 f \n" % (objects.size() + 1)
+	for offset in offsets.slice(1):
+		pdf += "%010d 00000 n \n" % offset
+	pdf += "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % [objects.size() + 1, xref_offset]
+	var path := "user://profile_data.pdf"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_buffer(pdf.to_utf8_buffer())
+		file.close()
+	return path
 
 ## Load session data from JSON
 func load_session_data() -> bool:

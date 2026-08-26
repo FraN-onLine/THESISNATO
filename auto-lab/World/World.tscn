@@ -84,7 +84,7 @@ size = Vector3(31.530396, 24.289185, 47.579224)
 material = SubResource("StandardMaterial3D_qwc0f")
 
 [node name="UI_Panel" parent="." unique_id=650402445 instance=ExtResource("2_ui")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 2.2, -26)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 2.5, -18)
 
 [node name="AreaLight3D" type="AreaLight3D" parent="." unique_id=724342199]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 9, -20.3)
