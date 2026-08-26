@@ -302,20 +302,20 @@ func _show_profile_setup() -> void:
 
 	# Digits 1–9.
 	for d in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
-		var kb := make_key.call(d)
+		var kb: Button = make_key.call(d)
 		kb.pressed.connect(press_digit.bind(d))
 		keypad.add_child(kb)
 
 	# Last keypad row: Del (backspace) / 0 / Clear.
-	var back := make_key.call("Del")
+	var back: Button = make_key.call("Del")
 	back.pressed.connect(press_back)
 	keypad.add_child(back)
 
-	var zero := make_key.call("0")
+	var zero: Button = make_key.call("0")
 	zero.pressed.connect(press_digit.bind("0"))
 	keypad.add_child(zero)
 
-	var clear := make_key.call("C")
+	var clear: Button = make_key.call("C")
 	clear.pressed.connect(press_clear)
 	keypad.add_child(clear)
 

@@ -36,9 +36,4 @@ renderer/rendering_method.mobile="gl_compatibility"
 
 [xr]
 
-; XR is NOT force-enabled at engine startup anymore. This lets the game boot and
-; run cleanly on a normal desktop (no headset) without OpenXR warnings/errors.
-; The InputMode autoload lazily detects and initializes OpenXR at runtime when a
-; headset IS present, so AR/VR support keeps working when available.
-openxr/enabled=false
 shaders/enabled=true
