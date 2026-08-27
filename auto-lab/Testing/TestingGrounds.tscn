@@ -384,6 +384,13 @@ theme_override_font_sizes/font_size = 14
 text = "Skills:"
 autowrap_mode = 2
 
+[node name="StatsWorkshop" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.8, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "Whiteboard:"
+autowrap_mode = 2
+
 [node name="Billboard" type="Sprite3D" parent="UI_Panel"]
 pixel_size = 0.002
 billboard = 1

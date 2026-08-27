@@ -6,6 +6,54 @@ const SessionManager = preload("res://Testing/session_manager.gd")
 const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 
+# Whiteboard (automata builder) challenges the learner must construct on the real
+# board before the free-choice multiple-choice questions of that topic. Each one
+# carries the instruction plus the accept/reject test strings used by Check task.
+const WORKSHOP_TASKS := {
+	"building": [
+		{"instruction": "Build a DFA over {a,b} that ACCEPTS any string ending in 'ab' and REJECTS 'aa'.", "accepted": "ab", "rejected": "aa"},
+		{"instruction": "Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's.", "accepted": "aab", "rejected": "a"},
+	],
+	"regex": [
+		{"instruction": "Convert the regex a*b* into a DFA. ACCEPT 'aab', REJECT 'aba'.", "accepted": "aab", "rejected": "aba"},
+		{"instruction": "Convert the regex (a|b)*a into a DFA. ACCEPT 'bba', REJECT 'ab'.", "accepted": "bba", "rejected": "ab"},
+	],
+	"set_builder": [
+		{"instruction": "From {w over {0,1} : w contains '00'} build a DFA. ACCEPT '1001', REJECT '101'.", "accepted": "1001", "rejected": "101"},
+		{"instruction": "From {w over {a,b} : |w| is even} build a DFA. ACCEPT 'aa', REJECT 'a'.", "accepted": "aa", "rejected": "a"},
+	],
+	"simulation": [
+		{"instruction": "Build a DFA over {a,b} ACCEPTING 'ba' and REJECTING 'ab', then simulate both.", "accepted": "ba", "rejected": "ab"},
+		{"instruction": "Build a DFA over {a,b} ACCEPTING strings ending in 'a' and REJECTING 'bb'.", "accepted": "ba", "rejected": "bb"},
+		{"instruction": "Build a DFA over {0,1} ACCEPTING '101' and REJECTING '111'.", "accepted": "101", "rejected": "111"},
+	],
+	"list": [
+		{"instruction": "From the list {ab, aab, aaab, ...} build a DFA (a+b). ACCEPT 'aab', REJECT 'ababb'.", "accepted": "aab", "rejected": "ababb"},
+	],
+}
+
+# The ordered DFA-centered course. The whole lesson is taught as ONE sequence of
+# topics (each folds in the relevant 7 segments under the hood), then adaptive
+# review re-visits each skill in the learner's weakest-first order, then post test.
+const DFA_LESSON_SPEC := [
+	{"m": "content", "skill": "definition", "field": "definition", "title": "WHAT IS A DFA", "subtitle": "Definition, purpose, and the idea of finite memory."},
+	{"m": "content", "skill": "definition", "field": "guided", "title": "PARTS OF A DFA & THE 5-QUINTUPLE", "subtitle": "States Set Q, Alphabet, Transition, Start, Final(s)."},
+	{"m": "content", "skill": "definition", "field": "example", "title": "THE 5-QUAD NOTATION IN PRACTICE", "subtitle": "Q, Sigma, delta, q0, F written out for a real machine."},
+	{"m": "content", "skill": "identification", "field": "definition", "title": "HOW DFAs ARE REPRESENTED", "subtitle": "Tables, transition diagrams & formal 5-tuples."},
+	{"m": "demo",  "skill": "building", "title": "SEE A DFA AT THE WHITEBOARD", "task": {"instruction": "A sample DFA is shown. Study the states, accepting ring, and labelled transitions.", "accepted": "ab", "rejected": "aa"}},
+	{"m": "content", "skill": "building", "field": "application", "title": "DFAs IN REAL LIFE", "subtitle": "Firewalls, lexical analysers, regex engines, text search."},
+	{"m": "content", "skill": "simulation", "field": "definition", "title": "SIMULATION", "subtitle": "Tracing input strings through states to accept or reject."},
+	{"m": "demo",   "skill": "simulation", "title": "SIMULATE ON THE WHITEBOARD", "task": {"instruction": "Build a DFA over {a,b}: ACCEPT 'ba', REJECT 'ab', then press Simulate.", "accepted": "ba", "rejected": "ab"}},
+	{"m": "content", "skill": "building", "field": "guided", "title": "HOW DO WE KNOW A DFA IS CORRECT?", "subtitle": "Test accepted/rejected strings on the whiteboard."},
+	{"m": "demo",   "skill": "building", "title": "BUILD: LIST / RULE / REGEX", "task": {"instruction": "From the list {a, aa, aaa, ...} build a DFA (a+). ACCEPT 'aaa', REJECT 'b'.", "accepted": "aaa", "rejected": "b"}},
+	{"m": "content", "skill": "regex", "field": "definition", "title": "DFA FROM REGEX", "subtitle": "a*, a+, a|b, a*b patterns become machines."},
+	{"m": "content", "skill": "set_builder", "field": "definition", "title": "DFA FROM SET BUILDER", "subtitle": "{w : condition(w)} becomes a machine."},
+	{"m": "content", "skill": "list", "field": "definition", "title": "DFA FROM LIST", "subtitle": "Infer the hidden language from example strings."},
+	{"m": "practice", "skill": "simulation", "title": "PRACTICE PROBLEMS | SIMULATION"},
+	{"m": "practice", "skill": "building", "title": "PRACTICE PROBLEMS | BUILDING"},
+	{"m": "practice", "skill": "definition", "title": "QUESTIONS | DFA & ITS 5-TUPLE"},
+]
+
 # UI references
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
@@ -31,6 +79,7 @@ const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 @onready var stats_progress: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsProgress
 @onready var stats_score: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsScore
 @onready var stats_skills: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsSkills
+@onready var stats_workshop: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsWorkshop
 @onready var stats_mode: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsMode
 
 # Session manager
@@ -69,6 +118,19 @@ var _adaptive_review_pass: bool = false
 # Results state
 var _results: Dictionary = {}
 
+# DFA-centered lesson navigation
+var _in_dfa_lesson := false
+var _dfa_lesson_index := 0
+var _dfa_practice_index := 0
+var _dfa_practice_skill := "simulation"
+var _dfa_practice_answered := false
+var _dfa_board_practice_index := 0
+var _dfa_board_practice_active := false
+
+# Workshop (automata builder) task navigation during a skill's interactive phase
+var _workshop_phase := false
+var _workshop_task_index := 0
+
 func _ready() -> void:
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
@@ -87,7 +149,7 @@ func _ready() -> void:
 		next_button.pressed.connect(_on_next_pressed)
 	if workshop:
 		workshop.evaluated.connect(_on_workshop_evaluated)
-		workshop.visible = false
+		workshop.set_active(false)
 
 	# Initialize session
 	session = SessionManager.new()
@@ -118,7 +180,7 @@ func _show_main_menu() -> void:
 	title_label.text = "TESTING GROUNDS"
 	_clear_content()
 
-	question_label.text = "Welcome to the DFA Testing Grounds!\n\nThis system will guide you through:\n1. Pretest (30 questions)\n2. Knowledge Analysis\n3. Adaptive Learning\n4. Post Test\n\nSelect an algorithm to begin:"
+	question_label.text = "Welcome to the DFA Testing Grounds!\n\nThis adaptive system walks you through:\n1. Pretest (30 questions across all DFA topics)\n2. Knowledge Analysis\n3. DFA Lesson (taught as ONE course, whiteboard + practice)\n4. Adaptive Review (weakest topics first)\n5. Post Test\n\nSelect an algorithm to begin:"
 	question_label.visible = true
 
 	# Create algorithm selection buttons
@@ -324,6 +386,52 @@ func _show_profile_setup() -> void:
 	clear.pressed.connect(press_clear)
 	keypad.add_child(clear)
 
+	# --- Name virtual keypad (VR-friendly) ---
+	# The name LineEdit still accepts a physical keyboard on desktop, but VR users
+	# can tap A–Z on this on-screen board; both stay in sync via _profile_name.
+	var name_key_label := Label.new()
+	name_key_label.text = "Name keypad (tap letters):"
+	name_key_label.add_theme_font_size_override("font_size", 16)
+	name_key_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	options_box.add_child(name_key_label)
+	var name_keypad := GridContainer.new()
+	name_keypad.columns = 7
+	name_keypad.add_theme_constant_override("h_separation", 6)
+	name_keypad.add_theme_constant_override("v_separation", 6)
+	name_keypad.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	options_box.add_child(name_keypad)
+	for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+		var ltr := letter
+		var letter_key: Button = make_key.call(ltr)
+		letter_key.custom_minimum_size = Vector2(72, 42)
+		letter_key.pressed.connect(func():
+			_profile_name += ltr
+			name_input.text = _profile_name
+		)
+		name_keypad.add_child(letter_key)
+	var space_n: Button = make_key.call("SPACE")
+	space_n.custom_minimum_size = Vector2(140, 42)
+	space_n.pressed.connect(func():
+		_profile_name += " "
+		name_input.text = _profile_name
+	)
+	name_keypad.add_child(space_n)
+	var del_n: Button = make_key.call("DEL")
+	del_n.custom_minimum_size = Vector2(90, 42)
+	del_n.pressed.connect(func():
+		if _profile_name.length() > 0:
+			_profile_name = _profile_name.substr(0, _profile_name.length() - 1)
+			name_input.text = _profile_name
+	)
+	name_keypad.add_child(del_n)
+	var clear_n: Button = make_key.call("CLEAR")
+	clear_n.custom_minimum_size = Vector2(90, 42)
+	clear_n.pressed.connect(func():
+		_profile_name = ""
+		name_input.text = ""
+	)
+	name_keypad.add_child(clear_n)
+
 	# --- Familiarity: two explicit buttons (Yes / No) ---
 	# Two separate buttons are clearer than a single toggling button.
 	var familiar_label := Label.new()
@@ -522,12 +630,183 @@ func _show_analysis() -> void:
 			data["mastery_percentage"]
 		]
 
-	question_label.text += summary_text + "\n\nAdaptive learning will now COVER ALL %d topics, starting with your weakest skill (%s) and using your pretest performance as the knowledge model's basis.\n\nClick Next to begin." % [_analysis_skills.size(), QuestionBank.get_skill_name(_analysis_skills[0])]
+	question_label.text += summary_text + "\n\nA guided DFA lesson will now teach the whole topic (5-tuple, representations, whiteboard building, simulation, correctness) as ONE course, then adaptively review every topic in the order of your weaknesses.\n\nClick Next to begin the DFA Lesson."
 
 	back_button.visible = true
 	back_button.text = "Back"
 	next_button.visible = true
-	next_button.text = "Start Learning"
+	next_button.text = "Start DFA Lesson"
+
+# ===== DFA-CENTERED LESSON =====
+
+func _begin_dfa_lesson() -> void:
+	_in_dfa_lesson = true
+	_dfa_lesson_index = 0
+	_dfa_practice_index = 0
+	_dfa_board_practice_index = 0
+	_dfa_board_practice_active = false
+	_show_dfa_lesson_step()
+
+func _show_dfa_lesson_step() -> void:
+	if _dfa_lesson_index >= DFA_LESSON_SPEC.size():
+		_finish_dfa_lesson()
+		return
+	var step: Dictionary = DFA_LESSON_SPEC[_dfa_lesson_index]
+	match step["m"]:
+		"content":
+			_show_dfa_content(step)
+		"demo":
+			_open_dfa_workshop(step)
+		"practice":
+			_dfa_practice_skill = step["skill"]
+			_dfa_practice_index = 0
+			_show_dfa_practice(step)
+
+func _show_dfa_content(step: Dictionary) -> void:
+	title_label.text = "DFA LESSON — %s" % step["title"]
+	_clear_content()
+	_enter_learning_room()
+	var field: String = step.get("field", "definition")
+	var body := ""
+	match field:
+		"definition": body = AdaptiveContent.get_definition(step["skill"])
+		"guided": body = AdaptiveContent.get_guided(step["skill"])
+		"example": body = AdaptiveContent.get_example(step["skill"])
+		"application": body = AdaptiveContent.get_application(step["skill"])
+		_: body = AdaptiveContent.get_definition(step["skill"])
+	body = "%s\n\n%s" % [step.get("subtitle", ""), body]
+	question_label.text = "Step %d / %d\n\n%s" % [_dfa_lesson_index + 1, DFA_LESSON_SPEC.size(), body]
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "DFA Lesson  ·  %s" % QuestionBank.get_skill_name(step["skill"])
+	back_button.visible = false
+	next_button.visible = true
+	next_button.text = "Next >>"
+
+func _open_dfa_workshop(step: Dictionary) -> void:
+	if workshop == null:
+		_dfa_lesson_index += 1
+		_show_dfa_lesson_step()
+		return
+	var task: Dictionary = step.get("task", {})
+	if workshop.builder is Control and not task.is_empty():
+		workshop.builder.call("reset_for_task",
+			task.get("instruction", "Build the DFA on the whiteboard."),
+			task.get("accepted", "aa"),
+			task.get("rejected", "ab")
+		)
+	_enter_learning_room()
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	title_label.text = "DFA LESSON — %s" % step["title"]
+	question_label.text = "Build it on the whiteboard.\n\nCreate states, toggle accepting, connect transitions, then press Check task to verify. Once the board passes, the lesson continues automatically."
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "DFA Lesson  ·  Whiteboard"
+	back_button.visible = false
+	next_button.visible = false
+
+func _show_dfa_practice(step: Dictionary) -> void:
+	title_label.text = "DFA LESSON — %s" % step["title"]
+	_clear_content()
+	_enter_learning_room()
+	if _dfa_practice_skill == "simulation" and workshop:
+		var board_tasks: Array = WORKSHOP_TASKS["simulation"]
+		if _dfa_board_practice_index < board_tasks.size():
+			_open_dfa_simulation_task(board_tasks[_dfa_board_practice_index])
+			return
+	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+	if _dfa_practice_index >= challenges.size():
+		_dfa_lesson_index += 1
+		_show_dfa_lesson_step()
+		return
+	var current: Dictionary = challenges[_dfa_practice_index]
+	_dfa_practice_answered = false
+	question_label.text = "Practice %d / %d\n\n%s" % [_dfa_practice_index + 1, challenges.size(), current["question"]]
+	question_label.visible = true
+	_clear_options()
+	var options: Array = current["options"]
+	for i in range(options.size()):
+		var btn := Button.new()
+		btn.text = options[i]
+		btn.custom_minimum_size = Vector2(800, 0)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_pressed_color", Color(0.8, 0.85, 1, 1))
+		btn.add_theme_stylebox_override("normal", _create_option_style(Color(0.12, 0.15, 0.3, 1)))
+		btn.add_theme_stylebox_override("hover", _create_option_style(Color(0.2, 0.25, 0.5, 1)))
+		btn.add_theme_stylebox_override("pressed", _create_option_style(Color(0.1, 0.12, 0.25, 1)))
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		btn.pressed.connect(_on_dfa_practice_answer.bind(i))
+		options_box.add_child(btn)
+	feedback_label.text = ""
+	progress_label.text = "DFA Lesson  ·  %s  ·  answers feed the knowledge model" % QuestionBank.get_skill_name(_dfa_practice_skill)
+	back_button.visible = false
+	next_button.visible = false
+
+func _open_dfa_simulation_task(task: Dictionary) -> void:
+	_dfa_board_practice_active = true
+	_enter_learning_room()
+	workshop.builder.call("reset_for_task", task["instruction"], task["accepted"], task["rejected"])
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	question_label.text = "Simulation board practice %d / %d\n\n%s\n\nUse the board to build the DFA, then press Check task. Wrong attempts stay here until the task is complete." % [_dfa_board_practice_index + 1, WORKSHOP_TASKS["simulation"].size(), task["instruction"]]
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "DFA Lesson  ·  Simulation board practice"
+	back_button.visible = false
+	next_button.visible = false
+
+func _on_dfa_practice_answer(selected_index: int) -> void:
+	if _dfa_practice_answered:
+		return
+	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+	if _dfa_practice_index >= challenges.size():
+		return
+	var current: Dictionary = challenges[_dfa_practice_index]
+	_dfa_practice_answered = true
+	var correct: bool = selected_index == current["correct"]
+	session.knowledge_tracer.record_learning_observation(_dfa_practice_skill, correct)
+	feedback_label.text = ("Correct! " if correct else "Incorrect. ") + current.get("explanation", "")
+	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
+	_dfa_practice_index += 1
+	if _dfa_practice_index >= challenges.size():
+		next_button.visible = true
+		next_button.text = "Next Topic >>"
+	else:
+		next_button.visible = true
+		next_button.text = "Next Question >>"
+	back_button.visible = false
+
+func _handle_dfa_lesson_next() -> void:
+	var step: Dictionary = DFA_LESSON_SPEC[_dfa_lesson_index]
+	match step["m"]:
+		"content":
+			_dfa_lesson_index += 1
+			_show_dfa_lesson_step()
+		"practice":
+			var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+			if _dfa_practice_index >= challenges.size():
+				_dfa_lesson_index += 1
+			_show_dfa_lesson_step()
+		_:
+			_dfa_lesson_index += 1
+			_show_dfa_lesson_step()
+
+func _finish_dfa_lesson() -> void:
+	_in_dfa_lesson = false
+	# The guided lesson is complete; adaptive review then re-visits every one of
+	# the seven topics in the learner's personal weakness order, followed by the
+	# post test.
+	_start_adaptive_learning()
 
 # ===== ADAPTIVE LEARNING =====
 
@@ -540,6 +819,8 @@ func _start_adaptive_learning() -> void:
 	_challenge_total = 0
 	_challenge_answered = false
 	_handholding = false
+	_workshop_task_index = 0
+	_workshop_phase = false
 	session.start_adaptive_learning(_learning_skill)
 	_show_learning_phase(0)
 
@@ -587,17 +868,13 @@ func _show_learning_content(content: String, next_text: String) -> void:
 func _show_challenge() -> void:
 	title_label.text = "INTERACTIVE CHALLENGE - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
-	if workshop and _learning_skill in ["building", "regex", "set_builder"]:
-		_enter_learning_room()
-		workshop.visible = true
-		if sprite:
-			sprite.visible = false
-		_set_player_paused(true)
-		question_label.text = "Interactive workshop: build and test the automaton on the whiteboard."
-		question_label.visible = true
-		back_button.visible = false
-		next_button.visible = false
-		return
+	# Builder phase: the learner must construct a working DFA on the whiteboard
+	# (one task per WORKSHOP_TASKS entry) BEFORE the free-response challenges.
+	if workshop and WORKSHOP_TASKS.has(_learning_skill):
+		var tasks: Array = WORKSHOP_TASKS[_learning_skill]
+		if _workshop_task_index < tasks.size():
+			_open_builder_task(tasks[_workshop_task_index])
+			return
 	var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
 	if _challenge_index >= challenges.size():
 		# All challenges done
@@ -655,19 +932,78 @@ func _on_challenge_answer(selected_index: int) -> void:
 	next_button.text = "Next Challenge"
 	back_button.visible = false
 
-func _on_workshop_evaluated(correct: bool, message: String) -> void:
-	if _challenge_answered:
-		return
-	_challenge_answered = true
-	_challenge_total += 1
-	if correct:
-		_challenge_correct += 1
-	session.knowledge_tracer.record_learning_observation(_learning_skill, correct)
-	feedback_label.text = ("Correct! " if correct else "Keep trying. ") + message
-	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
-	next_button.visible = true
-	next_button.text = "Next Workshop Task"
+func _open_builder_task(task: Dictionary) -> void:
+	_workshop_phase = true
+	_enter_learning_room()
+	if workshop:
+		if workshop.builder is Control:
+			workshop.builder.call("reset_for_task", task.get("instruction", "Build the DFA on the whiteboard."), task.get("accepted", "aa"), task.get("rejected", "ab"))
+		workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	question_label.text = "Whiteboard task: build the DFA, then press Check task.\n\n%s" % task.get("instruction", "")
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "Interactive Challenge  ·  %s  ·  press Check task to verify" % QuestionBank.get_skill_name(_learning_skill)
 	back_button.visible = false
+	next_button.visible = false
+
+func _on_workshop_evaluated(correct: bool, message: String) -> void:
+	# --- DFA lesson whiteboard phase ---
+	if _in_dfa_lesson:
+		if not correct:
+			feedback_label.text = message + "\nAdjust the states / transitions and press Check task again until it passes."
+			feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
+			return
+		feedback_label.text = "Correct! " + message
+		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1))
+		if _dfa_board_practice_active:
+			_dfa_board_practice_index += 1
+			if _dfa_board_practice_index < WORKSHOP_TASKS["simulation"].size():
+				_open_dfa_simulation_task(WORKSHOP_TASKS["simulation"][_dfa_board_practice_index])
+				return
+			_dfa_board_practice_active = false
+			_clear_content()
+			workshop.set_active(false)
+			_set_player_paused(false)
+			_show_dfa_lesson_step()
+			return
+		_dfa_lesson_index += 1
+		_clear_content()
+		workshop.set_active(false)
+		_set_player_paused(false)
+		_show_dfa_lesson_step()
+		return
+	# --- Adaptive skill builder phase ---
+	if _challenge_answered or workshop == null:
+		return
+	# Record EVERY attempt (count, wrong tries, connection edits, time) so the
+	# knowledge-tracing algorithms can use richer evidence than right/wrong alone.
+	var stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
+	session.record_workshop_attempt(_learning_skill, correct, stats)
+	if not correct:
+		# Pause: stay on the board; only a successful build advances the lesson.
+		feedback_label.text = message + "\nTry again — adjust states or transitions on the whiteboard."
+		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
+		return
+	# Correct build → next workshop task or on to the multiple-choice challenges.
+	_workshop_task_index += 1
+	session.knowledge_tracer.record_learning_observation(_learning_skill, true)
+	feedback_label.text = "Correct! " + message
+	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1))
+	var tasks: Array = WORKSHOP_TASKS.get(_learning_skill, [])
+	if _workshop_task_index < tasks.size():
+		_open_builder_task(tasks[_workshop_task_index])
+		return
+	_workshop_phase = false
+	_challenge_answered = false
+	_challenge_index = 0
+	_clear_content()
+	workshop.set_active(false)
+	_set_player_paused(false)
+	_show_challenge()
 
 func _show_challenge_feedback() -> void:
 	title_label.text = "CHALLENGE FEEDBACK - %s" % QuestionBank.get_skill_name(_learning_skill)
@@ -866,9 +1202,15 @@ func _on_back_pressed() -> void:
 	_show_main_menu()
 
 func _on_next_pressed() -> void:
+	if _in_dfa_lesson:
+		_handle_dfa_lesson_next()
+		return
 	match session.state:
 		SessionManager.SessionState.ANALYSIS:
-			_start_adaptive_learning()
+			if next_button.text == "Start DFA Lesson":
+				_begin_dfa_lesson()
+			else:
+				_start_adaptive_learning()
 		SessionManager.SessionState.ADAPTIVE_LEARNING:
 			if next_button.text == "Proceed to Post Test":
 				_start_posttest()
@@ -880,6 +1222,8 @@ func _on_next_pressed() -> void:
 				_challenge_total = 0
 				_challenge_answered = false
 				_handholding = false
+				_workshop_task_index = 0
+				_workshop_phase = false
 				session.start_adaptive_learning(_learning_skill)
 				_enter_learning_room()
 				_show_learning_phase(0)
@@ -892,7 +1236,7 @@ func _on_next_pressed() -> void:
 
 func _clear_content() -> void:
 	if workshop:
-		workshop.visible = false
+		workshop.set_active(false)
 	_set_player_paused(false)
 	question_label.text = ""
 	question_label.visible = false
@@ -918,7 +1262,7 @@ func _enter_learning_room() -> void:
 
 func _enter_test_panel() -> void:
 	if workshop:
-		workshop.visible = false
+		workshop.set_active(false)
 	if overlay_layer:
 		overlay_layer.visible = true
 	if sprite:
@@ -1127,6 +1471,30 @@ func _update_stats_panel() -> void:
 		stats_skills.text = "Skills:\nNo data yet"
 	else:
 		stats_skills.text = "Skills (acc):\n" + "\n".join(lines)
+
+	# --- Whiteboard (automata builder) analytics ---
+	var wshop_lines: Array[String] = ["Whiteboard:"]
+	var wdata: Dictionary = session.get_workshop_attempts() if session else {}
+	for skill in wdata:
+		var records: Array = wdata[skill]
+		var total_attempts := 0
+		var wrong := 0
+		var conns := 0
+		var time_s := 0.0
+		var successes := 0
+		for r in records:
+			total_attempts += r.get("attempts", 0)
+			wrong += r.get("wrong_attempts", 0)
+			conns += r.get("connections_made", 0)
+			time_s += float(r.get("time_seconds", 0.0))
+			if r.get("correct", false):
+				successes += 1
+		if records.is_empty():
+			continue
+		var sname: String = QuestionBank.get_skill_name(skill)
+		wshop_lines.append("%s: %d/%d ok · %d attempts · %d wrong · %d conns · %.0fs" % [sname, successes, records.size(), total_attempts, wrong, conns, time_s])
+	if stats_workshop:
+		stats_workshop.text = "\n".join(wshop_lines)
 
 # ===== VR POINTER =====
 

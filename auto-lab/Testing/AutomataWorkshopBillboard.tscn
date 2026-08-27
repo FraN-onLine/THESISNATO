@@ -19,10 +19,12 @@ render_target_update_mode = 4
 show_back_to_lab = false
 
 [node name="Backdrop" type="CSGBox3D" parent="."]
-position = Vector3(0, 0, 0.12)
+position = Vector3(0, 0, -0.3)
 size = Vector3(6.4, 4.2, 0.18)
 material = SubResource("mat_back")
 
 [node name="Billboard" type="Sprite3D" parent="."]
+; Sprite3D renders on its +Z face. Keeping the default orientation (no 180* flip)
+; makes the board's front face point toward the player (+Z), NOT the backside.
 pixel_size = 0.0032
 

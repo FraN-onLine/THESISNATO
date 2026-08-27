@@ -11,11 +11,21 @@ var _last_mouse_pos := Vector2(-1, -1)
 var _pressed := false
 var _mouse_down := false
 
+func set_active(active: bool) -> void:
+	visible = active
+	set_process(active)
+	if not active:
+		_pressed = false
+		_last_mouse_pos = Vector2(-1, -1)
+
 func _ready() -> void:
+	if InputMode.is_desktop():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	sprite.texture = viewport.get_texture()
 	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	builder.evaluated.connect(_on_builder_evaluated)
+	set_active(visible)
 
 func _on_builder_evaluated(correct: bool, message: String) -> void:
 	# The host lesson may connect to this signal on the wrapper instance.
@@ -27,6 +37,8 @@ func _input(event: InputEvent) -> void:
 		_mouse_down = event.pressed
 
 func _process(_delta: float) -> void:
+	if InputMode.is_desktop():
+		Input.set_default_cursor_shape(Input.CURSOR_CROSS)
 	if InputMode.is_desktop():
 		_update_desktop_pointer()
 	else:
@@ -66,6 +78,8 @@ func _send_pointer(point: Vector2, valid: bool, down: bool) -> void:
 		release.global_position = point
 		viewport.push_input(release)
 		_pressed = false
+	if not valid and not down and builder.has_method("cancel_pointer_interaction"):
+		builder.cancel_pointer_interaction()
 
 func _update_vr_pointer() -> void:
 	for controller in get_tree().get_nodes_in_group("xr_controller"):
@@ -80,10 +94,10 @@ func _update_vr_pointer() -> void:
 	_send_pointer(Vector2(-1, -1), false, false)
 
 func _ray_intersect_sprite(origin: Vector3, direction: Vector3) -> Dictionary:
-	var camera := get_viewport().get_camera_3d()
-	if camera == null or sprite.texture == null:
+	if sprite.texture == null:
 		return {}
-	var normal := (camera.global_position - sprite.global_position).normalized()
+	var board_basis := sprite.global_transform.basis
+	var normal := board_basis.z.normalized()
 	var denominator := normal.dot(direction)
 	if absf(denominator) < 0.0001:
 		return {}
@@ -92,11 +106,10 @@ func _ray_intersect_sprite(origin: Vector3, direction: Vector3) -> Dictionary:
 		return {}
 	var hit := origin + direction * distance
 	var offset := hit - sprite.global_position
-	var camera_basis := camera.global_transform.basis
 	var width := sprite.texture.get_size().x * sprite.pixel_size
 	var height := sprite.texture.get_size().y * sprite.pixel_size
-	var x := offset.dot(camera_basis.x)
-	var y := offset.dot(camera_basis.y)
+	var x := offset.dot(board_basis.x)
+	var y := offset.dot(board_basis.y)
 	if absf(x) > width * 0.5 or absf(y) > height * 0.5:
 		return {}
 	return {"uv": Vector2(x / width + 0.5, 0.5 - y / height)}

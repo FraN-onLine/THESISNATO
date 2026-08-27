@@ -36,6 +36,10 @@ var adaptive_learning_complete: bool = false
 var current_learning_skill: String = ""
 var learning_phase: int = 0  # 0=objective, 1=definition, 2=example, 3=guided, 4=challenge, 5=feedback
 
+# Whiteboard (automata builder) attempt analytics per skill.
+# skill -> Array of {correct, attempts, wrong_attempts, connections_made, time_seconds}
+var workshop_attempts: Dictionary = {}
+
 func _init() -> void:
 	profile_manager = ProfileManager.new()
 	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
@@ -161,6 +165,26 @@ func is_skill_learned(skill: String) -> bool:
 func complete_adaptive_learning() -> void:
 	adaptive_learning_complete = true
 
+## Record one whiteboard (automata builder) attempt. `stats` comes from the
+## builder's get_attempt_stats(): attempts, wrong_attempts, connections_made,
+## time_seconds. This richer evidence (failed tries, rework, time on task) is
+## stored per skill so the knowledge-tracing algorithms can use it later.
+func record_workshop_attempt(skill: String, correct: bool, stats: Dictionary) -> void:
+	if not workshop_attempts.has(skill):
+		workshop_attempts[skill] = []
+	workshop_attempts[skill].append({
+		"correct": correct,
+		"attempts": stats.get("attempts", 0),
+		"wrong_attempts": stats.get("wrong_attempts", 0),
+		"connections_made": stats.get("connections_made", 0),
+		"time_seconds": stats.get("time_seconds", 0.0),
+	})
+	save_session_data()
+
+## Get the recorded whiteboard analytics per skill.
+func get_workshop_attempts() -> Dictionary:
+	return workshop_attempts.duplicate(true)
+
 ## Start the post test
 func start_posttest() -> void:
 	state = SessionState.POST_TEST
@@ -236,6 +260,7 @@ func save_session_data() -> void:
 		"posttest_answers": posttest_answers,
 		"knowledge_tracer": knowledge_tracer.to_dict(),
 		"adaptive_learning_complete": adaptive_learning_complete,
+		"workshop_attempts": workshop_attempts,
 		"timestamp": Time.get_datetime_string_from_system()
 	}
 	
@@ -329,5 +354,7 @@ func load_session_data() -> bool:
 		knowledge_tracer.from_dict(data["knowledge_tracer"])
 	if data.has("adaptive_learning_complete"):
 		adaptive_learning_complete = data["adaptive_learning_complete"]
+	if data.has("workshop_attempts") and data["workshop_attempts"] is Dictionary:
+		workshop_attempts = data["workshop_attempts"]
 	
 	return true
