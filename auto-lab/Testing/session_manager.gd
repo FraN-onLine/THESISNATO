@@ -104,10 +104,12 @@ func submit_answer(selected_index: int) -> Dictionary:
 	if state == SessionState.PRETEST:
 		pretest_answers.append(answer)
 		# Record observation in the knowledge tracer
+		knowledge_tracer.set_state_hint("pretest")
 		knowledge_tracer.record_observation(skill, correct)
 		save_session_data()
 	elif state == SessionState.POST_TEST:
 		posttest_answers.append(answer)
+		knowledge_tracer.set_state_hint("posttest")
 		knowledge_tracer.record_observation(skill, correct)
 		save_session_data()
 	

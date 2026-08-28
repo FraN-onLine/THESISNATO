@@ -19,6 +19,41 @@ var dkt_model = null              # single DKT network
 var skill_stats: Dictionary = {}  # skill -> {correct: int, total: int}
 var learning_stats: Dictionary = {}  # skill -> {correct: int, total: int}
 
+# Prediction comparison log. Every observation records what EACH algorithm
+# predicted (its expected accuracy) BEFORE the real outcome was observed,
+# plus the actual outcome. This lets us compare HMM vs BKT vs DKT for a POC.
+var prediction_log: Array = []  # {skill, correct, hmm_pred, bkt_pred, dkt_pred, phase}
+
+## Phase hint ("pretest" / "learning" / "posttest") recorded on each prediction.
+var state_hint: String = "learning"
+
+func set_state_hint(value: String) -> void:
+	state_hint = value
+
+## Compare how well each algorithm's predicted accuracy matched reality.
+## A prediction is counted a "hit" when it points the right way: predicting a
+## correct answer (> 0.5) that was correct, or predicting a wrong one (<= 0.5)
+## that was wrong. Returns per-model {hits, total, accuracy}.
+func get_algorithm_comparison() -> Dictionary:
+	var result := {
+		"HMM": {"hits": 0, "total": 0, "accuracy": 0.0},
+		"BKT": {"hits": 0, "total": 0, "accuracy": 0.0},
+		"DKT": {"hits": 0, "total": 0, "accuracy": 0.0},
+	}
+	for entry in prediction_log:
+		for key in ["HMM", "BKT", "DKT"]:
+			var pred_field := "hmm_pred" if key == "HMM" else ("bkt_pred" if key == "BKT" else "dkt_pred")
+			var pred: float = entry.get(pred_field, 0.3)
+			var hit = (pred > 0.5) == entry["correct"]
+			result[key]["total"] += 1
+			if hit:
+				result[key]["hits"] += 1
+	for key in result:
+		var stats: Dictionary = result[key]
+		if stats["total"] > 0:
+			stats["accuracy"] = float(stats["hits"]) / float(stats["total"]) * 100.0
+	return result
+
 func _init(algo_type: int = AlgorithmType.HMM) -> void:
 	algorithm_type = algo_type
 	_initialize_models()
@@ -50,6 +85,22 @@ func record_observation(skill: String, correct: bool) -> void:
 	if correct:
 		skill_stats[skill]["correct"] += 1
 	
+	# Predictions BEFORE updating, so we compare each algorithm's forecast to the
+	# outcome (this is how we will pick the best model for the POC).
+	var hmm_pred = hmm_models[skill].get_expected_accuracy() if hmm_models.has(skill) else 0.3
+	var bkt_pred = bkt_models[skill].get_expected_accuracy() if bkt_models.has(skill) else 0.3
+	var dkt_pred = dkt_model.get_expected_accuracy(skill) if dkt_model else 0.3
+	prediction_log.append({
+		"skill": skill,
+		"correct": correct,
+		"hmm_pred": hmm_pred,
+		"bkt_pred": bkt_pred,
+		"dkt_pred": dkt_pred,
+		"phase": "pretest" if state_hint == "pretest" else "learning",
+	})
+	if prediction_log.size() > 4000:
+		prediction_log.pop_front()
+	
 	# Update all models
 	if hmm_models.has(skill):
 		hmm_models[skill].update(correct)
@@ -64,6 +115,7 @@ func begin_learning(skill: String) -> void:
 
 ## Record an adaptive observation separately from the pretest baseline.
 func record_learning_observation(skill: String, correct: bool) -> void:
+	state_hint = "learning"
 	record_observation(skill, correct)
 	if not learning_stats.has(skill):
 		learning_stats[skill] = {"correct": 0, "total": 0}

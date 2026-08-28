@@ -1,0 +1,74 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://Testing/stats_board.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="mat_back"]
+albedo_color = Color(0.03, 0.05, 0.09, 1)
+
+[sub_resource type="StyleBoxFlat" id="panel_style"]
+content_margin_left = 28.0
+content_margin_top = 22.0
+content_margin_right = 28.0
+content_margin_bottom = 22.0
+bg_color = Color(0.05, 0.08, 0.14, 0.97)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.35, 0.7, 1, 0.9)
+
+[node name="StatsBoard" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="SubViewport" type="SubViewport" parent="."]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(1400, 900)
+render_target_update_mode = 4
+
+[node name="Root" type="Control" parent="SubViewport"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="SubViewport/Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 26
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 26
+
+[node name="Panel" type="PanelContainer" parent="SubViewport/Root/Margin"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("panel_style")
+
+[node name="Scroll" type="ScrollContainer" parent="SubViewport/Root/Margin/Panel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="SubViewport/Root/Margin/Panel/Scroll"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.96, 1, 1)
+theme_override_font_sizes/font_size = 30
+text = "Session stats..."
+autowrap_mode = 2
+
+[node name="Backdrop" type="CSGBox3D" parent="."]
+position = Vector3(0, 0, -0.35)
+size = Vector3(5.4, 3.4, 0.2)
+material = SubResource("mat_back")
+
+[node name="Billboard" type="Sprite3D" parent="."]
+pixel_size = 0.0034

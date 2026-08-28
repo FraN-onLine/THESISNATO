@@ -8,6 +8,12 @@ enum EditMode { SELECT, CONNECT, MOVE }
 @export_multiline var task_instruction: String = "Build a DFA that ACCEPTS abuc and REJECTS accc."
 @export var accepted_test_string: String = "abuc"
 @export var rejected_test_string: String = "accc"
+## Flexible task validation: the built DFA is correct if it accepts EVERY string
+## in accept_strings and rejects EVERY string in reject_strings. This lets a task
+## such as "01* is true" accept ANY automaton recognising that language, not just
+## one specific construction.
+var accept_strings: Array = []
+var reject_strings: Array = []
 @export var seed_demo_graph: bool = true
 @export var show_back_to_lab: bool = false
 
@@ -63,10 +69,38 @@ func _timer_stop() -> void:
 
 ## Configure a brand-new challenge on the whiteboard. Wipes the previous graph,
 ## keeps only the required start state, and restarts the attempt/"speed" timer.
+## Accepted / rejected are single convenience strings; use reset_for_task_lists()
+## when full language coverage is desired.
 func reset_for_task(new_instruction: String, accepted: String, rejected: String) -> void:
 	task_instruction = new_instruction
 	accepted_test_string = accepted
 	rejected_test_string = rejected
+	accept_strings = [accepted]
+	reject_strings = [rejected]
+	_wipe_graph()
+	_timer_start()
+	_apply_instruction_text()
+	if input_line:
+		input_line.text = ""
+	_refresh()
+
+## Same as reset_for_task() but with list-based validation: the built DFA passes
+## if it accepts EVERY string in `accepted` and rejects EVERY string in
+## `rejected`.  So "make any automata for 01*" accepts ANY correct construction.
+func reset_for_task_lists(new_instruction: String, accepted: Array, rejected: Array) -> void:
+	task_instruction = new_instruction
+	accept_strings = accepted.duplicate()
+	reject_strings = rejected.duplicate()
+	accepted_test_string = accepted[0] if not accepted.is_empty() else ""
+	rejected_test_string = rejected[0] if not rejected.is_empty() else ""
+	_wipe_graph()
+	_timer_start()
+	_apply_instruction_text()
+	if input_line:
+		input_line.text = ""
+	_refresh()
+
+func _wipe_graph() -> void:
 	states.clear()
 	transitions.clear()
 	next_state_id = 1
@@ -88,11 +122,6 @@ func reset_for_task(new_instruction: String, accepted: String, rejected: String)
 		"correct": false,
 		"message": "",
 	}
-	_timer_start()
-	_apply_instruction_text()
-	if input_line:
-		input_line.text = ""
-	_refresh()
 
 func _apply_instruction_text() -> void:
 	# Push the (possibly new) instruction into the on-screen heading label.
@@ -258,6 +287,27 @@ func _seed_task_graph() -> void:
 	next_state_id = 1
 	transitions.clear()
 	states["q0"] = {"position": Vector2(360, 210), "accepting": false}
+	accept_strings = [accepted_test_string]
+	reject_strings = [rejected_test_string]
+
+## Seeds a small reference DFA (accepts strings ending in 'a') so the demonstration
+## step can show learners what a complete, correct machine looks like.
+func seed_reference_graph() -> void:
+	states.clear()
+	transitions.clear()
+	next_state_id = 2
+	selected_state = "q0"
+	active_symbol = "a"
+	states["q0"] = {"position": Vector2(300, 220), "accepting": false}
+	states["q1"] = {"position": Vector2(560, 220), "accepting": true}
+	transitions = [
+		{"from": "q0", "to": "q0", "symbols": ["b"]},
+		{"from": "q0", "to": "q1", "symbols": ["a"]},
+		{"from": "q1", "to": "q0", "symbols": ["b"]},
+		{"from": "q1", "to": "q1", "symbols": ["a"]},
+	]
+	_apply_instruction_text()
+	_refresh()
 
 func _refresh() -> void:
 	if graph:
@@ -477,10 +527,30 @@ func _simulate(value: String) -> bool:
 	return states.get(current, {}).get("accepting", false)
 
 func _check_task() -> void:
-	var accepted := _simulate(accepted_test_string)
-	var rejected := not _simulate(rejected_test_string)
-	var correct := accepted and rejected
-	var message := "Task passed: %s is accepted and %s is rejected." % [accepted_test_string, rejected_test_string] if correct else "Keep building: %s must be accepted and %s must be rejected." % [accepted_test_string, rejected_test_string]
+	var acc := accept_strings.duplicate()
+	if acc.is_empty():
+		acc = [accepted_test_string]
+	var rej := reject_strings.duplicate()
+	if rej.is_empty():
+		rej = [rejected_test_string]
+	var correct := true
+	var failure := ""
+	for s in acc:
+		if not _simulate(s):
+			correct = false
+			failure = s
+			break
+	if correct:
+		for s in rej:
+			if _simulate(s):
+				correct = false
+				failure = s
+				break
+	var message := ""
+	if correct:
+		message = "Task passed! The DFA accepts ALL required strings (%d) and rejects ALL required strings (%d)." % [acc.size(), rej.size()]
+	else:
+		message = "Not yet. Your DFA mishandles \"%s\" — check its accepting states and transitions, then press Check task again." % failure
 	status_label.text = message
 	if correct:
 		task_done = true
