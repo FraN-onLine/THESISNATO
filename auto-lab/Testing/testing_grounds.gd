@@ -100,8 +100,8 @@ const DFA_LESSON_SPEC := [
 @onready var progress_label: Label = $SubViewport/Root/Center/Panel/VBox/Content/ProgressLabel
 @onready var back_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/BackButton
 @onready var next_button: Button = $SubViewport/Root/Center/Panel/VBox/ButtonBox/NextButton
-@onready var workshop: Node3D = $AutomataWorkshopWhiteboard
-@onready var stats_board: Node3D = $StatsBoard
+@onready var workshop: Node3D = $"../AutomataWorkshopWhiteboard"
+@onready var stats_board: Node3D = $"../StatsBoard"
 
 # Full-screen overlay references (desktop mode only)
 @onready var overlay_layer: CanvasLayer = $OverlayLayer
@@ -160,12 +160,16 @@ var _dfa_lesson_index := 0
 var _dfa_practice_index := 0
 var _dfa_practice_skill := "simulation"
 var _dfa_practice_answered := false
+var _dfa_practice_board_active := false
 var _dfa_board_practice_index := 0
 var _dfa_board_practice_active := false
 
 # Workshop (automata builder) task navigation during a skill's interactive phase
 var _workshop_phase := false
 var _workshop_task_index := 0
+# True while the whiteboard is paired with a multiple-choice challenge (so the
+# board's Check task only gives feedback and does NOT advance the lesson).
+var _adaptive_board_paired := false
 
 func _ready() -> void:
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
@@ -804,21 +808,23 @@ func _activate_dfa_board(step: Dictionary) -> void:
 
 func _show_dfa_practice(step: Dictionary) -> void:
 	title_label.text = "DFA LESSON — %s" % step["title"]
+	_dfa_practice_answered = false
 	_clear_content()
 	_enter_learning_room()
-	if _dfa_practice_skill == "simulation" and workshop:
-		var board_tasks: Array = WORKSHOP_TASKS["simulation"]
-		if _dfa_board_practice_index < board_tasks.size():
-			_open_dfa_simulation_task(board_tasks[_dfa_board_practice_index])
-			return
 	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
 	if _dfa_practice_index >= challenges.size():
+		# All questions for this skill are done → close the paired board, continue.
+		_close_paired_board()
 		_dfa_lesson_index += 1
 		_show_dfa_lesson_step()
 		return
 	var current: Dictionary = challenges[_dfa_practice_index]
-	_dfa_practice_answered = false
-	question_label.text = "Practice %d / %d\n\n%s" % [_dfa_practice_index + 1, challenges.size(), current["question"]]
+	# Pair the whiteboard with this question so the learner can build/test while
+	# answering. The board task matches the skill AND the question number.
+	var paired := _pair_practice_board(_dfa_practice_skill, _dfa_practice_index)
+	_dfa_practice_board_active = paired
+	var hint := "\n\nUse the whiteboard to build and test the automaton before choosing your answer." if paired else ""
+	question_label.text = "Practice %d / %d\n\n%s%s" % [_dfa_practice_index + 1, challenges.size(), current["question"], hint]
 	question_label.visible = true
 	_clear_options()
 	var options: Array = current["options"]
@@ -837,9 +843,49 @@ func _show_dfa_practice(step: Dictionary) -> void:
 		btn.pressed.connect(_on_dfa_practice_answer.bind(i))
 		options_box.add_child(btn)
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  %s  ·  answers feed the knowledge model" % QuestionBank.get_skill_name(_dfa_practice_skill)
+	progress_label.text = "DFA Lesson  ·  %s  ·  %s" % [QuestionBank.get_skill_name(_dfa_practice_skill), "whiteboard active — build/check freely, then answer" if paired else "answer the question"]
 	back_button.visible = false
 	next_button.visible = false
+
+## Activate the whiteboard with a task matching the practice skill + question.
+func _pair_practice_board(skill: String, index: int) -> bool:
+	if workshop == null or workshop.builder is not Control:
+		return false
+	var tasks: Array = WORKSHOP_TASKS.get(skill, [])
+	if tasks.is_empty():
+		return false
+	var task: Dictionary = tasks[index % tasks.size()]
+	_reset_board_for_task(task)
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	return true
+
+## Shared helper: push a WORKSHOP_TASKS / DFA_LESSON_SPEC task into the builder.
+func _reset_board_for_task(task: Dictionary) -> void:
+	if workshop == null or workshop.builder is not Control:
+		return
+	if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
+		workshop.builder.call("reset_for_task_lists",
+			task.get("instruction", "Build the DFA on the whiteboard."),
+			task["accept"], task["reject"])
+	else:
+		workshop.builder.call("reset_for_task",
+			task.get("instruction", "Build the DFA on the whiteboard."),
+			task.get("accepted", "aa"),
+			task.get("rejected", "ab"))
+	if task.get("seed", false):
+		workshop.builder.call("seed_reference_graph")
+
+func _close_paired_board() -> void:
+	_dfa_practice_board_active = false
+	_adaptive_board_paired = false
+	if workshop:
+		workshop.set_active(false)
+	if sprite:
+		sprite.visible = true
+	_set_player_paused(false)
 
 func _open_dfa_simulation_task(task: Dictionary) -> void:
 	_dfa_board_practice_active = true
@@ -897,8 +943,14 @@ func _handle_dfa_lesson_next() -> void:
 		"practice":
 			var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
 			if _dfa_practice_index >= challenges.size():
+				# All questions answered → next topic.
+				_close_paired_board()
 				_dfa_lesson_index += 1
-			_show_dfa_lesson_step()
+				_show_dfa_lesson_step()
+			else:
+				# Still more questions — show the NEXT one (index already advanced
+				# by _on_dfa_practice_answer) WITHOUT resetting to question 1.
+				_show_dfa_practice(step)
 		_:
 			_dfa_lesson_index += 1
 			_show_dfa_lesson_step()
@@ -986,7 +1038,12 @@ func _show_challenge() -> void:
 	_current_challenge = challenges[_challenge_index]
 	_challenge_answered = false
 
-	question_label.text = "Challenge %d/%d\n\n%s" % [_challenge_index + 1, challenges.size(), _current_challenge["question"]]
+	# Pair the whiteboard with this challenge so the learner can build/test while
+	# choosing an answer (only for skills that have a build task).
+	var paired := _pair_practice_board(_learning_skill, _challenge_index)
+	_adaptive_board_paired = paired
+	var hint := "\n\nUse the whiteboard to build and test the automaton before choosing your answer." if paired else ""
+	question_label.text = "Challenge %d/%d\n\n%s%s" % [_challenge_index + 1, challenges.size(), _current_challenge["question"], hint]
 	question_label.visible = true
 	_clear_options()
 
@@ -1007,7 +1064,7 @@ func _show_challenge() -> void:
 		options_box.add_child(btn)
 
 	feedback_label.text = ""
-	progress_label.text = "Skill: %s | Challenge %d/%d" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size()]
+	progress_label.text = "Skill: %s | Challenge %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size(), "  ·  whiteboard active — build/check, then answer" if _adaptive_board_paired else ""]
 	back_button.visible = false
 	next_button.visible = false
 
@@ -1016,6 +1073,7 @@ func _on_challenge_answer(selected_index: int) -> void:
 		return
 	_challenge_answered = true
 	_challenge_total += 1
+	_adaptive_board_paired = false
 
 	var correct: bool = selected_index == _current_challenge["correct"]
 	if correct:
@@ -1036,6 +1094,7 @@ func _on_challenge_answer(selected_index: int) -> void:
 
 func _open_builder_task(task: Dictionary) -> void:
 	_workshop_phase = true
+	_adaptive_board_paired = false
 	_enter_learning_room()
 	if workshop:
 		if workshop.builder is Control:
@@ -1058,14 +1117,19 @@ func _open_builder_task(task: Dictionary) -> void:
 func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	# --- DFA lesson whiteboard phase ---
 	if _in_dfa_lesson:
+		var dfa_skill: String = DFA_LESSON_SPEC[_dfa_lesson_index].get("skill", "building") if _dfa_lesson_index < DFA_LESSON_SPEC.size() else "building"
 		var dfa_stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
-		session.record_workshop_attempt(DFA_LESSON_SPEC[_dfa_lesson_index].get("skill", "building"), correct, dfa_stats)
+		session.record_workshop_attempt(dfa_skill, correct, dfa_stats)
 		if not correct:
 			feedback_label.text = message + "\nAdjust the states / transitions and press Check task again until it passes."
 			feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 			return
-		feedback_label.text = "Correct! " + message
+		feedback_label.text = "Whiteboard verified! " + message
 		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1))
+		if _dfa_practice_board_active:
+			# Board is paired with a practice multiple-choice question — verify
+			# the build but keep the question on screen; answering it advances.
+			return
 		if _dfa_board_practice_active:
 			_dfa_board_practice_index += 1
 			if _dfa_board_practice_index < WORKSHOP_TASKS["simulation"].size():
@@ -1090,6 +1154,12 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	# knowledge-tracing algorithms can use richer evidence than right/wrong alone.
 	var stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
 	session.record_workshop_attempt(_learning_skill, correct, stats)
+	if _adaptive_board_paired:
+		# Board is paired with an adaptive multiple-choice challenge — verifying
+		# the build gives feedback but the challenge answer drives progress.
+		feedback_label.text = ("Whiteboard verified! " if correct else "Whiteboard: ") + message
+		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
+		return
 	if not correct:
 		# Pause: stay on the board; only a successful build advances the lesson.
 		feedback_label.text = message + "\nTry again — adjust states or transitions on the whiteboard."
@@ -1287,6 +1357,40 @@ func _show_results() -> void:
 	for skill in summary:
 		var data: Dictionary = summary[skill]
 		text += "%s: %.1f%%\n" % [data["name"], data["mastery_percentage"]]
+
+	# --- Algorithm comparison → pick the best model for the POC ---
+	if session and session.knowledge_tracer:
+		text += "\nALGORITHM COMPARISON  (prediction hit-rate)\n"
+		var cmp: Dictionary = session.knowledge_tracer.get_algorithm_comparison()
+		var best_key := "HMM"
+		var best_acc := -1.0
+		for key in ["HMM", "BKT", "DKT"]:
+			var s: Dictionary = cmp[key]
+			text += "  %s: %d/%d hits (%.1f%%)\n" % [key, s["hits"], s["total"], s["accuracy"]]
+			if s["accuracy"] > best_acc:
+				best_acc = s["accuracy"]
+				best_key = key
+		text += "\n★ Recommended for the POC: %s (highest prediction accuracy)\n" % best_key
+
+	# --- Whiteboard build analytics ---
+	var wdata3: Dictionary = session.get_workshop_attempts()
+	if not wdata3.is_empty():
+		text += "\nWHITEBOARD BUILDS\n"
+		for skill3 in wdata3:
+			var records3: Array = wdata3[skill3]
+			if records3.is_empty():
+				continue
+			var ok_count := 0
+			var wrong_tries := 0
+			var conns := 0
+			var time_s := 0.0
+			for r in records3:
+				wrong_tries += r.get("wrong_attempts", 0)
+				conns += r.get("connections_made", 0)
+				time_s += float(r.get("time_seconds", 0.0))
+				if r.get("correct", false):
+					ok_count += 1
+			text += "  %s: %d builds passed, %d wrong checks, %d connection edits, %.0fs on task\n" % [QuestionBank.get_skill_name(skill3), ok_count, wrong_tries, conns, time_s]
 
 	question_label.text = text
 	question_label.visible = true

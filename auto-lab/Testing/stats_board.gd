@@ -5,7 +5,7 @@ extends Node3D
 
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
-@onready var label: Label = $SubViewport/Root/Label
+@onready var label: Label = $SubViewport/Root/Margin/Panel/Scroll/Label
 
 func _ready() -> void:
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS

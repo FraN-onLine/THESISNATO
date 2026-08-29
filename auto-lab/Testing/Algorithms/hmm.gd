@@ -1,20 +1,23 @@
 extends RefCounted
 ## Hidden Markov Model (HMM) for knowledge tracing.
-## Each skill has its own HMM with hidden states: "knows" and "doesn't know".
-## Visible states: correct answer or wrong answer.
+## FULLY SELF-CONTAINED: owns its parameters, observation history, prediction
+## history, and its own accuracy metrics. One instance per skill.
+##
+## Hidden states: "knows" / "doesn't know". Visible states: answer right/wrong.
 
-# Model parameters
-var p_learn: float = 0.1      # Probability of transitioning from "doesn't know" to "knows" (learning rate)
-var p_forget: float = 0.05    # Probability of transitioning from "knows" to "doesn't know" (forgetting rate)
-var p_guess: float = 0.2      # Probability of answering correctly while NOT knowing (guessing)
-var p_slip: float = 0.1       # Probability of answering incorrectly while knowing (slipping)
+# --- Model parameters ---
+var p_learn: float = 0.1      # P("doesn't know" -> "knows")  (learning rate)
+var p_forget: float = 0.05    # P("knows" -> "doesn't know")   (forgetting rate)
+var p_guess: float = 0.2      # P(correct  | doesn't know)     (guessing)
+var p_slip: float = 0.1       # P(wrong    | knows)            (slipping)
 
-# Hidden state probabilities
-var p_knows: float = 0.3      # Initial probability the learner knows the skill
+# --- Hidden state ---
+var p_knows: float = 0.3      # P(learner knows the skill)
 
-# Observation history
-var observations: Array = []  # Array of bool (true = correct, false = wrong)
+# --- History ---
+var observations: Array = []     # bool per answer (true = correct)
 var observation_count: int = 0
+var prediction_log: Array = []   # {predicted: float, correct: bool, phase: String}
 
 func _init(initial_p_knows: float = 0.3, learn_rate: float = 0.1, forget_rate: float = 0.05, guess_rate: float = 0.2, slip_rate: float = 0.1) -> void:
 	p_knows = initial_p_knows

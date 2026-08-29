@@ -13,5 +13,3 @@ grow_vertical = 2
 script = ExtResource("1_builder")
 show_back_to_lab = true
 seed_demo_graph = true
-
-[editable path="."]
