@@ -1,7 +1,8 @@
 extends RefCounted
 ## Deep Knowledge Tracing (DKT) algorithm.
-## Simplified neural network implementation using a small feedforward network
-## with backpropagation. Tracks knowledge across all skills simultaneously.
+## FULLY SELF-CONTAINED: owns its weights, observation history, prediction
+## history, and its own accuracy metrics. A single network tracks all skills.
+## Simplified neural network: one hidden layer (tanh) + sigmoid output per skill.
 
 # Network architecture
 const INPUT_SIZE := 14  # 7 skills × 2 (correct/wrong one-hot)
@@ -20,9 +21,10 @@ var learning_rate: float = 0.1
 # Skill order (must match question_bank.gd SKILLS keys)
 const SKILL_ORDER := ["simulation", "identification", "definition", "building", "regex", "set_builder", "list"]
 
-# Observation history
-var observations: Array = []  # Array of {skill: String, correct: bool}
+# --- History ---
+var observations: Array = []          # {skill: String, correct: bool}
 var observation_count: int = 0
+var prediction_log: Array = []        # {skill, predicted, correct, phase}
 
 # Current knowledge state per skill
 var knowledge_state: Dictionary = {}
@@ -67,8 +69,18 @@ func _reset_knowledge_state() -> void:
 	for skill in SKILL_ORDER:
 		knowledge_state[skill] = 0.3
 
-## Update the model with a new observation
-func update(skill: String, correct: bool) -> void:
+## Update the model with a new observation. Records the prediction the network
+## made BEFORE seeing the answer so the model can score its own accuracy.
+func update(skill: String, correct: bool, phase: String = "learning") -> void:
+	# Self-record: what would the net have predicted for this skill, pre-outcome?
+	prediction_log.append({
+		"skill": skill,
+		"predicted": get_expected_accuracy(skill),
+		"correct": correct,
+		"phase": phase,
+	})
+	if prediction_log.size() > 4000:
+		prediction_log.pop_front()
 	observations.append({"skill": skill, "correct": correct})
 	observation_count += 1
 	
@@ -91,6 +103,20 @@ func update(skill: String, correct: bool) -> void:
 	
 	# Update knowledge state for the observed skill
 	knowledge_state[skill] = output[skill_idx]
+
+## How well did THIS network's predictions match reality? (per-skill and overall)
+## A prediction is a "hit" when it points the right way (pred > 0.5 and correct,
+## or pred <= 0.5 and wrong).
+func get_prediction_stats() -> Dictionary:
+	var hits := 0
+	for entry in prediction_log:
+		if (entry["predicted"] > 0.5) == entry["correct"]:
+			hits += 1
+	return {
+		"hits": hits,
+		"total": prediction_log.size(),
+		"accuracy": (float(hits) / float(prediction_log.size()) * 100.0) if prediction_log.size() > 0 else 0.0,
+	}
 
 ## Build the input vector for the network
 func _build_input(skill: String, correct: bool) -> Array:
@@ -194,6 +220,7 @@ func reset() -> void:
 	_reset_knowledge_state()
 	observations.clear()
 	observation_count = 0
+	prediction_log.clear()
 
 ## Get a summary of the model state
 func get_summary() -> Dictionary:
@@ -201,6 +228,7 @@ func get_summary() -> Dictionary:
 		"knowledge_state": knowledge_state.duplicate(),
 		"observations": observations.duplicate(),
 		"observation_count": observation_count,
+		"prediction_stats": get_prediction_stats(),
 		"learning_rate": learning_rate
 	}
 
@@ -214,7 +242,8 @@ func to_dict() -> Dictionary:
 		"learning_rate": learning_rate,
 		"knowledge_state": knowledge_state,
 		"observations": observations.duplicate(),
-		"observation_count": observation_count
+		"observation_count": observation_count,
+		"prediction_log": prediction_log.duplicate(true)
 	}
 
 ## Load from dictionary
@@ -227,6 +256,7 @@ func from_dict(data: Dictionary) -> void:
 	knowledge_state = data.get("knowledge_state", {})
 	observations = data.get("observations", []).duplicate()
 	observation_count = data.get("observation_count", observations.size())
+	prediction_log = data.get("prediction_log", []).duplicate(true)
 	
 	# Ensure weights are initialized if not present
 	if w1.is_empty() or w2.is_empty():

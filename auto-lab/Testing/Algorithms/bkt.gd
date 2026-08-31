@@ -1,5 +1,7 @@
 extends RefCounted
 ## Bayesian Knowledge Tracing (BKT) algorithm.
+## FULLY SELF-CONTAINED: owns its parameters, observation history, prediction
+## history, and its own accuracy metrics. One instance per skill.
 ## Classic BKT model with 4 parameters per skill.
 
 # BKT parameters
@@ -11,9 +13,10 @@ var p_S: float = 0.1        # Probability of slipping (answering wrong when know
 # Current knowledge state
 var p_learned: float = 0.3
 
-# Observation history
-var observations: Array = []  # Array of bool (true = correct, false = wrong)
+# --- History ---
+var observations: Array = []     # bool per answer (true = correct)
 var observation_count: int = 0
+var prediction_log: Array = []   # {predicted: float, correct: bool, phase: String}
 
 func _init(initial_p_learned: float = 0.3, transition_p: float = 0.1, guess_p: float = 0.2, slip_p: float = 0.1) -> void:
 	p_L0 = initial_p_learned
@@ -22,8 +25,18 @@ func _init(initial_p_learned: float = 0.3, transition_p: float = 0.1, guess_p: f
 	p_S = slip_p
 	p_learned = initial_p_learned
 
-## Update the model with a new observation (true = correct, false = incorrect)
-func update(correct: bool) -> void:
+## Update the model with a new observation (true = correct, false = incorrect).
+## Records the prediction this model would have made BEFORE seeing the answer,
+## so the model can score its own accuracy.
+func update(correct: bool, phase: String = "learning") -> void:
+	# Self-record: what did we predict the learner would answer, before the outcome?
+	prediction_log.append({
+		"predicted": get_expected_accuracy(),
+		"correct": correct,
+		"phase": phase,
+	})
+	if prediction_log.size() > 4000:
+		prediction_log.pop_front()
 	observations.append(correct)
 	observation_count += 1
 	
@@ -48,6 +61,20 @@ func update(correct: bool) -> void:
 	# Clamp to avoid numerical issues
 	p_learned = clampf(p_learned, 0.001, 0.999)
 
+## How well did THIS model's predictions match reality?
+## A prediction is a "hit" when it points the right way (pred > 0.5 and correct,
+## or pred <= 0.5 and wrong). Returns {hits, total, accuracy}.
+func get_prediction_stats() -> Dictionary:
+	var hits := 0
+	for entry in prediction_log:
+		if (entry["predicted"] > 0.5) == entry["correct"]:
+			hits += 1
+	return {
+		"hits": hits,
+		"total": prediction_log.size(),
+		"accuracy": (float(hits) / float(prediction_log.size()) * 100.0) if prediction_log.size() > 0 else 0.0,
+	}
+
 ## Get the current probability the learner knows this skill
 func get_knowledge_probability() -> float:
 	return p_learned
@@ -69,6 +96,7 @@ func reset() -> void:
 	p_learned = p_L0
 	observations.clear()
 	observation_count = 0
+	prediction_log.clear()
 
 ## Get a summary of the model state
 func get_summary() -> Dictionary:
@@ -80,6 +108,7 @@ func get_summary() -> Dictionary:
 		"p_S": p_S,
 		"observations": observations.duplicate(),
 		"observation_count": observation_count,
+		"prediction_stats": get_prediction_stats(),
 		"mastery_percentage": get_mastery_percentage(),
 		"is_learned": is_learned()
 	}
@@ -93,7 +122,8 @@ func to_dict() -> Dictionary:
 		"p_G": p_G,
 		"p_S": p_S,
 		"observations": observations.duplicate(),
-		"observation_count": observation_count
+		"observation_count": observation_count,
+		"prediction_log": prediction_log.duplicate(true)
 	}
 
 ## Load from dictionary
@@ -105,3 +135,4 @@ func from_dict(data: Dictionary) -> void:
 	p_S = data.get("p_S", 0.1)
 	observations = data.get("observations", []).duplicate()
 	observation_count = data.get("observation_count", observations.size())
+	prediction_log = data.get("prediction_log", []).duplicate(true)
