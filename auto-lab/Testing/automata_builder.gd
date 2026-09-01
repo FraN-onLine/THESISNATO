@@ -277,6 +277,7 @@ func _build_ui() -> void:
 	input_line.placeholder_text = "any string"
 	input_line.custom_minimum_size = Vector2(280, 48)
 	input_line.focus_entered.connect(func(): simulation_keyboard_active = true)
+	input_line.focus_exited.connect(func(): simulation_keyboard_active = false)
 	simulate.add_child(input_line)
 	var simulate_button := Button.new()
 	simulate_button.text = "Simulate"
@@ -520,6 +521,11 @@ func _delete_selected() -> void:
 func select_state(state_name: String) -> void:
 	if states.has(state_name):
 		selected_state = state_name
+		# Interacting with the graph means the Simulate field is idle again —
+		# stop capturing typed keys so they don't sneak into the text box.
+		simulation_keyboard_active = false
+		if input_line and input_line.has_focus():
+			input_line.release_focus()
 		_refresh()
 
 func move_state(state_name: String, state_position: Vector2) -> void:
