@@ -38,7 +38,22 @@ var input_line: LineEdit
 var mode_group: ButtonGroup
 var mode_buttons: Dictionary = {}
 var connection_status: Label
+var simulate_button: Button
+var sim_keyboard_title: Label
 var simulation_keyboard_active := false
+
+# --- Step-by-step simulation animation state ---
+var simulation_running := false
+var sim_input := ""
+var sim_pos := 0
+var sim_current := ""
+var sim_active_transition := {}
+var sim_finished := false
+var sim_accepted := false
+var sim_message := ""
+var sim_timer := 0.0
+var sim_flash := 0.0
+var sim_step_duration := 1.0
 var undo_stack: Array[Dictionary] = []
 var last_transition_from := ""
 var last_transition_to := ""
@@ -64,6 +79,19 @@ func _process(delta: float) -> void:
 	# Walk the stopwatch only while the learner is actually working on a task.
 	if not task_done and get_viewport() != null and is_visible_in_tree():
 		active_seconds += delta
+	# Drive the step-by-step simulation: one transition every second.
+	if simulation_running:
+		sim_timer += delta
+		if sim_timer >= sim_step_duration:
+			sim_timer = 0.0
+			_advance_simulation()
+	# Decay the accept/reject board flash.
+	if sim_flash > 0.0:
+		sim_flash = maxf(0.0, sim_flash - delta * 0.9)
+		if graph:
+			graph.queue_redraw()
+	if (simulation_running or sim_finished) and graph:
+		graph.queue_redraw()
 
 func _timer_start() -> void:
 	task_started_msec = Time.get_ticks_msec()
@@ -183,7 +211,7 @@ func _build_ui() -> void:
 		root.add_child(back_button)
 	var instruction := Label.new()
 	instruction.name = "InstructionLabel"
-	instruction.text = task_instruction + "\nDrag a node to move it — nodes space themselves apart so they never overlap. Pick a symbol, then click source -> target to draw arrows. Use \"Set as Start\" to choose the single start state. Incoming and outgoing arrows between two nodes are drawn in separate lanes."
+	instruction.text = task_instruction + "\nDrag nodes to move them. Pick a symbol, then click source -> target to draw arrows. \"Set as Start\" fixes the one start state; in/out arrows between a pair use separate lanes."
 	instruction.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction.add_theme_font_size_override("font_size", 18)
 	root.add_child(instruction)
@@ -214,7 +242,7 @@ func _build_ui() -> void:
 	mode_title.add_theme_font_size_override("font_size", 22)
 	mode_panel.add_child(mode_title)
 	var mode_help := Label.new()
-	mode_help.text = "Select: click selects, drag moves\nConnect: pick a symbol, then source -> target\nMove: drag nodes around (they space out)\n\"Set as Start\" marks the one start node"
+	mode_help.text = "Select / Move: click or drag nodes\nConnect: pick a symbol, then source -> target\n\"Set as Start\" picks the one start state"
 	mode_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mode_panel.add_child(mode_help)
 	mode_group = ButtonGroup.new()
@@ -232,16 +260,13 @@ func _build_ui() -> void:
 	_add_action_button(mode_panel, "Delete selected", _delete_selected)
 	_add_action_button(mode_panel, "Undo transition", _undo_transition)
 	_add_action_button(mode_panel, "Remove active symbol", _remove_active_transition)
-	connection_status = Label.new()
-	connection_status.text = "Selected: q0\nStart: q0"
-	mode_panel.add_child(connection_status)
 
 	var keyboard_panel := VBoxContainer.new()
 	keyboard_panel.add_theme_constant_override("separation", 4)
 	keyboard_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	root.add_child(keyboard_panel)
 	var keyboard_title := Label.new()
-	keyboard_title.text = "TRANSITION KEYBOARD  |  ACTIVE SYMBOL: %s" % active_symbol
+	keyboard_title.text = "SYMBOL KEYS | ACTIVE SYMBOL: %s" % active_symbol
 	keyboard_title.name = "KeyboardTitle"
 	keyboard_title.add_theme_font_size_override("font_size", 18)
 	keyboard_panel.add_child(keyboard_title)
@@ -279,7 +304,7 @@ func _build_ui() -> void:
 	input_line.focus_entered.connect(func(): simulation_keyboard_active = true)
 	input_line.focus_exited.connect(func(): simulation_keyboard_active = false)
 	simulate.add_child(input_line)
-	var simulate_button := Button.new()
+	simulate_button = Button.new()
 	simulate_button.text = "Simulate"
 	simulate_button.custom_minimum_size = Vector2(180, 48)
 	simulate_button.add_theme_font_size_override("font_size", 18)
@@ -297,6 +322,36 @@ func _build_ui() -> void:
 	check_button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
 	check_button.pressed.connect(_check_task)
 	simulate.add_child(check_button)
+
+	# On-screen keyboard for typing test strings (PC and VR alike).
+	var sim_kb_row := VBoxContainer.new()
+	sim_kb_row.add_theme_constant_override("separation", 4)
+	sim_keyboard_title = Label.new()
+	sim_keyboard_title.name = "SimKeyboardTitle"
+	sim_keyboard_title.add_theme_font_size_override("font_size", 16)
+	sim_kb_row.add_child(sim_keyboard_title)
+	var sim_grid := GridContainer.new()
+	sim_grid.columns = 13
+	sim_grid.add_theme_constant_override("h_separation", 3)
+	sim_grid.add_theme_constant_override("v_separation", 3)
+	for symbol in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+		var key := _make_keyboard_key(symbol)
+		key.pressed.connect(_on_simulation_key.bind(symbol))
+		sim_grid.add_child(key)
+	var sim_space := _make_keyboard_key("space")
+	sim_space.custom_minimum_size = Vector2(160, 44)
+	sim_space.pressed.connect(_on_simulation_space)
+	sim_grid.add_child(sim_space)
+	var sim_del := _make_keyboard_key("del")
+	sim_del.custom_minimum_size = Vector2(70, 44)
+	sim_del.pressed.connect(_on_simulation_backspace)
+	sim_grid.add_child(sim_del)
+	var sim_clear := _make_keyboard_key("Clear")
+	sim_clear.custom_minimum_size = Vector2(110, 44)
+	sim_clear.pressed.connect(_on_simulation_clear)
+	sim_grid.add_child(sim_clear)
+	sim_kb_row.add_child(sim_grid)
+	root.add_child(sim_kb_row)
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 18)
@@ -337,10 +392,15 @@ func _refresh() -> void:
 	if graph:
 		graph.queue_redraw()
 	if status_label:
-		status_label.text = "Start: %s | Selected: %s | Symbol: %s | Nodes: %d" % [start_state, selected_state, active_symbol, states.size()]
+		if simulation_running and not sim_finished:
+			status_label.text = "Step %d/%d — at %s | remaining: '%s'" % [sim_pos, sim_input.length(), sim_current, sim_input.substr(sim_pos)]
+		else:
+			status_label.text = "Start: %s | Selected: %s | Symbol: %s | Nodes: %d" % [start_state, selected_state, active_symbol, states.size()]
+	if sim_keyboard_title:
+		sim_keyboard_title.text = "SIMULATION KEYBOARD | INPUT: '%s'" % (input_line.text if input_line else "")
 	var keyboard_title := get_node_or_null("VBoxContainer/KeyboardTitle")
 	if keyboard_title:
-		keyboard_title.text = "TRANSITION KEYBOARD  |  ACTIVE SYMBOL: %s" % active_symbol
+		keyboard_title.text = "SYMBOL KEYS | ACTIVE SYMBOL: %s" % active_symbol
 	if connection_status:
 		if edit_mode == EditMode.CONNECT:
 			connection_status.text = "Source: %s\nTarget: %s" % [connect_source if connect_source != "" else "none", selected_state if selected_state != connect_source else "click target"]
@@ -352,8 +412,8 @@ func _add_mode_button(parent: VBoxContainer, label: String, mode: EditMode, sele
 	button.text = label
 	button.toggle_mode = true
 	button.button_group = mode_group
-	button.custom_minimum_size = Vector2(240, 60)
-	button.add_theme_font_size_override("font_size", 20)
+	button.custom_minimum_size = Vector2(240, 44)
+	button.add_theme_font_size_override("font_size", 17)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.12, 0.2, 0.38, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.2, 0.4, 0.7, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.55, 0.48, 1)))
@@ -379,8 +439,8 @@ func _on_mode_toggled(toggled_on: bool, mode: EditMode) -> void:
 func _add_action_button(parent: VBoxContainer, label: String, action: Callable) -> void:
 	var button := Button.new()
 	button.text = label
-	button.custom_minimum_size = Vector2(240, 56)
-	button.add_theme_font_size_override("font_size", 18)
+	button.custom_minimum_size = Vector2(240, 36)
+	button.add_theme_font_size_override("font_size", 14)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
@@ -453,12 +513,14 @@ func _set_edit_mode(mode: EditMode) -> void:
 	_refresh()
 
 func _set_symbol(symbol: String) -> void:
+	_cancel_simulation()
 	active_symbol = symbol
 	if graph:
 		graph.queue_redraw()
 	_refresh()
 
 func _add_state() -> void:
+	_cancel_simulation()
 	_save_undo_state()
 	var state_name := "q%d" % next_state_id
 	next_state_id += 1
@@ -486,6 +548,7 @@ func _find_free_position(base: Vector2) -> Vector2:
 	return base + Vector2(230.0, 0.0)
 
 func _toggle_accepting() -> void:
+	_cancel_simulation()
 	if states.has(selected_state):
 		_save_undo_state()
 		states[selected_state]["accepting"] = not states[selected_state]["accepting"]
@@ -493,6 +556,7 @@ func _toggle_accepting() -> void:
 
 ## Makes the currently selected node the ONE start state, replacing any other.
 func _make_start_selected() -> void:
+	_cancel_simulation()
 	if not states.has(selected_state):
 		return
 	if selected_state == start_state:
@@ -505,6 +569,7 @@ func _make_start_selected() -> void:
 	_refresh()
 
 func _delete_selected() -> void:
+	_cancel_simulation()
 	if not states.has(selected_state):
 		return
 	if selected_state == start_state:
@@ -529,6 +594,7 @@ func select_state(state_name: String) -> void:
 		_refresh()
 
 func move_state(state_name: String, state_position: Vector2) -> void:
+	_cancel_simulation()
 	if not states.has(state_name):
 		return
 	var position := state_position
@@ -585,6 +651,7 @@ func _save_undo_state() -> void:
 		undo_stack.pop_front()
 
 func _undo_transition() -> void:
+	_cancel_simulation()
 	if undo_stack.is_empty():
 		return
 	var snapshot: Dictionary = undo_stack.pop_back()
@@ -621,8 +688,121 @@ func _string_clear() -> void:
 		input_line.text = ""
 
 func _simulate_input() -> void:
-	var result := _simulate(input_line.text)
-	status_label.text = "Simulation: %s" % ("ACCEPTED" if result else "REJECTED")
+	if simulation_running:
+		_cancel_simulation()
+		return
+	var value := input_line.text if input_line else ""
+	if value.is_empty():
+		status_label.text = "Type a string in the box (or use the simulation keyboard), then press Simulate."
+		return
+	start_simulation(value)
+
+## Kicks off the step-by-step animated simulation: every second one symbol is
+## consumed, the active transition and current node are highlighted and, at the
+## end, the board flashes green (accepted) or red (rejected).
+func start_simulation(value: String) -> void:
+	sim_input = value
+	sim_pos = 0
+	sim_current = start_state if states.has(start_state) else (states.keys()[0] if not states.is_empty() else "")
+	sim_active_transition = {}
+	sim_finished = false
+	sim_accepted = false
+	sim_message = ""
+	sim_timer = 0.0
+	sim_flash = 0.0
+	if sim_current == "":
+		status_label.text = "No nodes to simulate."
+		return
+	simulation_running = true
+	if simulate_button:
+		simulate_button.text = "Stop"
+	_refresh()
+
+func _advance_simulation() -> void:
+	if not simulation_running or sim_finished:
+		return
+	if sim_pos >= sim_input.length():
+		var accepted: bool = states.get(sim_current, {}).get("accepting", false)
+		_finish_simulation(accepted, "Input read — ended in %s (%s)" % [sim_current, "ACCEPTING" if accepted else "NOT accepting"])
+		return
+	var remaining := sim_input.substr(sim_pos)
+	var best_len := -1
+	var best_to := ""
+	var best_symbol := ""
+	for transition in transitions:
+		if transition["from"] != sim_current:
+			continue
+		for symbol in transition.get("symbols", [transition.get("symbol", "")]):
+			if symbol.is_empty():
+				continue
+			var sl: int = symbol.length()
+			if sl > best_len and remaining.begins_with(symbol):
+				best_len = sl
+				best_to = transition["to"]
+				best_symbol = symbol
+	if best_len < 0:
+		var shown := remaining.substr(0, 1)
+		_finish_simulation(false, "No '%s' transition from %s — string rejected." % [shown, sim_current])
+		return
+	sim_active_transition = {"from": sim_current, "to": best_to, "symbol": best_symbol}
+	sim_pos += best_len
+	sim_current = best_to
+	if sim_pos >= sim_input.length():
+		var accepted: bool = states.get(best_to, {}).get("accepting", false)
+		_finish_simulation(accepted, "Input read — ended in %s (%s)" % [best_to, "ACCEPTING" if accepted else "NOT accepting"])
+		return
+	_refresh()
+
+func _finish_simulation(accepted: bool, reason: String) -> void:
+	simulation_running = false
+	sim_finished = true
+	sim_accepted = accepted
+	sim_message = reason
+	sim_flash = 1.0
+	if simulate_button:
+		simulate_button.text = "Simulate"
+	status_label.text = ("ACCEPTED — " if accepted else "REJECTED — ") + reason
+	_refresh()
+
+func _cancel_simulation() -> void:
+	if not (simulation_running or sim_finished or sim_flash > 0.0):
+		return
+	simulation_running = false
+	sim_finished = false
+	sim_active_transition = {}
+	sim_message = ""
+	sim_flash = 0.0
+	if simulate_button:
+		simulate_button.text = "Simulate"
+	_refresh()
+
+func _on_simulation_key(symbol: String) -> void:
+	if input_line == null:
+		return
+	input_line.grab_focus()
+	input_line.text += symbol
+	simulation_keyboard_active = true
+	_refresh()
+
+func _on_simulation_backspace() -> void:
+	if input_line == null or input_line.text.is_empty():
+		return
+	input_line.text = input_line.text.substr(0, input_line.text.length() - 1)
+	_refresh()
+
+func _on_simulation_clear() -> void:
+	if input_line == null:
+		return
+	input_line.text = ""
+	_refresh()
+
+func _on_simulation_space() -> void:
+	if input_line == null:
+		return
+	input_line.grab_focus()
+	input_line.text += " "
+	simulation_keyboard_active = true
+	_refresh()
 
 func _simulate(value: String) -> bool:
 	# Simulation starts at the single, changeable start state, so ANY correct
@@ -656,6 +836,7 @@ func _simulate(value: String) -> bool:
 	return states.get(current, {}).get("accepting", false)
 
 func _check_task() -> void:
+	_cancel_simulation()
 	var acc := accept_strings.duplicate()
 	if acc.is_empty():
 		acc = [accepted_test_string]

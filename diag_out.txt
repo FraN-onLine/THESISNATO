@@ -1,0 +1,56 @@
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+START
+wrapper_ok=true builder_ok=true
+BTN 'Select' rect=[P: (1110.0, 390.0), S: (252.0, 60.0)] vis=true
+BTN 'Connect' rect=[P: (1110.0, 458.0), S: (252.0, 60.0)] vis=true
+BTN 'Move' rect=[P: (1110.0, 526.0), S: (252.0, 60.0)] vis=true
+BTN 'Add node' rect=[P: (1110.0, 625.0), S: (252.0, 56.0)] vis=true
+BTN 'Toggle accepting' rect=[P: (1110.0, 689.0), S: (252.0, 56.0)] vis=true
+BTN 'Set as Start' rect=[P: (1110.0, 753.0), S: (252.0, 56.0)] vis=true
+BTN 'Delete selected' rect=[P: (1110.0, 817.0), S: (252.0, 56.0)] vis=true
+BTN 'Undo transition' rect=[P: (1110.0, 881.0), S: (252.0, 56.0)] vis=true
+BTN 'Remove active symbol' rect=[P: (1110.0, 945.0), S: (252.0, 56.0)] vis=true
+BTN 'a' rect=[P: (0.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'b' rect=[P: (55.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'c' rect=[P: (110.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'd' rect=[P: (165.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'e' rect=[P: (220.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'f' rect=[P: (275.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'g' rect=[P: (330.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'h' rect=[P: (385.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'i' rect=[P: (440.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'j' rect=[P: (495.0, 1114.0), S: (52.0, 44.0)] vis=true
+BTN 'k' rect=[P: (550.0, 1114.0), S: (110.0, 44.0)] vis=true
+BTN 'l' rect=[P: (663.0, 1114.0), S: (90.0, 44.0)] vis=true
+BTN 'm' rect=[P: (756.0, 1114.0), S: (110.0, 44.0)] vis=true
+BTN 'n' rect=[P: (0.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'o' rect=[P: (55.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'p' rect=[P: (110.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'q' rect=[P: (165.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'r' rect=[P: (220.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 's' rect=[P: (275.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 't' rect=[P: (330.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'u' rect=[P: (385.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'v' rect=[P: (440.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'w' rect=[P: (495.0, 1161.0), S: (52.0, 44.0)] vis=true
+BTN 'x' rect=[P: (550.0, 1161.0), S: (110.0, 44.0)] vis=true
+BTN 'y' rect=[P: (663.0, 1161.0), S: (90.0, 44.0)] vis=true
+BTN 'z' rect=[P: (756.0, 1161.0), S: (110.0, 44.0)] vis=true
+BTN '0' rect=[P: (0.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '1' rect=[P: (55.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '2' rect=[P: (110.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '3' rect=[P: (165.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '4' rect=[P: (220.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '5' rect=[P: (275.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '6' rect=[P: (330.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '7' rect=[P: (385.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '8' rect=[P: (440.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN '9' rect=[P: (495.0, 1208.0), S: (52.0, 48.0)] vis=true
+BTN 'Clear' rect=[P: (550.0, 1208.0), S: (110.0, 48.0)] vis=true
+BTN 'del' rect=[P: (663.0, 1208.0), S: (90.0, 48.0)] vis=true
+BTN 'space' rect=[P: (756.0, 1208.0), S: (110.0, 48.0)] vis=true
+BTN 'Simulate' rect=[P: (369.0, 1268.0), S: (180.0, 48.0)] vis=true
+BTN 'Check task' rect=[P: (557.0, 1268.0), S: (200.0, 48.0)] vis=true
+CLICK added=true before=1 after=2
+DIAGNOSIS COMPLETE
