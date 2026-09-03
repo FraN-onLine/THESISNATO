@@ -906,9 +906,28 @@ class GraphCanvas extends Control:
 	func _draw() -> void:
 		if builder == null:
 			return
+		_draw_simulation_overlay()
 		_draw_transitions()
 		_draw_connect_preview()
 		_draw_states()
+
+	## Full-board flash when a simulation finishes: green = accepted, red =
+	## rejected. The overlay is drawn behind everything and fades out.
+	func _draw_simulation_overlay() -> void:
+		if builder.sim_flash <= 0.0:
+			return
+		var flash_color := Color(0.2, 0.9, 0.45, 0.25) if builder.sim_accepted else Color(0.95, 0.25, 0.25, 0.28)
+		flash_color.a *= builder.sim_flash
+		draw_rect(Rect2(Vector2.ZERO, size), flash_color)
+		var banner := "ACCEPTED" if builder.sim_accepted else "REJECTED"
+		var banner_color := Color(0.15, 0.7, 0.4, 1.0) if builder.sim_accepted else Color(0.95, 0.3, 0.3, 1.0)
+		var font := ThemeDB.fallback_font
+		var banner_font_size := 44
+		var w := font.get_string_size(banner, HORIZONTAL_ALIGNMENT_CENTER, -1, banner_font_size)
+		var center := Vector2(size.x * 0.5, size.y * 0.42)
+		# Dark backing card so the banner always reads over the graph.
+		draw_rect(Rect2(center.x - w.x * 0.5 - 24.0, center.y - 34.0, w.x + 48.0, 76.0), Color(0.02, 0.04, 0.08, 0.85))
+		draw_string(font, center + Vector2(-w.x * 0.5, 0.0), banner, HORIZONTAL_ALIGNMENT_LEFT, -1, banner_font_size, banner_color)
 
 	# --------------------------------------------------------- transitions
 	func _draw_transitions() -> void:
@@ -965,6 +984,12 @@ class GraphCanvas extends Control:
 	## Draws one arrow that leaves `from_node` and enters `to_node`, shifted
 	## `lane` pixels to the side of the direct centre line so the forward and
 	## return arrows between the same two nodes are visually separated.
+	func _is_active_transition(transition: Dictionary) -> bool:
+		var active: Dictionary = builder.sim_active_transition
+		if active.is_empty():
+			return false
+		return transition.get("from", "") == active.get("from", "") and transition.get("to", "") == active.get("to", "")
+
 	func _draw_paired_edge(transition: Dictionary, from_node: String, to_node: String, lane: float) -> void:
 		var states: Dictionary = builder.states
 		if not states.has(from_node) or not states.has(to_node):
@@ -983,10 +1008,20 @@ class GraphCanvas extends Control:
 		var start := center_a + offset + direction * reach
 		var tip := center_b + offset - direction * reach
 
-		draw_line(start, tip, EDGE_COLOR, EDGE_WIDTH)
+		# During step-by-step simulation, the transition being consumed is
+		# highlighted in a bright travelling-arrow color instead of the default.
+		var active: bool = _is_active_transition(transition) and (builder.simulation_running or builder.sim_finished)
+		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else EDGE_COLOR
+		var edge_width := EDGE_WIDTH + 3.0 if active else EDGE_WIDTH
+
+		draw_line(start, tip, edge_color, edge_width)
 		var arrow_base := tip - direction * ARROW_LENGTH
 		var head := PackedVector2Array([tip, arrow_base + side * ARROW_HALF_WIDTH, arrow_base - side * ARROW_HALF_WIDTH])
-		draw_colored_polygon(head, EDGE_COLOR)
+		draw_colored_polygon(head, edge_color)
+		# Animated dot travelling along the active edge.
+		if active:
+			var t := fmod(Time.get_ticks_msec() * 0.0005, 1.0)
+			draw_circle(start.lerp(tip, t), 7.0, Color(1.0, 1.0, 0.7, 0.95))
 
 		var symbols: Array = transition.get("symbols", [transition.get("symbol", "")])
 		if not symbols.is_empty():
@@ -1012,14 +1047,21 @@ class GraphCanvas extends Control:
 		var points := PackedVector2Array()
 		for step in 25:
 			points.append(_quad_bezier(p0, control, p1, float(step) / 24.0))
-		draw_polyline(points, EDGE_COLOR, EDGE_WIDTH, true)
+		var active: bool = _is_active_transition(transition) and (builder.simulation_running or builder.sim_finished)
+		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else EDGE_COLOR
+		var edge_width := EDGE_WIDTH + 3.0 if active else EDGE_WIDTH
+		draw_polyline(points, edge_color, edge_width, true)
 
 		# Arrowhead on the re-entering end of the loop.
 		var incoming := (p1 - control).normalized()
 		var arrow_base := p1 - incoming * ARROW_LENGTH
 		var arrow_side := Vector2(-incoming.y, incoming.x)
 		var head := PackedVector2Array([p1, arrow_base + arrow_side * ARROW_HALF_WIDTH, arrow_base - arrow_side * ARROW_HALF_WIDTH])
-		draw_colored_polygon(head, EDGE_COLOR)
+		draw_colored_polygon(head, edge_color)
+		# Animated dot travelling along the active loop.
+		if active:
+			var t := fmod(Time.get_ticks_msec() * 0.0005, 1.0)
+			draw_circle(_quad_bezier(p0, control, p1, t), 7.0, Color(1.0, 1.0, 0.7, 0.95))
 
 		var symbols: Array = transition.get("symbols", [transition.get("symbol", "")])
 		if not symbols.is_empty():
@@ -1082,6 +1124,15 @@ class GraphCanvas extends Control:
 			draw_arc(state_position, node_radius, 0.0, TAU, 40, Color(0, 0, 0, 0.3), 2.0)
 			if state["accepting"]:
 				draw_arc(state_position, node_radius - 8.0, 0.0, TAU, 40, Color.WHITE, 3.0)
+			# Step-by-step simulation highlight: the node being consumed right now
+			# glows bright cyan + white, so the learner can follow the parse.
+			if builder.simulation_running or builder.sim_finished:
+				if state_name == builder.sim_current:
+					var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+					draw_circle(state_position, node_radius + 12.0 + pulse * 5.0, Color(0.3, 0.95, 1.0, 0.4))
+					draw_arc(state_position, node_radius + 10.0, 0.0, TAU, 48, Color(0.4, 1.0, 1.0, 0.9), 5.0)
+			if builder.sim_finished and builder.sim_accepted and state_name == builder.sim_current:
+				draw_arc(state_position, node_radius + 16.0, 0.0, TAU, 48, Color(0.4, 1.0, 0.5, 0.8), 3.0)
 
 			# Centred state name just below the circle centre.
 			var font := ThemeDB.fallback_font

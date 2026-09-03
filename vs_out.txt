@@ -1,0 +1,10 @@
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+START
+running=true current=q0 pos=0
+after_step1 current=q1 pos=1 active={ "from": "q0", "to": "q1", "symbol": "a" }
+after_step2 finished=true accepted=false flash=1.0
+multisym pos=2 finished=true accepted=true
+reject_path finished=true accepted=false
+cancelled running=false flash=0.0
+VALIDATION COMPLETE

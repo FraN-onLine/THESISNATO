@@ -1,0 +1,4 @@
+SCRIPT ERROR: Parse Error: Unexpected identifier "progress_label" in class body.
+   at: GDScript::reload (res://Testing/testing_grounds.gd:919)
+ERROR: Failed to load script "res://Testing/testing_grounds.gd" with error "Parse error".
+   at: load (modules/gdscript/gdscript_resource_format.cpp:46)

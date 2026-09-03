@@ -1,0 +1,8 @@
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+START
+wrapper_ok=true builder_ok=true
+NO KeyboardTitle node found
+CLICK added=true
+sim_finished=true accepted=false flash=0.99965788748814
+VALIDATION COMPLETE

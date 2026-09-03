@@ -163,6 +163,7 @@ var _dfa_practice_answered := false
 var _dfa_practice_board_active := false
 var _dfa_board_practice_index := 0
 var _dfa_board_practice_active := false
+var _dfa_board_practice_skill := "simulation"
 
 # Workshop (automata builder) task navigation during a skill's interactive phase
 var _workshop_phase := false
@@ -709,6 +710,7 @@ func _begin_dfa_lesson() -> void:
 	_dfa_practice_index = 0
 	_dfa_board_practice_index = 0
 	_dfa_board_practice_active = false
+	_dfa_board_practice_skill = "simulation"
 	_show_dfa_lesson_step()
 
 func _show_dfa_lesson_step() -> void:
@@ -724,7 +726,16 @@ func _show_dfa_lesson_step() -> void:
 		"practice":
 			_dfa_practice_skill = step["skill"]
 			_dfa_practice_index = 0
-			_show_dfa_practice(step)
+			var practice_tasks: Array = WORKSHOP_TASKS.get(step["skill"], [])
+			if workshop != null and workshop.builder is Control and not practice_tasks.is_empty():
+				# Board-task practice: build & verify each DFA on the board to proceed.
+				_dfa_board_practice_skill = step["skill"]
+				_dfa_board_practice_active = true
+				_dfa_board_practice_index = 0
+				_open_dfa_board_practice(step["skill"], practice_tasks[0])
+			else:
+				# Question practice: answer each multiple-choice question to proceed.
+				_show_dfa_practice(step)
 
 func _show_dfa_content(step: Dictionary) -> void:
 	title_label.text = "DFA LESSON — %s" % step["title"]
@@ -887,8 +898,10 @@ func _close_paired_board() -> void:
 		sprite.visible = true
 	_set_player_paused(false)
 
-func _open_dfa_simulation_task(task: Dictionary) -> void:
+func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 	_dfa_board_practice_active = true
+	_dfa_board_practice_skill = skill
+	var skill_tasks: Array = WORKSHOP_TASKS.get(skill, [])
 	_enter_learning_room()
 	if workshop.builder is Control:
 		if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
@@ -899,11 +912,11 @@ func _open_dfa_simulation_task(task: Dictionary) -> void:
 	if sprite:
 		sprite.visible = false
 	_set_player_paused(true)
-	question_label.text = "Simulation board practice %d / %d\n\n%s\n\nUse the board to build the DFA, then press Check task. Any correct construction is accepted; wrong attempts stay here until the task is complete." % [_dfa_board_practice_index + 1, WORKSHOP_TASKS["simulation"].size(), task["instruction"]]
+	question_label.text = "Whiteboard practice %d / %d - %s\n\n%s\n\nBuild the DFA on the board, then press Check task. Any correct construction is accepted; wrong attempts stay here until the build passes." % [_dfa_board_practice_index + 1, skill_tasks.size(), QuestionBank.get_skill_name(skill), task["instruction"]]
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  Simulation board practice"
+	progress_label.text = "DFA Lesson · Whiteboard practice · %s" % QuestionBank.get_skill_name(skill)
 	back_button.visible = false
 	next_button.visible = false
 
@@ -1131,14 +1144,17 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 			# the build but keep the question on screen; answering it advances.
 			return
 		if _dfa_board_practice_active:
+			var bp_tasks: Array = WORKSHOP_TASKS.get(_dfa_board_practice_skill, [])
 			_dfa_board_practice_index += 1
-			if _dfa_board_practice_index < WORKSHOP_TASKS["simulation"].size():
-				_open_dfa_simulation_task(WORKSHOP_TASKS["simulation"][_dfa_board_practice_index])
+			if _dfa_board_practice_index < bp_tasks.size():
+				_open_dfa_board_practice(_dfa_board_practice_skill, bp_tasks[_dfa_board_practice_index])
 				return
+			# All board tasks for this skill are verified -> on to the next step.
 			_dfa_board_practice_active = false
 			_clear_content()
 			workshop.set_active(false)
 			_set_player_paused(false)
+			_dfa_lesson_index += 1
 			_show_dfa_lesson_step()
 			return
 		_dfa_lesson_index += 1

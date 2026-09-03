@@ -1,0 +1,4 @@
+SCRIPT ERROR: Compile Error: Identifier not found: InputMode
+   at: GDScript::reload (res://Testing/testing_grounds.gd:215)
+ERROR: Failed to load script "res://Testing/testing_grounds.gd" with error "Compilation failed".
+   at: load (modules/gdscript/gdscript_resource_format.cpp:46)

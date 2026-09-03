@@ -1,0 +1,43 @@
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+OVERFLOW 'a' bottom=1148.0
+OVERFLOW 'b' bottom=1148.0
+OVERFLOW 'c' bottom=1148.0
+OVERFLOW 'd' bottom=1148.0
+OVERFLOW 'e' bottom=1148.0
+OVERFLOW 'f' bottom=1148.0
+OVERFLOW 'g' bottom=1148.0
+OVERFLOW 'h' bottom=1148.0
+OVERFLOW 'i' bottom=1148.0
+OVERFLOW 'j' bottom=1148.0
+OVERFLOW 'k' bottom=1148.0
+OVERFLOW 'l' bottom=1148.0
+OVERFLOW 'm' bottom=1148.0
+OVERFLOW 'n' bottom=1195.0
+OVERFLOW 'o' bottom=1195.0
+OVERFLOW 'p' bottom=1195.0
+OVERFLOW 'q' bottom=1195.0
+OVERFLOW 'r' bottom=1195.0
+OVERFLOW 's' bottom=1195.0
+OVERFLOW 't' bottom=1195.0
+OVERFLOW 'u' bottom=1195.0
+OVERFLOW 'v' bottom=1195.0
+OVERFLOW 'w' bottom=1195.0
+OVERFLOW 'x' bottom=1195.0
+OVERFLOW 'y' bottom=1195.0
+OVERFLOW 'z' bottom=1195.0
+OVERFLOW '0' bottom=1242.0
+OVERFLOW '1' bottom=1242.0
+OVERFLOW '2' bottom=1242.0
+OVERFLOW '3' bottom=1242.0
+OVERFLOW '4' bottom=1242.0
+OVERFLOW '5' bottom=1242.0
+OVERFLOW '6' bottom=1242.0
+OVERFLOW '7' bottom=1242.0
+OVERFLOW '8' bottom=1242.0
+OVERFLOW '9' bottom=1242.0
+OVERFLOW 'space' bottom=1242.0
+OVERFLOW 'del' bottom=1242.0
+OVERFLOW 'Clear' bottom=1242.0
+total_buttons=89 overflow_count=39
+VALIDATION COMPLETE
