@@ -1,0 +1,12 @@
+﻿var answer := {
+"question_id": question["id"],
+"skill": skill,
+"correct": correct,
+"selected": selected_index,
+"correct_index": question["correct"],
+"question": question["question"],
+"options": question["options"],
+"explanation": question["explanation"],
+"type": question.get("type", "mc"),
+}
+return _record_answer(answer, correct, skill)

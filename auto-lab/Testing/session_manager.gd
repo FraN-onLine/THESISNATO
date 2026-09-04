@@ -127,6 +127,65 @@ func submit_answer(selected_index: int) -> Dictionary:
 	_current_question()
 	return {"complete": false, "correct": correct, "skill": skill}
 
+## Submit the result of a hands-on (board-built) question. `correct` comes from
+## the automata board evaluation of the built DFA, not from choosing an option.
+func submit_hands_on(correct: bool, board_message: String) -> Dictionary:
+	var question: Dictionary = current_question
+	var skill: String = question["skill"]
+	var answer := {
+		"question_id": question["id"],
+		"skill": skill,
+		"correct": correct,
+		"selected": -1,
+		"correct_index": -1,
+		"question": question["question"],
+		"options": [],
+		"explanation": question.get("explanation", ""),
+		"type": "handson",
+		"board_message": board_message,
+	}
+	return _record_answer(answer, correct, skill)
+
+## Shared tail for both answer paths: append the answer, feed the tracer, save,
+## advance to the next question (or flip state), and report completion.
+func _record_answer(answer: Dictionary, correct: bool, skill: String) -> Dictionary:
+	if state == SessionState.PRETEST:
+		pretest_answers.append(answer)
+		# Record observation in the knowledge tracer
+		knowledge_tracer.set_state_hint("pretest")
+		knowledge_tracer.record_observation(skill, correct)
+		save_session_data()
+	elif state == SessionState.POST_TEST:
+		posttest_answers.append(answer)
+		knowledge_tracer.set_state_hint("posttest")
+		knowledge_tracer.record_observation(skill, correct)
+		save_session_data()
+
+	# Advance to next question
+	current_question_index += 1
+
+	if current_question_index >= pretest_questions.size():
+		# Test is complete
+		if state == SessionState.PRETEST:
+			state = SessionState.ANALYSIS
+		elif state == SessionState.POST_TEST:
+			state = SessionState.COMPLETE
+		return {"complete": true, "correct": correct, "skill": skill}
+
+	_current_question()
+	return {"complete": false, "correct": correct, "skill": skill}
+
+## True when the current question is a hands-on board task (needs the automata
+## board built and submitted), as opposed to a multiple-choice question.
+func current_question_is_handson() -> bool:
+	return current_question.get("type", "mc") == "handson"
+
+## Returns the board task dict ({instruction, accept, reject}) for a hands-on
+## question, or an empty Dictionary when not applicable.
+func get_current_hands_on_task() -> Dictionary:
+	if not current_question_is_handson():
+		return {}
+	return current_question.get("task", {})
 ## Get the current question's correct answer index
 func get_correct_answer_index() -> int:
 	return current_question.get("correct", -1)

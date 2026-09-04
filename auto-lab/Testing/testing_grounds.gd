@@ -192,11 +192,21 @@ func _ready() -> void:
 		workshop.evaluated.connect(_on_workshop_evaluated)
 		workshop.set_active(false)
 
-	# Initialize session
-	session = SessionManager.new()
-	_enter_test_panel()
+	# The SessionBridge owns the single live session shared with the separate
+	# Pretest / Post-test room, so returning here keeps all answers and states.
+	session = SessionBridge.get_session()
 
-	# Show the main menu
+	# If we just came back from the Pretest room (Analysis) or the Post-test room
+	# (Results), show the correct next screen instead of the main menu.
+	match session.state:
+		SessionManager.SessionState.ANALYSIS:
+			_show_analysis()
+			return
+		SessionManager.SessionState.COMPLETE:
+			_show_results()
+			return
+
+	_enter_test_panel()
 	_show_main_menu()
 
 func _process(_delta: float) -> void:
@@ -619,9 +629,8 @@ func _show_pretest_intro() -> void:
 	next_button.visible = false
 
 func _on_start_pretest() -> void:
-	session.start_pretest()
-	session.save_session_data()
-	_show_question()
+	SessionBridge.test_mode = "pretest"
+	get_tree().change_scene_to_file("res://Testing/TestRoom.tscn")
 
 func _show_question() -> void:
 	title_label.text = "PRETEST"
@@ -1302,9 +1311,8 @@ func _on_learning_next() -> void:
 # ===== POST TEST =====
 
 func _start_posttest() -> void:
-	_enter_test_panel()
-	session.start_posttest()
-	_show_posttest_question()
+	SessionBridge.test_mode = "posttest"
+	get_tree().change_scene_to_file("res://Testing/TestRoom.tscn")
 
 func _show_posttest_question() -> void:
 	title_label.text = "POST TEST"

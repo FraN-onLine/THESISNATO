@@ -436,6 +436,47 @@ const QUESTIONS := [
 		],
 		"correct": 0,
 		"explanation": "3 states: q0 (start, no 0s yet), q1 (saw one or more 0s), q2 (accepting, saw the final 1). On '0' at q0, go to q1. On '0' at q1, stay at q1. On '1' at q1, go to q2. Any other transition goes to a trap state."
+	},
+	# ===== IMAGE QUESTION (shows a diagram on the floating panel) =====
+	{
+		"id": 31,
+		"skill": "simulation",
+		"type": "image",
+		"image": "res://Testing/Data/images/dfa_ends_a.svg",
+		"question": "Study the DFA diagram shown above (start state q0, accepting state q1). Which of the following strings does it ACCEPT?",
+		"options": [
+			"'ba'",
+			"'ab'",
+			"'b'",
+			"'aab'"
+		],
+		"correct": 0,
+		"explanation": "The diagram has q0 --a--> q1 and q0 --b--> q0 (a self-loop). The only way to reach the accepting state q1 is with the symbol 'a', and once at q1 there are no outgoing arrows, so the DFA accepts exactly strings ending in 'a'. 'ba' ends in 'a' and is accepted."
+	},
+	# ===== HANDS-ON QUESTION (must build + submit on the automata board) =====
+	{
+		"id": 32,
+		"skill": "building",
+		"type": "handson",
+		"question": "Build a DFA on the automata board that ACCEPTS strings ending in 'ab' over {a, b} and REJECTS everything else.",
+		"task": {
+			"instruction": "Build a DFA over {a,b} that ACCEPTS strings ending in 'ab' and REJECTS others.",
+			"accept": ["ab", "aab", "bab"],
+			"reject": ["a", "aa", "ba"]
+		},
+		"explanation": "A correct DFA accepts 'ab', 'aab', 'bab' and rejects 'a', 'aa', 'ba'. You must build it on the board and press Check task to submit — only a correct build lets you continue."
+	},
+	{
+		"id": 33,
+		"skill": "building",
+		"type": "handson",
+		"question": "Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's (the empty string is accepted).",
+		"task": {
+			"instruction": "Build a DFA over {a,b} that ACCEPTS strings with an even number of 'a's.",
+			"accept": ["", "aa", "baab"],
+			"reject": ["a", "aba", "aaa"]
+		},
+		"explanation": "Use two states tracking 'even a count' (accepting) and 'odd a count'. A 'b' loops in place; an 'a' flips between the two states. Only this correct build lets you continue."
 	}
 ]
 

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320">
+  <style>
+    .node { fill: #1d3f8f; stroke: #ffffff; stroke-width: 3; }
+    .accept { fill: #1d3f8f; stroke: #ffffff; stroke-width: 3; }
+    .accept-inner { fill: none; stroke: #ffffff; stroke-width: 3; }
+    .edge { stroke: #4cc9f0; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    .lab { fill: #ffffff; font: 20px sans-serif; text-anchor: middle; }
+    .statename { fill: #ffffff; font: 22px sans-serif; text-anchor: middle; }
+    .start { stroke: #7aff9a; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    .epsilon { fill: #ffffff; font: 18px sans-serif; text-anchor: middle; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0,0 14,7 0,14" fill="#4cc9f0"/>
+    </marker>
+  </defs>
+  <!-- incoming start marker -->
+  <path class="start" d="M 30 160 L 110 160"/>
+  <!-- q0 -->
+  <circle class="node" cx="160" cy="160" r="52"/>
+  <text class="statename" x="160" y="170">q0</text>
+  <!-- q1 (accepting, double ring) -->
+  <circle class="accept" cx="470" cy="160" r="52"/>
+  <circle class="accept-inner" cx="470" cy="160" r="42"/>
+  <text class="statename" x="470" y="170">q1</text>
+  <!-- q0 --a--> q1 -->
+  <path class="edge" d="M 212 160 C 300 160 300 160 410 160"/>
+  <text class="lab" x="310" y="140">a</text>
+  <!-- q0 --b--> self loop -->
+  <path class="edge" d="M 150 215 C 95 280 40 280 100 200"/>
+  <text class="lab" x="55" y="270">b</text>
+</svg>
