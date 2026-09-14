@@ -28,6 +28,34 @@ var learning_stats: Dictionary = {}  # skill -> {correct: int, total: int}
 ## update; each model stores it in its own prediction_log.
 var state_hint: String = "learning"
 
+## Live count of observations fed to the models per phase. Shows how the
+## algorithm is learning through the 3 stages: pretest (only input),
+## learning (interactive analysis), posttest (proof).
+var phase_counts: Dictionary = {"pretest": 0, "learning": 0, "posttest": 0}
+
+func get_phase_observation_counts() -> Dictionary:
+	return phase_counts.duplicate()
+
+func get_algorithm_name() -> String:
+	match algorithm_type:
+		AlgorithmType.HMM:
+			return "HMM (Hidden Markov Model)"
+		AlgorithmType.BKT:
+			return "BKT (Bayesian Knowledge Tracing)"
+		AlgorithmType.DKT:
+			return "DKT (Deep Knowledge Tracing)"
+	return "HMM"
+
+func get_algorithm_callout() -> String:
+	match algorithm_type:
+		AlgorithmType.HMM:
+			return "HMM"
+		AlgorithmType.BKT:
+			return "BKT"
+		AlgorithmType.DKT:
+			return "DKT"
+	return "HMM"
+
 func set_state_hint(value: String) -> void:
 	state_hint = value
 
@@ -68,6 +96,7 @@ func _initialize_models() -> void:
 	bkt_models.clear()
 	skill_stats.clear()
 	learning_stats.clear()
+	phase_counts = {"pretest": 0, "learning": 0, "posttest": 0}
 	
 	for skill in SKILL_ORDER:
 		hmm_models[skill] = load("res://Testing/Algorithms/hmm.gd").new()
@@ -87,6 +116,13 @@ func record_observation(skill: String, correct: bool) -> void:
 		skill_stats[skill] = {"correct": 0, "total": 0}
 	
 	skill_stats[skill]["total"] += 1
+
+	# Track which phase this observation belongs to: pretest-only input,
+	# interactive learning, or post-test proof.
+	if phase_counts.has(state_hint):
+		phase_counts[state_hint] += 1
+	else:
+		phase_counts[state_hint] = 1
 	if correct:
 		skill_stats[skill]["correct"] += 1
 	
@@ -219,6 +255,7 @@ func to_dict() -> Dictionary:
 	var data := {
 		"algorithm_type": algorithm_type,
 		"skill_stats": skill_stats,
+		"phase_counts": phase_counts,
 			"learning_stats": learning_stats,
 		"hmm_models": {},
 		"bkt_models": {},
@@ -240,6 +277,7 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	algorithm_type = data.get("algorithm_type", AlgorithmType.HMM)
 	skill_stats = data.get("skill_stats", {})
+	phase_counts = data.get("phase_counts", {"pretest": 0, "learning": 0, "posttest": 0})
 	learning_stats = data.get("learning_stats", {})
 	
 	# Ensure all skills have stats

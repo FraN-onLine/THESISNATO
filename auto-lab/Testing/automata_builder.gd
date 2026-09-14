@@ -63,6 +63,7 @@ var attempt_count := 0
 var wrong_attempt_count := 0
 var connection_edits := 0
 var task_done := false
+var free_build_mode := false
 var task_started_msec := 0
 var active_seconds := 0.0
 var _last_time := 0
@@ -112,6 +113,7 @@ func reset_for_task(new_instruction: String, accepted: String, rejected: String)
 	rejected_test_string = rejected
 	accept_strings = [accepted]
 	reject_strings = [rejected]
+	free_build_mode = false
 	_wipe_graph()
 	_timer_start()
 	_apply_instruction_text()
@@ -126,6 +128,7 @@ func reset_for_task_lists(new_instruction: String, accepted: Array, rejected: Ar
 	task_instruction = new_instruction
 	accept_strings = accepted.duplicate()
 	reject_strings = rejected.duplicate()
+	free_build_mode = false
 	accepted_test_string = accepted[0] if not accepted.is_empty() else ""
 	rejected_test_string = rejected[0] if not rejected.is_empty() else ""
 	_wipe_graph()
@@ -158,6 +161,30 @@ func _wipe_graph() -> void:
 		"correct": false,
 		"message": "",
 	}
+
+## Free-build sandbox used during interactive learning: wipe the board, disable
+## task validation and let the learner design their OWN automaton and test any
+## string they invent with Simulate. No right answer - pure experimentation.
+func reset_for_free_build() -> void:
+	task_instruction = "FREE BUILD SANDBOX — design your own DFA.\nAdd states (Add node), connect them (Connect mode), toggle accepting (Toggle accepting), choose the start (Set as Start), then type any string and press Simulate to watch it travel through your machine. There is no right or wrong answer — explore how accept/reject depends on your design."
+	accept_strings.clear()
+	reject_strings.clear()
+	accepted_test_string = ""
+	rejected_test_string = ""
+	_wipe_graph()
+	free_build_mode = true
+	task_done = true
+	_timer_stop()
+	_apply_instruction_text()
+	if input_line:
+		input_line.text = ""
+	_refresh()
+
+## Public wrapper around the internal DFA simulator: returns true when the given
+## string is accepted by the currently built automaton. Used by the free-build
+## sandbox and the gamified learning screens.
+func test_string(value: String) -> bool:
+	return _simulate(value)
 
 func _apply_instruction_text() -> void:
 	# Push the (possibly new) instruction into the on-screen heading label.
@@ -837,6 +864,11 @@ func _simulate(value: String) -> bool:
 
 func _check_task() -> void:
 	_cancel_simulation()
+	# Free-build sandbox has no fixed accept/reject set: only Simulate applies,
+	# so the learner can test THEIR OWN strings against THEIR OWN machine.
+	if free_build_mode:
+		status_label.text = "Free build — there is no task to check. Use Simulate (and the input field) to test any string you like against your own DFA."
+		return
 	var acc := accept_strings.duplicate()
 	if acc.is_empty():
 		acc = [accepted_test_string]

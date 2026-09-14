@@ -5,6 +5,7 @@ extends RefCounted
 const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const KnowledgeTracer = preload("res://Testing/Algorithms/knowledge_tracer.gd")
 const ProfileManager = preload("res://Testing/profile_manager.gd")
+const Gamification = preload("res://Testing/gamification.gd")
 
 # Session states
 enum SessionState {
@@ -33,6 +34,12 @@ var posttest_answers: Array = []
 
 # Adaptive learning data
 var adaptive_learning_complete: bool = false
+
+## The algorithm chosen BEFORE entering the Testing Grounds (HMM=0, BKT=1, DKT=2).
+var selected_algorithm: int = -1
+
+## Gamification tracker (XP, streaks, badges, mastery stars) for the session.
+var gamification: Gamification = null
 var current_learning_skill: String = ""
 var learning_phase: int = 0  # 0=objective, 1=definition, 2=example, 3=guided, 4=challenge, 5=feedback
 
@@ -43,10 +50,19 @@ var workshop_attempts: Dictionary = {}
 func _init() -> void:
 	profile_manager = ProfileManager.new()
 	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
+	gamification = Gamification.new()
 
 ## Set the algorithm type (HMM, BKT, or DKT)
 func set_algorithm_type(algo_type: int) -> void:
 	knowledge_tracer.set_algorithm_type(algo_type)
+	selected_algorithm = algo_type
+
+## Display name of the chosen algorithm (for menus / stats boards).
+func get_algorithm_label() -> String:
+	return knowledge_tracer.get_algorithm_name() if knowledge_tracer else "HMM"
+
+func get_algorithm_callout() -> String:
+	return knowledge_tracer.get_algorithm_callout() if knowledge_tracer else "HMM"
 
 ## Start a new session
 func start_session() -> void:
@@ -322,6 +338,8 @@ func save_session_data() -> void:
 		"knowledge_tracer": knowledge_tracer.to_dict(),
 		"adaptive_learning_complete": adaptive_learning_complete,
 		"workshop_attempts": workshop_attempts,
+		"selected_algorithm": selected_algorithm,
+		"gamification": gamification.to_dict() if gamification else {},
 		"timestamp": Time.get_datetime_string_from_system()
 	}
 	
@@ -417,5 +435,11 @@ func load_session_data() -> bool:
 		adaptive_learning_complete = data["adaptive_learning_complete"]
 	if data.has("workshop_attempts") and data["workshop_attempts"] is Dictionary:
 		workshop_attempts = data["workshop_attempts"]
+	if data.has("selected_algorithm"):
+		selected_algorithm = int(data["selected_algorithm"])
+		if selected_algorithm >= 0:
+			knowledge_tracer.set_algorithm_type(selected_algorithm)
+	if data.has("gamification") and gamification:
+		gamification.from_dict(data["gamification"])
 	
 	return true
