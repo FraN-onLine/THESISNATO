@@ -80,8 +80,8 @@ Before the Testing Grounds opens, choose the algorithm that will watch YOU learn
 Pick an algorithm to see exactly how it learns:"""
 	question_label.visible = true
 
-	for algo_type in AlgorithmCatalog.get_all_types():
-		var info: Dictionary = AlgorithmCatalog.get(algo_type)
+	for algo_type in AlgorithmCatalog.catalog_all_types():
+		var info: Dictionary = AlgorithmCatalog.catalog_info(algo_type)
 		var btn := Button.new()
 		btn.text = "%s\n%s\n%s" % [info["name"], info["tagline"], info["needs_summary"]]
 		btn.custom_minimum_size = Vector2(1100, 104)
@@ -124,15 +124,15 @@ func _show_library() -> void:
 	_show_detail(true)
 
 func _show_detail(browsing := false) -> void:
-	var info: Dictionary = AlgorithmCatalog.get(_viewing)
-	var selected_name: String = AlgorithmCatalog.get_name(_selected)
+	var info: Dictionary = AlgorithmCatalog.catalog_info(_viewing)
+	var selected_name: String = AlgorithmCatalog.catalog_name(_selected)
 	title_label.text = "HOW %s LEARNS" % info["callout"]
 	_clear_options()
 
 	var text := "SELECTED FOR THIS SESSION: %s\n\n" % selected_name
 	text += "■ HOW IT WORKS\n%s\n\n" % info["how_works"]
 	text += "■ THE MATH\n%s\n\n" % info["formula"]
-	text += "■ ITS LEARNING PIPELINE\n%s\n\n" % AlgorithmCatalog.get_pipeline_summary(_viewing)
+	text += "■ ITS LEARNING PIPELINE\n%s\n\n" % AlgorithmCatalog.catalog_pipeline_summary(_viewing)
 	text += "■ WHY USE IT\n%s\n\n■ LIMITATION\n%s" % [info["best_for"], info["limit"]]
 	question_label.text = text
 	question_label.visible = true
@@ -141,10 +141,10 @@ func _show_detail(browsing := false) -> void:
 	var switch_row := HBoxContainer.new()
 	switch_row.add_theme_constant_override("separation", 8)
 	switch_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	for algo_type in AlgorithmCatalog.get_all_types():
+	for algo_type in AlgorithmCatalog.catalog_all_types():
 		var sw := Button.new()
 		var highlight = algo_type == _viewing
-		sw.text = AlgorithmCatalog.get_callout(algo_type)
+		sw.text = AlgorithmCatalog.catalog_callout(algo_type)
 		sw.custom_minimum_size = Vector2(140, 40)
 		sw.add_theme_font_size_override("font_size", 16)
 		sw.add_theme_color_override("font_color", Color(1, 1, 1, 1))
@@ -161,7 +161,7 @@ func _show_detail(browsing := false) -> void:
 	options_box.add_child(switch_row)
 
 	var continue_btn := Button.new()
-	continue_btn.text = "Use %s → Enter Testing Grounds" % AlgorithmCatalog.get_callout(_selected)
+	continue_btn.text = "Use %s → Enter Testing Grounds" % AlgorithmCatalog.catalog_callout(_selected)
 	continue_btn.custom_minimum_size = Vector2(1100, 52)
 	continue_btn.add_theme_font_size_override("font_size", 19)
 	continue_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))

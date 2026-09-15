@@ -132,39 +132,51 @@ loss    = cross_entropy(output[skill], target)  -> back-propagate""",
 	},
 }
 
-static func get(algo_type: int) -> Dictionary:
+static func catalog_info(algo_type: int) -> Dictionary:
 	return ALGORITHMS.get(algo_type, ALGORITHMS[TYPE_HMM])
 
-static func get_name(algo_type: int) -> String:
-	return get(algo_type).get("name", "HMM")
+static func catalog_name(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("name", "HMM"))
 
-static func get_callout(algo_type: int) -> String:
-	return get(algo_type).get("callout", "HMM")
+static func catalog_tagline(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("tagline", ""))
 
-static func get_accent(algo_type: int) -> Color:
-	return get(algo_type).get("accent", Color(1, 1, 1, 1))
+static func catalog_needs_summary(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("needs_summary", ""))
 
-static func get_pipeline(algo_type: int) -> Array:
-	return get(algo_type).get("pipeline", [])
+static func catalog_how_works(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("how_works", ""))
 
-static func get_needs(algo_type: int) -> Dictionary:
-	return get(algo_type).get("needs", {})
+static func catalog_formula(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("formula", ""))
 
-static func get_all_types() -> Array:
+static func catalog_callout(algo_type: int) -> String:
+	return str(catalog_info(algo_type).get("callout", "HMM"))
+
+static func catalog_accent(algo_type: int) -> Color:
+	return catalog_info(algo_type).get("accent", Color(1, 1, 1, 1))
+
+static func catalog_pipeline(algo_type: int) -> Array:
+	return catalog_info(algo_type).get("pipeline", [])
+
+static func catalog_needs(algo_type: int) -> Dictionary:
+	return catalog_info(algo_type).get("needs", {})
+
+static func catalog_all_types() -> Array:
 	return [TYPE_HMM, TYPE_BKT, TYPE_DKT]
 
 ## The three-phase flow the user asked to "track and show":
 ##  1. Pretest data ONLY as input/starting elements
 ##  2. Interactive learning to analyse learning, terminate when learnt
 ##  3. Post test to prove the theory
-static func get_pipeline_summary(algo_type: int) -> String:
+static func catalog_pipeline_summary(algo_type: int) -> String:
 	var lines: Array[String] = []
-	for step in get_pipeline(algo_type):
+	for step in catalog_pipeline(algo_type):
 		lines.append("  [%s] %s — %s" % [step["icon"], step["name"], step["text"]])
 	return "\n".join(lines)
 
-static func get_how_learns_flavor(algo_type: int) -> String:
-	var n: Dictionary = get_needs(algo_type)
+static func catalog_how_learns_flavor(algo_type: int) -> String:
+	var n: Dictionary = catalog_needs(algo_type)
 	return """HOW THIS ALGORITHM LEARNS THROUGH THE 3 PHASES
 1. INPUT (pretest only)
 %s

@@ -230,6 +230,11 @@ func _ready() -> void:
 	_enter_test_panel()
 	_show_main_menu()
 
+## Refresh the in-scene gamification/stats readout from the shared session.
+## The gamification tracker (XP, streaks, badges) lives on the session object
+## so it survives scene changes; calling this re-reads it into the panel.
+func gamification_sync() -> void:
+	_update_stats_panel()
 func _process(_delta: float) -> void:
 	if workshop and workshop.visible:
 		_update_stats_panel()
@@ -742,6 +747,51 @@ func _begin_dfa_lesson() -> void:
 	_dfa_board_practice_active = false
 	_dfa_board_practice_skill = "simulation"
 	_show_dfa_lesson_step()
+
+## Opens the whiteboard in FREE-BUILD sandbox mode (used by the DFA Lesson's
+## "freebuild" step). The learner can design ANY automaton and explore how
+## accept/reject depends on their structure. The board's "Done - exit sandbox"
+## button routes back through _close_free_build() into the lesson flow.
+func _open_free_build(from_lesson: bool) -> void:
+	if workshop == null or workshop.builder is not Control:
+		if from_lesson:
+			_dfa_lesson_index += 1
+			_show_dfa_lesson_step()
+		return
+	_in_free_build = true
+	_free_build_from_lesson = from_lesson
+	_enter_learning_room()
+	workshop.builder.call("reset_for_free_build")
+	workshop.builder.set("sandbox_exit_callback", func(): _close_free_build())
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	question_label.text = "FREE BUILD SANDBOX\n\nDesign ANY automaton you like: tap Add node for a state, pick a symbol and connect states, toggle accepting, set the start - then type any string and press Simulate to watch it run. There is no right or wrong answer, just explore. Press \"Done - exit sandbox\" on the board when you are ready to continue."
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	if from_lesson:
+		progress_label.text = "DFA Lesson  -  free-build sandbox"
+	else:
+		progress_label.text = "Adaptive Learning  -  free-build sandbox"
+	back_button.visible = false
+	next_button.visible = false
+
+## Closes the free-build sandbox and returns to the previous learning flow.
+func _close_free_build() -> void:
+	_in_free_build = false
+	var from_lesson := _free_build_from_lesson
+	_free_build_from_lesson = false
+	if workshop:
+		workshop.set_active(false)
+	if sprite:
+		sprite.visible = true
+	_set_player_paused(false)
+	if from_lesson:
+		# Skip past the freebuild step itself and continue the lesson.
+		_dfa_lesson_index += 1
+		_show_dfa_lesson_step()
 
 func _show_dfa_lesson_step() -> void:
 	if _dfa_lesson_index >= DFA_LESSON_SPEC.size():

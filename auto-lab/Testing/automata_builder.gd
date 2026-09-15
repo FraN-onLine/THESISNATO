@@ -626,20 +626,21 @@ func _find_free_position(base: Vector2) -> Vector2:
 	base.y = clampf(base.y, margin, bounds.size.y - margin)
 	var min_separation: float = NODE_RADIUS * 2.0 + 34.0
 	# Try progressively larger rings around the requested spot first.
-	for step_radius in [90.0, 155.0, 230.0]:
+	var step_radii: Array[float] = [90.0, 155.0, 230.0]
+	for step_radius in step_radii:
 		for angle_index in 12:
-			var candidate := base + Vector2.from_angle(TAU * float(angle_index) / 12.0) * step_radius
+			var candidate: Vector2 = base + Vector2.from_angle(TAU * float(angle_index) / 12.0) * step_radius
 			candidate.x = clampf(candidate.x, margin, bounds.size.x - margin)
 			candidate.y = clampf(candidate.y, margin, bounds.size.y - margin)
 			if _is_free_spot(candidate, min_separation):
 				return candidate
 	# Dense fallback: sweep a grid across the whole board for any free patch.
-	var grid_step := min_separation * 0.6
-	var y := margin
+	var grid_step: float = min_separation * 0.6
+	var y: float = margin
 	while y <= bounds.size.y - margin:
-		var x := margin
+		var x: float = margin
 		while x <= bounds.size.x - margin:
-			var candidate := Vector2(x, y)
+			var candidate: Vector2 = Vector2(x, y)
 			if _is_free_spot(candidate, min_separation):
 				return candidate
 			x += grid_step
