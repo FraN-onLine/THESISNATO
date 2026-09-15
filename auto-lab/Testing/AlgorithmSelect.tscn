@@ -1,0 +1,218 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://Testing/algorithm_select.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://ck16644gt46b6" path="res://Player/player.tscn" id="2_player"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_algo"]
+sky_top_color = Color(0.04, 0.04, 0.09, 1)
+sky_horizon_color = Color(0.09, 0.09, 0.18, 1)
+ground_bottom_color = Color(0.04, 0.04, 0.09, 1)
+ground_horizon_color = Color(0.09, 0.09, 0.18, 1)
+
+[sub_resource type="Sky" id="Sky_algo"]
+sky_material = SubResource("ProceduralSkyMaterial_algo")
+
+[sub_resource type="Environment" id="Environment_algo"]
+background_mode = 2
+sky = SubResource("Sky_algo")
+ambient_light_source = 3
+ambient_light_color = Color(0.5, 0.5, 0.6, 1)
+ambient_light_energy = 1.2
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_algo_floor"]
+albedo_color = Color(0.3, 0.25, 0.4, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_algo_wall"]
+albedo_color = Color(0.04, 0.06, 0.12, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_algo_panel"]
+content_margin_left = 30.0
+content_margin_top = 20.0
+content_margin_right = 30.0
+content_margin_bottom = 20.0
+bg_color = Color(0.06, 0.06, 0.12, 0.95)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_algo_title"]
+content_margin_left = 20.0
+content_margin_top = 12.0
+content_margin_right = 20.0
+content_margin_bottom = 12.0
+bg_color = Color(0.22, 0.3, 0.55, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_algo_button"]
+content_margin_left = 20.0
+content_margin_top = 12.0
+content_margin_right = 20.0
+content_margin_bottom = 12.0
+bg_color = Color(0.16, 0.28, 0.62, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_algo_focus"]
+
+[node name="AlgorithmSelect" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_algo")
+
+[node name="CharacterBody3D" parent="." instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+size = Vector3(20, 1, 20)
+material = SubResource("StandardMaterial3D_algo_floor")
+
+[node name="BackWall" type="CSGBox3D" parent="."]
+position = Vector3(0, 4.0, -7.0)
+size = Vector3(20, 8, 0.5)
+material = SubResource("StandardMaterial3D_algo_wall")
+[node name="UI_Panel" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, -4.0)
+
+[node name="SubViewport" type="SubViewport" parent="UI_Panel"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(2200, 1500)
+render_target_update_mode = 4
+
+[node name="Root" type="Control" parent="UI_Panel/SubViewport"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="UI_Panel/SubViewport/Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 320.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_algo_panel")
+
+[node name="VBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleContainer" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_algo_title")
+
+[node name="Title" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/TitleContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 32
+text = "ALGORITHM SELECT"
+horizontal_alignment = 1
+
+[node name="Content" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="QuestionLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = ""
+autowrap_mode = 2
+custom_minimum_size = Vector2(1100, 0)
+
+[node name="OptionsBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="FeedbackLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.5, 1)
+theme_override_font_sizes/font_size = 17
+text = ""
+autowrap_mode = 2
+
+[node name="ProgressLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ButtonBox" type="HBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="BackButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox"]
+custom_minimum_size = Vector2(240, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_algo_focus")
+text = "Back"
+
+[node name="NextButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox"]
+custom_minimum_size = Vector2(320, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_algo_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_algo_focus")
+text = "Next"
+
+[node name="Billboard" type="Sprite3D" parent="UI_Panel"]
+pixel_size = 0.002
+billboard = 1
+
+[node name="OverlayLayer" type="CanvasLayer" parent="UI_Panel"]
+; Full-screen overlay shown in desktop mode: renders the SubViewport texture
+; over the whole window so the panel is easy to read and click without a headset.
+layer = 10
+
+[node name="OverlayBG" type="ColorRect" parent="UI_Panel/OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.02, 0.07, 0.97)
+
+[node name="OverlayRect" type="TextureRect" parent="UI_Panel/OverlayLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 0

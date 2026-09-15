@@ -1,21 +1,22 @@
-extends Node3D
+﻿extends Node3D
 ## Main controller for the Testing Grounds VR scene.
-## Handles the full flow: Profile Setup → Algorithm Selection → Pretest → Analysis → Adaptive Learning → Post Test → Results.
+## Handles the full flow: Profile Setup â†’ Algorithm Selection â†’ Pretest â†’ Analysis â†’ Adaptive Learning â†’ Post Test â†’ Results.
 
 const SessionManager = preload("res://Testing/session_manager.gd")
 const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
+const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd")
 
-# How each knowledge-tracing algorithm works — displayed whenever the user picks
+# How each knowledge-tracing algorithm works â€” displayed whenever the user picks
 # one, and all three run in parallel so we can compare them for the POC.
 const ALGORITHM_INFO := {
 	0: {
 		"name": "HMM (Hidden Markov Model)",
-		"how": "Each skill is its own HMM with two HIDDEN states: 'knows' and 'doesn't know'. The visible states are the learner's answers (right/wrong). Every answer updates P(knows) with Bayes' rule — a correct answer raises it, a wrong one lowers it, and a small learning/forgetting transition nudges the estimate each step. The driver reads this P(knows) to decide if the skill is mastered."
+		"how": "Each skill is its own HMM with two HIDDEN states: 'knows' and 'doesn't know'. The visible states are the learner's answers (right/wrong). Every answer updates P(knows) with Bayes' rule â€” a correct answer raises it, a wrong one lowers it, and a small learning/forgetting transition nudges the estimate each step. The driver reads this P(knows) to decide if the skill is mastered."
 	},
 	1: {
 		"name": "BKT (Bayesian Knowledge Tracing)",
-		"how": "The classic four-parameter model per skill: P(L0) initial chance of knowing, P(T) chance of learning after one practice, P(S) the 'slip' chance of answering wrong despite knowing, P(G) the 'guess' chance of answering right without knowing. Each answer reweights P(learned) with Bayes — mastery requires repeated evidence — and it is intentionally simple and explainable."
+		"how": "The classic four-parameter model per skill: P(L0) initial chance of knowing, P(T) chance of learning after one practice, P(S) the 'slip' chance of answering wrong despite knowing, P(G) the 'guess' chance of answering right without knowing. Each answer reweights P(learned) with Bayes â€” mastery requires repeated evidence â€” and it is intentionally simple and explainable."
 	},
 	2: {
 		"name": "DKT (Deep Knowledge Tracing)",
@@ -53,7 +54,7 @@ const WORKSHOP_TASKS := {
 # topics (each folds in the relevant 7 segments under the hood), then adaptive
 # review re-visits each skill in the learner's weakest-first order, then post test.
 # "demo" steps first show "explain" text (what the language means) and then pass a
-# flexible task to the whiteboard: the learner may build ANY correct automaton —
+# flexible task to the whiteboard: the learner may build ANY correct automaton â€”
 # validation uses the accept/reject string lists, so any valid construction passes.
 const DFA_LESSON_SPEC := [
 	{"m": "content", "skill": "definition", "field": "definition", "title": "WHAT IS A DFA", "subtitle": "Definition, purpose, and the idea of finite memory."},
@@ -63,14 +64,16 @@ const DFA_LESSON_SPEC := [
 	{"m": "demo", "skill": "building", "title": "SEE A DFA AT THE WHITEBOARD",
 	 "explain": "This is a complete DFA over {a,b}: it ACCEPTS strings ending in 'a' (like 'a', 'ba', 'aba') and REJECTS strings ending in 'b'. Notice the accepting state has a double ring. Every state has exactly one arrow per symbol.",
 	 "task": {"instruction": "This reference DFA is already built for you. Press Check task to confirm it works.", "seed": true, "accepted": "ba", "rejected": "bb", "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}},
+	{"m": "freebuild", "skill": "building", "title": "FREE BUILD - CUSTOMIZE YOUR OWN AUTOMATON",
+	 "subtitle": "No task, no right answer: add states, draw transitions, simulate ANY string you invent."},
 	{"m": "content", "skill": "building", "field": "application", "title": "DFAs IN REAL LIFE", "subtitle": "Firewalls, lexical analysers, regex engines, text search."},
 	{"m": "content", "skill": "simulation", "field": "definition", "title": "SIMULATION", "subtitle": "Tracing input strings through states to accept or reject."},
 	{"m": "demo", "skill": "simulation", "title": "SIMULATE ON THE WHITEBOARD",
-	 "explain": "We say 'string ends in a' means the LAST symbol is 'a'. So 'ba' is accepted, 'ab' is rejected. Now build any DFA that accepts exactly the strings ending in 'a' over {a,b} — there are several correct ways.",
+	 "explain": "We say 'string ends in a' means the LAST symbol is 'a'. So 'ba' is accepted, 'ab' is rejected. Now build any DFA that accepts exactly the strings ending in 'a' over {a,b} â€” there are several correct ways.",
 	 "task": {"instruction": "Build a DFA over {a,b} that ACCEPTS strings ending in 'a' and REJECTS those ending in 'b'. Then simulate some strings.", "accepted": "ba", "rejected": "ab", "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}},
 	{"m": "content", "skill": "building", "field": "guided", "title": "HOW DO WE KNOW A DFA IS CORRECT?", "subtitle": "Test accepted/rejected strings on the whiteboard."},
 	{"m": "demo", "skill": "building", "title": "BUILD: LIST / RULE / REGEX",
-	 "explain": "The list {a, aa, aaa, ...} means 'one or more a's', written a+ in regex, or {w : w is only a's and |w| >= 1} as a rule. All three describe the SAME language — build any DFA for it.",
+	 "explain": "The list {a, aa, aaa, ...} means 'one or more a's', written a+ in regex, or {w : w is only a's and |w| >= 1} as a rule. All three describe the SAME language â€” build any DFA for it.",
 	 "task": {"instruction": "From the list {a, aa, aaa, ...} build a DFA for a+ (one or more a's). ACCEPT any all-a string, REJECT anything with a b or the empty string.", "accepted": "aaa", "rejected": "b", "accept": ["a", "aa", "aaa"], "reject": ["", "b", "ab", "ba"]}},
 	{"m": "content", "skill": "regex", "field": "definition", "title": "DFA FROM REGEX", "subtitle": "a*, a+, a|b, a*b patterns become machines."},
 	{"m": "demo", "skill": "regex", "title": "MAKE 01* TRUE ON THE WHITEBOARD",
@@ -172,6 +175,15 @@ var _workshop_task_index := 0
 # board's Check task only gives feedback and does NOT advance the lesson).
 var _adaptive_board_paired := false
 
+# --- Free-build sandbox (custom automata during learning) ---
+var _in_free_build := false
+var _free_build_from_lesson := false
+# --- Algorithm-driven mastery termination ---
+var _terminated_by_algorithm := false
+var _mastered_skills: Array = []
+# --- Algorithm library browsing ---
+var _library_view: int = -1
+
 func _ready() -> void:
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
@@ -195,6 +207,15 @@ func _ready() -> void:
 	# The SessionBridge owns the single live session shared with the separate
 	# Pretest / Post-test room, so returning here keeps all answers and states.
 	session = SessionBridge.get_session()
+
+	# The active algorithm is chosen on the pre-Grounds Algorithm Select screen
+	# (HMM / BKT / DKT). If we arrived without a choice, send the learner there â€”
+	# the Grounds are locked until an algorithm is picked.
+	if session.selected_algorithm < 0:
+		get_tree().change_scene_to_file("res://Testing/AlgorithmSelect.tscn")
+		return
+	session.set_algorithm_type(session.selected_algorithm)
+	gamification_sync()
 
 	# If we just came back from the Pretest room (Analysis) or the Post-test room
 	# (Results), show the correct next screen instead of the main menu.
@@ -274,7 +295,7 @@ func _show_algorithm_explanation(algo_type: int) -> void:
 	title_label.text = "ALGORITHM EXPLANATION"
 	_clear_content()
 	var info: Dictionary = ALGORITHM_INFO.get(algo_type, {})
-	question_label.text = "You selected: %s\n\nHow it works:\n%s\n\nNote: all three models (HMM, BKT, DKT) run in parallel during this session so we can compare their prediction accuracy on the stats board — the best one will be chosen for the POC. The one you picked just drives the lesson/masternese decisions." % [info.get("name", ""), info.get("how", "")]
+	question_label.text = "You selected: %s\n\nHow it works:\n%s\n\nNote: all three models (HMM, BKT, DKT) run in parallel during this session so we can compare their prediction accuracy on the stats board â€” the best one will be chosen for the POC. The one you picked just drives the lesson/masternese decisions." % [info.get("name", ""), info.get("how", "")]
 	question_label.visible = true
 	_clear_options()
 
@@ -401,7 +422,7 @@ func _show_profile_setup() -> void:
 	var refresh_age := func():
 		age_display.text = _profile_age_str if _profile_age_str != "" else "-"
 
-	# Append a digit (capped at 3 digits so the age stays inside 5–100).
+	# Append a digit (capped at 3 digits so the age stays inside 5â€“100).
 	var press_digit := func(digit: String):
 		if _profile_age_str.length() < 3:
 			_profile_age_str += digit
@@ -442,7 +463,7 @@ func _show_profile_setup() -> void:
 	keypad.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	options_box.add_child(keypad)
 
-	# Digits 1–9.
+	# Digits 1â€“9.
 	for d in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
 		var kb: Button = make_key.call(d)
 		kb.pressed.connect(press_digit.bind(d))
@@ -463,7 +484,7 @@ func _show_profile_setup() -> void:
 
 	# --- Name virtual keypad (VR-friendly) ---
 	# The name LineEdit still accepts a physical keyboard on desktop, but VR users
-	# can tap A–Z on this on-screen board; both stay in sync via _profile_name.
+	# can tap Aâ€“Z on this on-screen board; both stay in sync via _profile_name.
 	var name_key_label := Label.new()
 	name_key_label.text = "Name keypad (tap letters):"
 	name_key_label.add_theme_font_size_override("font_size", 16)
@@ -584,7 +605,7 @@ func _on_profile_continue() -> void:
 		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		return
 
-	# Validate the age that was typed on the keypad (must be 5–100).
+	# Validate the age that was typed on the keypad (must be 5â€“100).
 	if _profile_age_str.is_empty():
 		feedback_label.text = "Please enter your age using the keypad."
 		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
@@ -606,7 +627,7 @@ func _show_pretest_intro() -> void:
 	title_label.text = "PRETEST"
 	_clear_content()
 
-	question_label.text = "You will now take a 30-question pretest on DFA (Deterministic Finite Automata).\n\nThe questions cover 7 skill areas:\n• Simulation\n• Identification of Diagrams\n• DFA Definition and Parts\n• DFA Building\n• DFA from Regex\n• DFA from Set Builder\n• DFA from List\n\nAnswer each question to the best of your ability. Your results will determine your adaptive learning path."
+	question_label.text = "You will now take a 30-question pretest on DFA (Deterministic Finite Automata).\n\nThe questions cover 7 skill areas:\nâ€¢ Simulation\nâ€¢ Identification of Diagrams\nâ€¢ DFA Definition and Parts\nâ€¢ DFA Building\nâ€¢ DFA from Regex\nâ€¢ DFA from Set Builder\nâ€¢ DFA from List\n\nAnswer each question to the best of your ability. Your results will determine your adaptive learning path."
 	question_label.visible = true
 	_clear_options()
 
@@ -730,6 +751,8 @@ func _show_dfa_lesson_step() -> void:
 	match step["m"]:
 		"content":
 			_show_dfa_content(step)
+		"freebuild":
+			_open_free_build(true)
 		"demo":
 			_open_dfa_workshop(step)
 		"practice":
@@ -747,7 +770,7 @@ func _show_dfa_lesson_step() -> void:
 				_show_dfa_practice(step)
 
 func _show_dfa_content(step: Dictionary) -> void:
-	title_label.text = "DFA LESSON — %s" % step["title"]
+	title_label.text = "DFA LESSON â€” %s" % step["title"]
 	_clear_content()
 	_enter_learning_room()
 	var field: String = step.get("field", "definition")
@@ -763,7 +786,7 @@ func _show_dfa_content(step: Dictionary) -> void:
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  %s" % QuestionBank.get_skill_name(step["skill"])
+	progress_label.text = "DFA Lesson  Â·  %s" % QuestionBank.get_skill_name(step["skill"])
 	back_button.visible = false
 	next_button.visible = true
 	next_button.text = "Next >>"
@@ -785,13 +808,13 @@ func _open_dfa_workshop(step: Dictionary) -> void:
 
 func _show_dfa_explanation(step: Dictionary) -> void:
 	_enter_learning_room()
-	title_label.text = "DFA LESSON — %s" % step["title"]
+	title_label.text = "DFA LESSON â€” %s" % step["title"]
 	_clear_content()
-	question_label.text = "EXPLANATION — what does the language mean?\n\n%s" % step.get("explain", "")
+	question_label.text = "EXPLANATION â€” what does the language mean?\n\n%s" % step.get("explain", "")
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  first understand, then build"
+	progress_label.text = "DFA Lesson  Â·  first understand, then build"
 	back_button.visible = false
 	next_button.visible = true
 	next_button.text = "Build it on the Whiteboard"
@@ -817,23 +840,23 @@ func _activate_dfa_board(step: Dictionary) -> void:
 	if sprite:
 		sprite.visible = false
 	_set_player_paused(true)
-	title_label.text = "DFA LESSON — %s" % step["title"]
-	question_label.text = "Build it on the whiteboard.\n\nCreate states, toggle accepting, connect transitions, then press Check task to verify. The board accepts ANY correct construction — not just one specific one.\n\n%s" % step.get("task", {}).get("instruction", "")
+	title_label.text = "DFA LESSON â€” %s" % step["title"]
+	question_label.text = "Build it on the whiteboard.\n\nCreate states, toggle accepting, connect transitions, then press Check task to verify. The board accepts ANY correct construction â€” not just one specific one.\n\n%s" % step.get("task", {}).get("instruction", "")
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  Whiteboard"
+	progress_label.text = "DFA Lesson  Â·  Whiteboard"
 	back_button.visible = false
 	next_button.visible = false
 
 func _show_dfa_practice(step: Dictionary) -> void:
-	title_label.text = "DFA LESSON — %s" % step["title"]
+	title_label.text = "DFA LESSON â€” %s" % step["title"]
 	_dfa_practice_answered = false
 	_clear_content()
 	_enter_learning_room()
 	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
 	if _dfa_practice_index >= challenges.size():
-		# All questions for this skill are done → close the paired board, continue.
+		# All questions for this skill are done â†’ close the paired board, continue.
 		_close_paired_board()
 		_dfa_lesson_index += 1
 		_show_dfa_lesson_step()
@@ -863,7 +886,7 @@ func _show_dfa_practice(step: Dictionary) -> void:
 		btn.pressed.connect(_on_dfa_practice_answer.bind(i))
 		options_box.add_child(btn)
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  %s  ·  %s" % [QuestionBank.get_skill_name(_dfa_practice_skill), "whiteboard active — build/check freely, then answer" if paired else "answer the question"]
+	progress_label.text = "DFA Lesson  Â·  %s  Â·  %s" % [QuestionBank.get_skill_name(_dfa_practice_skill), "whiteboard active â€” build/check freely, then answer" if paired else "answer the question"]
 	back_button.visible = false
 	next_button.visible = false
 
@@ -925,7 +948,7 @@ func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson · Whiteboard practice · %s" % QuestionBank.get_skill_name(skill)
+	progress_label.text = "DFA Lesson Â· Whiteboard practice Â· %s" % QuestionBank.get_skill_name(skill)
 	back_button.visible = false
 	next_button.visible = false
 
@@ -965,12 +988,12 @@ func _handle_dfa_lesson_next() -> void:
 		"practice":
 			var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
 			if _dfa_practice_index >= challenges.size():
-				# All questions answered → next topic.
+				# All questions answered â†’ next topic.
 				_close_paired_board()
 				_dfa_lesson_index += 1
 				_show_dfa_lesson_step()
 			else:
-				# Still more questions — show the NEXT one (index already advanced
+				# Still more questions â€” show the NEXT one (index already advanced
 				# by _on_dfa_practice_answer) WITHOUT resetting to question 1.
 				_show_dfa_practice(step)
 		_:
@@ -1086,7 +1109,7 @@ func _show_challenge() -> void:
 		options_box.add_child(btn)
 
 	feedback_label.text = ""
-	progress_label.text = "Skill: %s | Challenge %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size(), "  ·  whiteboard active — build/check, then answer" if _adaptive_board_paired else ""]
+	progress_label.text = "Skill: %s | Challenge %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size(), "  Â·  whiteboard active â€” build/check, then answer" if _adaptive_board_paired else ""]
 	back_button.visible = false
 	next_button.visible = false
 
@@ -1132,7 +1155,7 @@ func _open_builder_task(task: Dictionary) -> void:
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "Interactive Challenge  ·  %s  ·  press Check task to verify" % QuestionBank.get_skill_name(_learning_skill)
+	progress_label.text = "Interactive Challenge  Â·  %s  Â·  press Check task to verify" % QuestionBank.get_skill_name(_learning_skill)
 	back_button.visible = false
 	next_button.visible = false
 
@@ -1149,7 +1172,7 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		feedback_label.text = "Whiteboard verified! " + message
 		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1))
 		if _dfa_practice_board_active:
-			# Board is paired with a practice multiple-choice question — verify
+			# Board is paired with a practice multiple-choice question â€” verify
 			# the build but keep the question on screen; answering it advances.
 			return
 		if _dfa_board_practice_active:
@@ -1180,17 +1203,17 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	var stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
 	session.record_workshop_attempt(_learning_skill, correct, stats)
 	if _adaptive_board_paired:
-		# Board is paired with an adaptive multiple-choice challenge — verifying
+		# Board is paired with an adaptive multiple-choice challenge â€” verifying
 		# the build gives feedback but the challenge answer drives progress.
 		feedback_label.text = ("Whiteboard verified! " if correct else "Whiteboard: ") + message
 		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 		return
 	if not correct:
 		# Pause: stay on the board; only a successful build advances the lesson.
-		feedback_label.text = message + "\nTry again — adjust states or transitions on the whiteboard."
+		feedback_label.text = message + "\nTry again â€” adjust states or transitions on the whiteboard."
 		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		return
-	# Correct build → next workshop task or on to the multiple-choice challenges.
+	# Correct build â†’ next workshop task or on to the multiple-choice challenges.
 	_workshop_task_index += 1
 	session.knowledge_tracer.record_learning_observation(_learning_skill, true)
 	feedback_label.text = "Correct! " + message
@@ -1382,7 +1405,7 @@ func _show_results() -> void:
 		var data: Dictionary = summary[skill]
 		text += "%s: %.1f%%\n" % [data["name"], data["mastery_percentage"]]
 
-	# --- Algorithm comparison → pick the best model for the POC ---
+	# --- Algorithm comparison â†’ pick the best model for the POC ---
 	if session and session.knowledge_tracer:
 		text += "\nALGORITHM COMPARISON  (prediction hit-rate)\n"
 		var cmp: Dictionary = session.knowledge_tracer.get_algorithm_comparison()
@@ -1394,7 +1417,7 @@ func _show_results() -> void:
 			if s["accuracy"] > best_acc:
 				best_acc = s["accuracy"]
 				best_key = key
-		text += "\n★ Recommended for the POC: %s (highest prediction accuracy)\n" % best_key
+		text += "\nâ˜… Recommended for the POC: %s (highest prediction accuracy)\n" % best_key
 
 	# --- Whiteboard build analytics ---
 	var wdata3: Dictionary = session.get_workshop_attempts()
@@ -1678,7 +1701,7 @@ func _update_stats_panel() -> void:
 	if session.state == SessionManager.SessionState.PRETEST or session.state == SessionManager.SessionState.POST_TEST:
 		stats_progress.text = "Progress: Q %d / %d" % [session.get_current_question_number(), session.get_total_questions()]
 	else:
-		stats_progress.text = "Progress: —"
+		stats_progress.text = "Progress: â€”"
 
 	# --- Score (accumulated correct answers) ---
 	var answered := 0
@@ -1701,7 +1724,7 @@ func _update_stats_panel() -> void:
 	var lines: Array[String] = []
 	for skill in summary:
 		var data: Dictionary = summary[skill]
-		lines.append("%s: %d/%d · %.0f%%" % [data["name"], data["correct"], data["total"], data["accuracy_percentage"]])
+		lines.append("%s: %d/%d Â· %.0f%%" % [data["name"], data["correct"], data["total"], data["accuracy_percentage"]])
 	if lines.is_empty():
 		stats_skills.text = "Skills:\nNo data yet"
 	else:
@@ -1727,7 +1750,7 @@ func _update_stats_panel() -> void:
 		if records.is_empty():
 			continue
 		var sname: String = QuestionBank.get_skill_name(skill)
-		wshop_lines.append("%s: %d/%d ok · %d attempts · %d wrong · %d conns · %.0fs" % [sname, successes, records.size(), total_attempts, wrong, conns, time_s])
+		wshop_lines.append("%s: %d/%d ok Â· %d attempts Â· %d wrong Â· %d conns Â· %.0fs" % [sname, successes, records.size(), total_attempts, wrong, conns, time_s])
 	if stats_workshop:
 		stats_workshop.text = "\n".join(wshop_lines)
 
@@ -1738,7 +1761,7 @@ func _update_stats_board(phase: String, answered: int, correct: int, acc: float)
 	if stats_board == null or session == null:
 		return
 	var lines: Array[String] = []
-	lines.append("SESSION STATS  ·  " + phase)
+	lines.append("SESSION STATS  Â·  " + phase)
 	lines.append("Mode: %s   |   Active algorithm drives learning:" % InputMode.get_mode_name())
 	var algo_view := "HMM"
 	if session.knowledge_tracer:
@@ -1785,7 +1808,7 @@ func _update_stats_board(phase: String, answered: int, correct: int, acc: float)
 					ok_count += 1
 			lines.append("  %s: %d build(s) passed, %d total checks" % [QuestionBank.get_skill_name(skill2), ok_count, try_count])
 	lines.append("")
-	lines.append("Live-updating — build, simulate and check tasks to watch it change.")
+	lines.append("Live-updating â€” build, simulate and check tasks to watch it change.")
 	stats_board.call("set_stats_text", "\n".join(lines))
 
 # ===== VR POINTER =====

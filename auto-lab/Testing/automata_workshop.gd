@@ -19,8 +19,9 @@ signal evaluated(correct: bool, message: String)
 @onready var builder: Control = $SubViewport/Builder
 
 ## Re-deliver the release at the original press point when the pointer drifted
-## less than this many viewport pixels, making buttons click reliably.
-const CLICK_SLOP := 72.0
+## less than this many viewport pixels, making buttons click reliably even with
+## real-world controller wobble.
+const CLICK_SLOP := 92.0
 
 var _last_mouse_pos := Vector2(-1, -1)
 var _pressed := false

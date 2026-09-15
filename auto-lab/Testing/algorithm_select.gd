@@ -143,7 +143,7 @@ func _show_detail(browsing := false) -> void:
 	switch_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	for algo_type in AlgorithmCatalog.get_all_types():
 		var sw := Button.new()
-		var highlight := algo_type == _viewing
+		var highlight = algo_type == _viewing
 		sw.text = AlgorithmCatalog.get_callout(algo_type)
 		sw.custom_minimum_size = Vector2(140, 40)
 		sw.add_theme_font_size_override("font_size", 16)
@@ -219,3 +219,152 @@ func _create_button_style(color: Color) -> StyleBoxFlat:
 	style.content_margin_top = 10.0
 	style.content_margin_bottom = 10.0
 	return style
+# ===== POINTER (desktop overlay + VR laser) =====
+
+func _update_pointer() -> void:
+	if InputMode.is_desktop():
+		_update_overlay_pointer()
+	else:
+		_update_vr_pointer()
+
+func _update_overlay_pointer() -> void:
+	var mouse_screen := get_viewport().get_mouse_position()
+	var uv := Vector2(-1, -1)
+	if overlay_rect != null and overlay_rect.visible:
+		var rect := overlay_rect.get_global_rect()
+		if rect.has_point(mouse_screen) and rect.size.x > 0.0 and rect.size.y > 0.0:
+			var local := mouse_screen - rect.position
+			uv = Vector2(local.x / rect.size.x * viewport.size.x, local.y / rect.size.y * viewport.size.y)
+	var on_panel := uv != Vector2(-1, -1)
+	if uv != _last_mouse_pos:
+		var motion := InputEventMouseMotion.new()
+		motion.position = uv
+		motion.global_position = uv
+		viewport.push_input(motion)
+		_last_mouse_pos = uv
+	if on_panel and _desktop_mouse_down and not _is_pressed:
+		var press := InputEventMouseButton.new()
+		press.button_index = MOUSE_BUTTON_LEFT
+		press.pressed = true
+		press.position = uv
+		press.global_position = uv
+		viewport.push_input(press)
+		_is_pressed = true
+	elif (not _desktop_mouse_down or not on_panel) and _is_pressed:
+		var release := InputEventMouseButton.new()
+		release.button_index = MOUSE_BUTTON_LEFT
+		release.pressed = false
+		release.position = uv
+		release.global_position = uv
+		viewport.push_input(release)
+		_is_pressed = false
+
+func _update_vr_pointer() -> void:
+	var controllers := get_tree().get_nodes_in_group("xr_controller")
+	var hit_any := false
+	var active_controller: XRController3D = null
+	var active_result: Dictionary = {}
+	for controller in controllers:
+		if not (controller is XRController3D):
+			continue
+		var laser := _ensure_laser(controller)
+		if not controller.get_is_active():
+			laser.visible = false
+			continue
+		var result := _ray_intersect_sprite(controller.global_position, -controller.global_transform.basis.z)
+		if result.is_empty():
+			laser.visible = false
+			continue
+		laser.visible = true
+		var distance: float = controller.global_position.distance_to(result["hit"])
+		laser.position = Vector3(0, 0, -distance * 0.5)
+		laser.scale = Vector3(1, 1, distance)
+		if not hit_any:
+			hit_any = true
+			active_controller = controller
+			active_result = result
+	if hit_any and active_controller:
+		var mouse_pos := Vector2(active_result["uv"].x * viewport.size.x, active_result["uv"].y * viewport.size.y)
+		if mouse_pos != _last_mouse_pos:
+			var motion := InputEventMouseMotion.new()
+			motion.position = mouse_pos
+			motion.global_position = mouse_pos
+			viewport.push_input(motion)
+			_last_mouse_pos = mouse_pos
+		var trigger_down: bool = active_controller.is_button_pressed("trigger_click")
+		if trigger_down and not _is_pressed:
+			var press := InputEventMouseButton.new()
+			press.button_index = MOUSE_BUTTON_LEFT
+			press.pressed = true
+			press.position = mouse_pos
+			press.global_position = mouse_pos
+			viewport.push_input(press)
+			_is_pressed = true
+		elif not trigger_down and _is_pressed:
+			var release := InputEventMouseButton.new()
+			release.button_index = MOUSE_BUTTON_LEFT
+			release.pressed = false
+			release.position = mouse_pos
+			release.global_position = mouse_pos
+			viewport.push_input(release)
+			_is_pressed = false
+	else:
+		if _last_mouse_pos != Vector2(-1, -1):
+			var motion := InputEventMouseMotion.new()
+			motion.position = Vector2(-1000, -1000)
+			motion.global_position = Vector2(-1000, -1000)
+			viewport.push_input(motion)
+			_last_mouse_pos = Vector2(-1, -1)
+		if _is_pressed:
+			var release := InputEventMouseButton.new()
+			release.button_index = MOUSE_BUTTON_LEFT
+			release.pressed = false
+			release.position = Vector2(-1000, -1000)
+			release.global_position = Vector2(-1000, -1000)
+			viewport.push_input(release)
+			_is_pressed = false
+
+func _ray_intersect_sprite(ray_origin: Vector3, ray_dir: Vector3) -> Dictionary:
+	if sprite == null or sprite.texture == null:
+		return {}
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return {}
+	var sprite_pos: Vector3 = sprite.global_position
+	var plane_normal: Vector3 = (camera.global_position - sprite_pos).normalized()
+	var denom := plane_normal.dot(ray_dir)
+	if absf(denom) < 0.0001:
+		return {}
+	var t := (sprite_pos - ray_origin).dot(plane_normal) / denom
+	if t < 0.0:
+		return {}
+	var hit := ray_origin + ray_dir * t
+	var to_hit := hit - sprite_pos
+	var camera_basis := camera.global_transform.basis
+	var local_x := to_hit.dot(camera_basis.x)
+	var local_y := to_hit.dot(camera_basis.y)
+	var tex_size := sprite.texture.get_size()
+	var quad_w := tex_size.x * sprite.pixel_size
+	var quad_h := tex_size.y * sprite.pixel_size
+	if absf(local_x) > quad_w * 0.5 or absf(local_y) > quad_h * 0.5:
+		return {}
+	return {"uv": Vector2(local_x / quad_w + 0.5, 0.5 - local_y / quad_h), "hit": hit}
+
+func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
+	if _lasers.has(controller):
+		return _lasers[controller]
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.008, 0.008, 1.0)
+	mesh_instance.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.3, 0.6, 1.0, 0.9)
+	mat.emission_enabled = true
+	mat.emission = Color(0.3, 0.6, 1.0)
+	mat.emission_energy_multiplier = 2.0
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh_instance.material_override = mat
+	mesh_instance.visible = false
+	controller.add_child(mesh_instance)
+	_lasers[controller] = mesh_instance
+	return mesh_instance

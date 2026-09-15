@@ -1,0 +1,301 @@
+﻿func _show_challenge_feedback() -> void:
+	title_label.text = "CHALLENGE FEEDBACK - %s" % QuestionBank.get_skill_name(_learning_skill)
+	_clear_content()
+
+	var percentage: float = 0.0
+	if _challenge_total > 0:
+		percentage = float(_challenge_correct) / float(_challenge_total) * 100.0
+
+	var knowledge: float = session.knowledge_tracer.get_mastery_percentage(_learning_skill)
+	var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
+
+	question_label.text = "You answered %d/%d challenges correctly (%.1f%%).\n\nCurrent knowledge level: %.1f%%\n\n%s" % [
+		_challenge_correct,
+		_challenge_total,
+		percentage,
+		knowledge,
+		"Great job! You have mastered this skill!" if learned else "You need more practice. Let's review the material again."
+	]
+	question_label.visible = true
+	_clear_options()
+
+	feedback_label.text = ""
+	progress_label.text = "Skill: %s" % QuestionBank.get_skill_name(_learning_skill)
+	back_button.visible = true
+	back_button.text = "Back"
+	next_button.visible = true
+	next_button.text = "Continue"
+
+func _show_learning_end() -> void:
+	title_label.text = "SKILL COMPLETE - %s" % QuestionBank.get_skill_name(_learning_skill)
+	_clear_content()
+
+	var knowledge: float = session.knowledge_tracer.get_mastery_percentage(_learning_skill)
+	var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
+
+	question_label.text = "You have completed the learning activity for %s.\n\nCurrent knowledge level: %.1f%%\n\n%s" % [
+		QuestionBank.get_skill_name(_learning_skill),
+		knowledge,
+		"Excellent! You have mastered this skill." if learned else "You have improved, but may need more practice."
+	]
+	question_label.visible = true
+	_clear_options()
+
+	# Check if there are more skills to cover. Adaptive learning walks through
+	# ALL topics (weakest-first) so nothing is skipped; the "next" step is simply
+	# the next skill in the pretest-derived priority order.
+	_analysis_skill_index += 1
+	if _analysis_skill_index < _analysis_skills.size():
+		var next_skill: String = _analysis_skills[_analysis_skill_index]
+		var next_knowledge: float = session.knowledge_tracer.get_mastery_percentage(next_skill)
+		question_label.text += "\n\nNext topic to cover: %s (current knowledge %.1f%%)" % [QuestionBank.get_skill_name(next_skill), next_knowledge]
+		next_button.text = "Next Topic"
+	elif not _adaptive_review_pass:
+		_adaptive_review_pass = true
+		_analysis_skills = session.get_skills_by_weakness()
+		_analysis_skill_index = 0
+		question_label.text += "\n\nThe ordered DFA lesson is complete. Now adaptive review will revisit topics in pretest weakness order."
+		next_button.text = "Start Adaptive Review"
+	else:
+		question_label.text += "\n\nAll seven topics and the adaptive review have now been covered."
+		next_button.text = "Proceed to Post Test"
+
+	feedback_label.text = ""
+	progress_label.text = "Adaptive Learning Progress"
+	back_button.visible = true
+	back_button.text = "Back"
+	next_button.visible = true
+
+func _on_learning_next() -> void:
+	var phase: int = session.get_learning_phase()
+
+	match phase:
+		0, 1, 2, 3, 4:
+			session.advance_learning_phase()
+			_show_learning_phase(phase + 1)
+		5: # Challenge phase - next challenge or feedback
+			var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
+			_challenge_index += 1
+			if _challenge_index < challenges.size():
+				_show_challenge()
+			else:
+				session.advance_learning_phase()
+				_show_learning_phase(6)
+		6: # Feedback - check if learned, if not, handhold
+			var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
+			if not learned:
+				# Handhold: go back to definition and example
+				_handholding = true
+				_challenge_index = 0
+				_challenge_correct = 0
+				_challenge_total = 0
+				_challenge_answered = false
+				session.learning_phase = 1
+				_show_learning_phase(1)
+			else:
+				session.advance_learning_phase()
+				_show_learning_phase(7)
+		7: # End - move to next skill or post test
+			# This is handled by _on_next_pressed
+			pass
+
+# ===== POST TEST =====
+
+func _start_posttest() -> void:
+	SessionBridge.test_mode = "posttest"
+	get_tree().change_scene_to_file("res://Testing/TestRoom.tscn")
+
+func _show_posttest_question() -> void:
+	title_label.text = "POST TEST"
+	_clear_content()
+
+	var question: Dictionary = session.get_current_question()
+	question_label.text = "Question %d/%d\n\n%s" % [session.get_current_question_number(), session.get_total_questions(), question["question"]]
+	question_label.visible = true
+
+	_clear_options()
+	var options: Array = question["options"]
+	for i in range(options.size()):
+		var btn := Button.new()
+		btn.text = options[i]
+		btn.custom_minimum_size = Vector2(800, 0)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_pressed_color", Color(0.8, 0.85, 1, 1))
+		btn.add_theme_stylebox_override("normal", _create_option_style(Color(0.12, 0.15, 0.3, 1)))
+		btn.add_theme_stylebox_override("hover", _create_option_style(Color(0.2, 0.25, 0.5, 1)))
+		btn.add_theme_stylebox_override("pressed", _create_option_style(Color(0.1, 0.12, 0.25, 1)))
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		btn.pressed.connect(_on_posttest_answer.bind(i))
+		options_box.add_child(btn)
+
+	feedback_label.text = ""
+	progress_label.text = "Post Test: Question %d of %d" % [session.get_current_question_number(), session.get_total_questions()]
+	back_button.visible = false
+	next_button.visible = false
+
+func _on_posttest_answer(selected_index: int) -> void:
+	var result: Dictionary = session.submit_answer(selected_index)
+
+	if result["complete"]:
+		_show_results()
+	else:
+		_show_posttest_question()
+
+# ===== RESULTS =====
+
+func _show_results() -> void:
+	_enter_test_panel()
+	title_label.text = "RESULTS"
+	_clear_content()
+
+	_results = session.get_posttest_results()
+	session.save_session_data()
+	var report_path := session.generate_profile_pdf()
+
+	var pretest: Dictionary = _results["pretest"]
+	var posttest: Dictionary = _results["posttest"]
+
+	var text := "Pretest Results:\n"
+	text += "Score: %d/%d (%.1f%%)\n\n" % [pretest["correct"], pretest["total"], pretest["percentage"]]
+
+	text += "Post Test Results:\n"
+	text += "Score: %d/%d (%.1f%%)\n\n" % [posttest["correct"], posttest["total"], posttest["percentage"]]
+
+	var improvement: float = posttest["percentage"] - pretest["percentage"]
+	text += "Improvement: %+.1f%%\n\n" % improvement
+	text += "Profile report saved to: %s\n\n" % report_path
+
+	text += "Knowledge Summary:\n"
+	var summary: Dictionary = _results["knowledge_summary"]
+	for skill in summary:
+		var data: Dictionary = summary[skill]
+		text += "%s: %.1f%%\n" % [data["name"], data["mastery_percentage"]]
+
+	# --- Algorithm comparison â†’ pick the best model for the POC ---
+	if session and session.knowledge_tracer:
+		text += "\nALGORITHM COMPARISON  (prediction hit-rate)\n"
+		var cmp: Dictionary = session.knowledge_tracer.get_algorithm_comparison()
+		var best_key := "HMM"
+		var best_acc := -1.0
+		for key in ["HMM", "BKT", "DKT"]:
+			var s: Dictionary = cmp[key]
+			text += "  %s: %d/%d hits (%.1f%%)\n" % [key, s["hits"], s["total"], s["accuracy"]]
+			if s["accuracy"] > best_acc:
+				best_acc = s["accuracy"]
+				best_key = key
+		text += "\nâ˜… Recommended for the POC: %s (highest prediction accuracy)\n" % best_key
+
+	# --- Whiteboard build analytics ---
+	var wdata3: Dictionary = session.get_workshop_attempts()
+	if not wdata3.is_empty():
+		text += "\nWHITEBOARD BUILDS\n"
+		for skill3 in wdata3:
+			var records3: Array = wdata3[skill3]
+			if records3.is_empty():
+				continue
+			var ok_count := 0
+			var wrong_tries := 0
+			var conns := 0
+			var time_s := 0.0
+			for r in records3:
+				wrong_tries += r.get("wrong_attempts", 0)
+				conns += r.get("connections_made", 0)
+				time_s += float(r.get("time_seconds", 0.0))
+				if r.get("correct", false):
+					ok_count += 1
+			text += "  %s: %d builds passed, %d wrong checks, %d connection edits, %.0fs on task\n" % [QuestionBank.get_skill_name(skill3), ok_count, wrong_tries, conns, time_s]
+
+	question_label.text = text
+	question_label.visible = true
+	_clear_options()
+
+	feedback_label.text = ""
+	progress_label.text = "Session Complete"
+	back_button.visible = true
+	back_button.text = "Back to Lab"
+	next_button.visible = false
+
+# ===== BUTTON HANDLERS =====
+
+func _on_back_pressed() -> void:
+	if back_button.text == "Back to Lab":
+		get_tree().change_scene_to_file("res://World/World.tscn")
+		return
+
+	# Go back to main menu
+	_show_main_menu()
+
+func _on_next_pressed() -> void:
+	if _in_dfa_lesson:
+		_handle_dfa_lesson_next()
+		return
+	match session.state:
+		SessionManager.SessionState.ANALYSIS:
+			if next_button.text == "Start DFA Lesson":
+				_begin_dfa_lesson()
+			else:
+				_start_adaptive_learning()
+		SessionManager.SessionState.ADAPTIVE_LEARNING:
+			if next_button.text == "Proceed to Post Test":
+				_start_posttest()
+			elif next_button.text == "Learn Next Skill" or next_button.text == "Next Topic":
+				# Start learning the next weak skill
+				_learning_skill = _analysis_skills[_analysis_skill_index]
+				_challenge_index = 0
+				_challenge_correct = 0
+				_challenge_total = 0
+				_challenge_answered = false
+				_handholding = false
+				_workshop_task_index = 0
+				_workshop_phase = false
+				session.start_adaptive_learning(_learning_skill)
+				_enter_learning_room()
+				_show_learning_phase(0)
+			else:
+				_on_learning_next()
+		SessionManager.SessionState.COMPLETE:
+			_show_results()
+
+# ===== UI HELPERS =====
+
+func _clear_content() -> void:
+	if workshop:
+		workshop.set_active(false)
+	_set_player_paused(false)
+	question_label.text = ""
+	question_label.visible = false
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = ""
+
+func _clear_options() -> void:
+	for child in options_box.get_children():
+		options_box.remove_child(child)
+		child.queue_free()
+
+func _enter_learning_room() -> void:
+	# Learning happens in the walkable room. Only testing screens use the desktop overlay.
+	if overlay_layer:
+		overlay_layer.visible = false
+	if sprite:
+		sprite.visible = true
+	var player := get_node_or_null("../CharacterBody3D")
+	if player:
+		player.set_physics_process(true)
+		player.set_process(true)
+
+func _enter_test_panel() -> void:
+	if workshop:
+		workshop.set_active(false)
+	if overlay_layer:
+		overlay_layer.visible = true
+	if sprite:
+		sprite.visible = false
+	var player := get_node_or_null("../CharacterBody3D")
+	if player:
+		player.set_physics_process(false)
+		player.set_process(false)
+
+func _set_player_paused(paused: bool) -> void:

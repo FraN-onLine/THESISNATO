@@ -41,6 +41,10 @@ var connection_status: Label
 var simulate_button: Button
 var sim_keyboard_title: Label
 var simulation_keyboard_active := false
+## Shown on the whiteboard only in FREE BUILD mode; the host sets the callback
+## so the learner can leave their custom sandbox and keep learning.
+var sandbox_exit_button: Button
+var sandbox_exit_callback: Callable = Callable()
 
 # --- Step-by-step simulation animation state ---
 var simulation_running := false
@@ -161,6 +165,8 @@ func _wipe_graph() -> void:
 		"correct": false,
 		"message": "",
 	}
+	if sandbox_exit_button:
+		sandbox_exit_button.visible = false
 
 ## Free-build sandbox used during interactive learning: wipe the board, disable
 ## task validation and let the learner design their OWN automaton and test any
@@ -175,6 +181,8 @@ func reset_for_free_build() -> void:
 	free_build_mode = true
 	task_done = true
 	_timer_stop()
+	if sandbox_exit_button:
+		sandbox_exit_button.visible = true
 	_apply_instruction_text()
 	if input_line:
 		input_line.text = ""
@@ -214,6 +222,10 @@ func cancel_pointer_interaction() -> void:
 	connect_source = ""
 	_refresh()
 
+func _on_sandbox_exit_pressed() -> void:
+	if sandbox_exit_callback.is_valid():
+		sandbox_exit_callback.call()
+
 func _ready() -> void:
 	custom_minimum_size = Vector2(1400, 760)
 	_build_ui()
@@ -230,15 +242,23 @@ func _build_ui() -> void:
 	heading.text = "AUTOMATA WORKSHOP"
 	heading.add_theme_font_size_override("font_size", 30)
 	root.add_child(heading)
+	sandbox_exit_button = Button.new()
+	sandbox_exit_button.name = "SandboxExitButton"
+	sandbox_exit_button.text = "✅ Done — exit sandbox"
+	sandbox_exit_button.custom_minimum_size = Vector2(320, 48)
+	sandbox_exit_button.visible = false
+	sandbox_exit_button.add_theme_font_size_override("font_size", 17)
+	sandbox_exit_button.pressed.connect(_on_sandbox_exit_pressed)
+	root.add_child(sandbox_exit_button)
 	if show_back_to_lab:
 		var back_button := Button.new()
 		back_button.text = "Back to Lab"
-		back_button.custom_minimum_size = Vector2(180, 42)
+		back_button.custom_minimum_size = Vector2(200, 48)
 		back_button.pressed.connect(func(): get_tree().change_scene_to_file("res://World/World.tscn"))
 		root.add_child(back_button)
 	var instruction := Label.new()
 	instruction.name = "InstructionLabel"
-	instruction.text = task_instruction + "\nDrag nodes to move them. Pick a symbol, then click source -> target to draw arrows. \"Set as Start\" fixes the one start state; in/out arrows between a pair use separate lanes."
+	instruction.text = task_instruction + "\nBuild on the board on the right. Tap \"Add node\" for a new state, pick a symbol, then tap source -> target to draw arrows. Drag any node to move it. \"Set as Start\" marks the one start state."
 	instruction.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction.add_theme_font_size_override("font_size", 18)
 	root.add_child(instruction)
@@ -269,7 +289,7 @@ func _build_ui() -> void:
 	mode_title.add_theme_font_size_override("font_size", 22)
 	mode_panel.add_child(mode_title)
 	var mode_help := Label.new()
-	mode_help.text = "Select / Move: click or drag nodes\nConnect: pick a symbol, then source -> target\n\"Set as Start\" picks the one start state"
+	mode_help.text = "Add node: places a new state on the board\nSelect: tap a node to pick it\nConnect: pick a symbol, then tap source -> target\n\"Set as Start\" fixes the one start state"
 	mode_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mode_panel.add_child(mode_help)
 	mode_group = ButtonGroup.new()
@@ -327,13 +347,13 @@ func _build_ui() -> void:
 	simulate.add_child(label)
 	input_line = LineEdit.new()
 	input_line.placeholder_text = "any string"
-	input_line.custom_minimum_size = Vector2(280, 48)
+	input_line.custom_minimum_size = Vector2(300, 52)
 	input_line.focus_entered.connect(func(): simulation_keyboard_active = true)
 	input_line.focus_exited.connect(func(): simulation_keyboard_active = false)
 	simulate.add_child(input_line)
 	simulate_button = Button.new()
 	simulate_button.text = "Simulate"
-	simulate_button.custom_minimum_size = Vector2(180, 48)
+	simulate_button.custom_minimum_size = Vector2(190, 52)
 	simulate_button.add_theme_font_size_override("font_size", 18)
 	simulate_button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	simulate_button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
@@ -342,7 +362,7 @@ func _build_ui() -> void:
 	simulate.add_child(simulate_button)
 	var check_button := Button.new()
 	check_button.text = "Check task"
-	check_button.custom_minimum_size = Vector2(200, 48)
+	check_button.custom_minimum_size = Vector2(210, 52)
 	check_button.add_theme_font_size_override("font_size", 18)
 	check_button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	check_button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
@@ -366,15 +386,15 @@ func _build_ui() -> void:
 		key.pressed.connect(_on_simulation_key.bind(symbol))
 		sim_grid.add_child(key)
 	var sim_space := _make_keyboard_key("space")
-	sim_space.custom_minimum_size = Vector2(160, 44)
+	sim_space.custom_minimum_size = Vector2(170, 50)
 	sim_space.pressed.connect(_on_simulation_space)
 	sim_grid.add_child(sim_space)
 	var sim_del := _make_keyboard_key("del")
-	sim_del.custom_minimum_size = Vector2(70, 44)
+	sim_del.custom_minimum_size = Vector2(90, 50)
 	sim_del.pressed.connect(_on_simulation_backspace)
 	sim_grid.add_child(sim_del)
 	var sim_clear := _make_keyboard_key("Clear")
-	sim_clear.custom_minimum_size = Vector2(110, 44)
+	sim_clear.custom_minimum_size = Vector2(130, 50)
 	sim_clear.pressed.connect(_on_simulation_clear)
 	sim_grid.add_child(sim_clear)
 	sim_kb_row.add_child(sim_grid)
@@ -439,8 +459,8 @@ func _add_mode_button(parent: VBoxContainer, label: String, mode: EditMode, sele
 	button.text = label
 	button.toggle_mode = true
 	button.button_group = mode_group
-	button.custom_minimum_size = Vector2(240, 44)
-	button.add_theme_font_size_override("font_size", 17)
+	button.custom_minimum_size = Vector2(250, 48)
+	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.12, 0.2, 0.38, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.2, 0.4, 0.7, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.55, 0.48, 1)))
@@ -466,8 +486,8 @@ func _on_mode_toggled(toggled_on: bool, mode: EditMode) -> void:
 func _add_action_button(parent: VBoxContainer, label: String, action: Callable) -> void:
 	var button := Button.new()
 	button.text = label
-	button.custom_minimum_size = Vector2(240, 36)
-	button.add_theme_font_size_override("font_size", 14)
+	button.custom_minimum_size = Vector2(250, 48)
+	button.add_theme_font_size_override("font_size", 15)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
@@ -477,9 +497,9 @@ func _add_action_button(parent: VBoxContainer, label: String, action: Callable) 
 func _make_keyboard_key(symbol: String) -> Button:
 	var button := Button.new()
 	button.text = symbol
-	button.custom_minimum_size = Vector2(52, 44)
+	button.custom_minimum_size = Vector2(64, 50)
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_font_size_override("font_size", 20)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.1, 0.16, 0.3, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.42, 0.72, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.55, 0.45, 1)))
@@ -547,32 +567,90 @@ func _set_symbol(symbol: String) -> void:
 	_refresh()
 
 func _add_state() -> void:
+	var bounds := _board_rect()
+	var margin := _board_margin()
+	# Default home for a fresh node is a comfortable mid-board spot, so it is
+	# always visible even when nothing has been built yet.
+	var base := Vector2(bounds.size.x * 0.5, bounds.size.y * 0.45)
+	if states.has(selected_state):
+		var from_pos: Vector2 = states[selected_state]["position"]
+		var step_x := minf(240.0, bounds.size.x * 0.22)
+		# New nodes spawn down-and-to-the-right of the currently selected node.
+		var offset := Vector2(step_x, 56.0)
+		# If that would push the circle past the right edge of the board, start a
+		# new row to the left/underneath instead, so a fresh node can never be
+		# summoned outside the board.
+		if from_pos.x + offset.x > bounds.size.x - margin:
+			offset = Vector2(-step_x, minf(150.0, bounds.size.y * 0.3))
+		base = from_pos + offset
+	_create_state_at(base, true)
+
+## Public entry point used by the board: double-tapping/clicking an empty area
+## of the canvas stamps a brand-new node at that spot (still clamped on-canvas).
+func spawn_state_at(screen_pos: Vector2) -> void:
+	_create_state_at(screen_pos, false)
+
+func _create_state_at(spawn_pos: Vector2, announce: bool) -> void:
 	_cancel_simulation()
 	_save_undo_state()
 	var state_name := "q%d" % next_state_id
 	next_state_id += 1
-	var base := Vector2(400, 215)
-	if states.has(selected_state):
-		base = states[selected_state]["position"] + Vector2(230, 40)
-	states[state_name] = {"position": _find_free_position(base), "accepting": false}
+	states[state_name] = {"position": _find_free_position(spawn_pos), "accepting": false}
 	selected_state = state_name
+	if status_label:
+		if announce:
+			status_label.text = "Added %s - pick a symbol and use Connect mode to link it." % state_name
+		else:
+			status_label.text = "Added %s at your tap - pick a symbol and use Connect mode to link it." % state_name
 	_refresh()
 
+## The on-screen area of the graph canvas, in canvas pixel coordinates. Used so
+## every spawned node is guaranteed to be fully visible on the board.
+func _board_rect() -> Rect2:
+	if graph and graph.size.x >= 200.0 and graph.size.y >= 200.0:
+		return Rect2(Vector2.ZERO, graph.size)
+	return Rect2(Vector2.ZERO, Vector2(1080, 430))
+
+## Minimum distance a node centre must keep from the canvas edges so the whole
+## circle (plus a little padding) always stays on the board.
+func _board_margin() -> float:
+	return NODE_RADIUS + 30.0
+
 ## Picks a spot near `base` with at least one node-width of clearance from
-## every existing node, so freshly added nodes never overlap their neighbours.
+## every existing node, so freshly added nodes never overlap their neighbours -
+## and always INSIDE the board, so nodes can never be summoned off-canvas.
 func _find_free_position(base: Vector2) -> Vector2:
-	var min_separation: float = (NODE_RADIUS * 2.0 + 30.0) if graph else 130.0
-	for radius_step in [1.0, 1.6, 2.2]:
-		for angle_index in 8:
-			var candidate: Vector2 = base + Vector2.from_angle(TAU * float(angle_index) / 8.0) * (230.0 * float(radius_step))
-			var free := true
-			for other_name in states:
-				if states[other_name]["position"].distance_to(candidate) < min_separation:
-					free = false
-					break
-			if free:
+	var bounds := _board_rect()
+	var margin := _board_margin()
+	base.x = clampf(base.x, margin, bounds.size.x - margin)
+	base.y = clampf(base.y, margin, bounds.size.y - margin)
+	var min_separation: float = NODE_RADIUS * 2.0 + 34.0
+	# Try progressively larger rings around the requested spot first.
+	for step_radius in [90.0, 155.0, 230.0]:
+		for angle_index in 12:
+			var candidate := base + Vector2.from_angle(TAU * float(angle_index) / 12.0) * step_radius
+			candidate.x = clampf(candidate.x, margin, bounds.size.x - margin)
+			candidate.y = clampf(candidate.y, margin, bounds.size.y - margin)
+			if _is_free_spot(candidate, min_separation):
 				return candidate
-	return base + Vector2(230.0, 0.0)
+	# Dense fallback: sweep a grid across the whole board for any free patch.
+	var grid_step := min_separation * 0.6
+	var y := margin
+	while y <= bounds.size.y - margin:
+		var x := margin
+		while x <= bounds.size.x - margin:
+			var candidate := Vector2(x, y)
+			if _is_free_spot(candidate, min_separation):
+				return candidate
+			x += grid_step
+		y += grid_step
+	return base
+
+func _is_free_spot(candidate: Vector2, min_separation: float) -> bool:
+	for other_name in states:
+		if states[other_name]["position"].distance_to(candidate) < min_separation:
+			return false
+	return true
 
 func _toggle_accepting() -> void:
 	_cancel_simulation()
@@ -922,6 +1000,10 @@ class GraphCanvas extends Control:
 	var hit_radius := 96.0
 	var hovered_state := ""
 	var preview_mouse := Vector2(-1e6, -1e6)
+	## Double-tap stamping: two quick taps on an empty area of the board create a
+	## new state there (nice for laser/no-mouse use).
+	var _last_empty_tap_pos := Vector2(-1e6, -1e6)
+	var _last_empty_tap_ms := 0
 
 	func set_builder(value: Control) -> void:
 		builder = value
@@ -1230,6 +1312,20 @@ class GraphCanvas extends Control:
 					builder.connect_source = ""
 					builder._refresh()
 					accept_event()
+				return
+				# Double-tap an empty area of the board to stamp a new state there
+				# (works with a mouse OR a VR laser pointer).
+				if builder.edit_mode != builder.EditMode.CONNECT:
+					var now := Time.get_ticks_msec()
+					if now - _last_empty_tap_ms < 500 and event.position.distance_to(_last_empty_tap_pos) <= 90.0:
+						_last_empty_tap_ms = 0
+						if builder.has_method("spawn_state_at"):
+							builder.call("spawn_state_at", event.position)
+						accept_event()
+						return
+					_last_empty_tap_ms = now
+					_last_empty_tap_pos = event.position
+				accept_event()
 				return
 			if builder.edit_mode == builder.EditMode.CONNECT:
 				if builder.connect_source == "":

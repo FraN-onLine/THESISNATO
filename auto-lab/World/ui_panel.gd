@@ -303,7 +303,10 @@ func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://Game/Game1.tscn")
 
 func _on_testing_pressed() -> void:
-	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
+	# Algorithm selection happens BEFORE the Testing Grounds opens: the learner
+	# picks which knowledge-tracing algorithm will drive the session (and reads
+	# how it learns) before any pretest data is collected.
+	get_tree().change_scene_to_file("res://Testing/AlgorithmSelect.tscn")
 
 func _on_workshop_pressed() -> void:
 	get_tree().change_scene_to_file("res://Testing/AutomataWorkshopRoom.tscn")

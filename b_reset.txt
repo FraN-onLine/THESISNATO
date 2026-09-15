@@ -1,0 +1,96 @@
+﻿
+func _timer_stop() -> void:
+	if task_started_msec > 0:
+		active_seconds = float(Time.get_ticks_msec() - task_started_msec) / 1000.0
+
+## Configure a brand-new challenge on the whiteboard. Wipes the previous graph,
+## keeps only the required start state, and restarts the attempt/"speed" timer.
+## Accepted / rejected are single convenience strings; use reset_for_task_lists()
+## when full language coverage is desired.
+func reset_for_task(new_instruction: String, accepted: String, rejected: String) -> void:
+	task_instruction = new_instruction
+	accepted_test_string = accepted
+	rejected_test_string = rejected
+	accept_strings = [accepted]
+	reject_strings = [rejected]
+	_wipe_graph()
+	_timer_start()
+	_apply_instruction_text()
+	if input_line:
+		input_line.text = ""
+	_refresh()
+
+## Same as reset_for_task() but with list-based validation: the built DFA passes
+## if it accepts EVERY string in `accepted` and rejects EVERY string in
+## `rejected`.  So "make any automata for 01*" accepts ANY correct construction.
+func reset_for_task_lists(new_instruction: String, accepted: Array, rejected: Array) -> void:
+	task_instruction = new_instruction
+	accept_strings = accepted.duplicate()
+	reject_strings = rejected.duplicate()
+	accepted_test_string = accepted[0] if not accepted.is_empty() else ""
+	rejected_test_string = rejected[0] if not rejected.is_empty() else ""
+	_wipe_graph()
+	_timer_start()
+	_apply_instruction_text()
+	if input_line:
+		input_line.text = ""
+	_refresh()
+
+func _wipe_graph() -> void:
+	states.clear()
+	transitions.clear()
+	next_state_id = 1
+	selected_state = "q0"
+	start_state = "q0"
+	active_symbol = "a"
+	states["q0"] = {"position": Vector2(360, 210), "accepting": false}
+	attempt_count = 0
+	wrong_attempt_count = 0
+	connection_edits = 0
+	undo_stack.clear()
+	last_transition_from = ""
+	last_transition_to = ""
+	task_done = false
+	last_attempt_stats = {
+		"attempts": 0,
+		"wrong_attempts": 0,
+		"connections_made": 0,
+		"time_seconds": 0.0,
+		"correct": false,
+		"message": "",
+	}
+
+func _apply_instruction_text() -> void:
+	# Push the (possibly new) instruction into the on-screen heading label.
+	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
+	if heading:
+		heading.text = task_instruction + "\nDrag a node to move it â€” nodes space themselves apart so they never overlap. Pick a symbol, then click source -> target to draw arrows. Use \"Set as Start\" to choose the single start state. Incoming and outgoing arrows between two nodes are drawn in separate lanes."
+
+## Snapshot of the attempt analytics for the host lesson / algorithms.
+func get_attempt_stats() -> Dictionary:
+	return last_attempt_stats.duplicate()
+
+func _record_attempt(correct: bool, message: String) -> void:
+	attempt_count += 1
+	if not correct:
+		wrong_attempt_count += 1
+	last_attempt_stats = {
+		"attempts": attempt_count,
+		"wrong_attempts": wrong_attempt_count,
+		"connections_made": connection_edits,
+		"time_seconds": active_seconds,
+		"correct": correct,
+		"message": message,
+	}
+
+func cancel_pointer_interaction() -> void:
+	dragging_state = ""
+	connect_source = ""
+	_refresh()
+
+func _ready() -> void:
+	custom_minimum_size = Vector2(1400, 760)
+	_build_ui()
+	_seed_task_graph()
+	_refresh()
+	_timer_start()

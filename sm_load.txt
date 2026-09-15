@@ -1,0 +1,4 @@
+﻿	if data.has("workshop_attempts") and data["workshop_attempts"] is Dictionary:
+		workshop_attempts = data["workshop_attempts"]
+	
+	return true

@@ -1,0 +1,86 @@
+﻿func _ready() -> void:
+	# The same UI is always displayed on the in-room billboard in both desktop and VR.
+	if viewport and sprite:
+		sprite.texture = viewport.get_texture()
+	if overlay_rect:
+		overlay_rect.texture = viewport.get_texture()
+	if overlay_layer:
+		overlay_layer.visible = false
+	if sprite:
+		sprite.visible = false
+
+	# Connect buttons
+	if back_button:
+		back_button.pressed.connect(_on_back_pressed)
+	if next_button:
+		next_button.pressed.connect(_on_next_pressed)
+	if workshop:
+		workshop.evaluated.connect(_on_workshop_evaluated)
+		workshop.set_active(false)
+
+	# The SessionBridge owns the single live session shared with the separate
+	# Pretest / Post-test room, so returning here keeps all answers and states.
+	session = SessionBridge.get_session()
+
+	# If we just came back from the Pretest room (Analysis) or the Post-test room
+	# (Results), show the correct next screen instead of the main menu.
+	match session.state:
+		SessionManager.SessionState.ANALYSIS:
+			_show_analysis()
+			return
+		SessionManager.SessionState.COMPLETE:
+			_show_results()
+			return
+
+	_enter_test_panel()
+	_show_main_menu()
+
+func _process(_delta: float) -> void:
+	if workshop and workshop.visible:
+		_update_stats_panel()
+		return
+	_update_pointer()
+	_update_stats_panel()
+
+func _input(event: InputEvent) -> void:
+	# Track the real left mouse button so Desktop mode can click the panel.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_desktop_mouse_down = event.pressed
+	# In desktop mode forward keyboard input to the SubViewport so text fields
+	# (e.g. the name LineEdit) can be typed normally on a physical keyboard.
+	if InputMode.is_desktop():
+		_forward_keyboard(event)
+
+# ===== UI NAVIGATION =====
+
+func _show_main_menu() -> void:
+	title_label.text = "TESTING GROUNDS"
+	_clear_content()
+
+	question_label.text = "Welcome to the DFA Testing Grounds!\n\nThis adaptive system walks you through:\n1. Pretest (30 questions across all DFA topics)\n2. Knowledge Analysis\n3. DFA Lesson (taught as ONE course, whiteboard + practice)\n4. Adaptive Review (weakest topics first)\n5. Post Test\n\nSelect an algorithm to begin:"
+	question_label.visible = true
+
+	# Create algorithm selection buttons
+	_create_algorithm_buttons()
+	feedback_label.text = ""
+	progress_label.text = ""
+	back_button.visible = true
+	back_button.text = "Back to Lab"
+	next_button.visible = false
+
+func _create_algorithm_buttons() -> void:
+	_clear_options()
+
+	var algorithms := [
+		{"name": "HMM (Hidden Markov Model)", "type": 0, "desc": "Tracks knowledge per skill using hidden states"},
+		{"name": "BKT (Bayesian Knowledge Tracing)", "type": 1, "desc": "Classic BKT with 4 parameters per skill"},
+		{"name": "DKT (Deep Knowledge Tracing)", "type": 2, "desc": "Neural network-based knowledge tracing"}
+	]
+
+	for algo in algorithms:
+		var btn := Button.new()
+		btn.text = algo["name"] + "\n" + algo["desc"]
+		btn.custom_minimum_size = Vector2(800, 60)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))

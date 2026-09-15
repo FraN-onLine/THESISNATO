@@ -21,7 +21,7 @@ signal back_pressed
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
 
-const CLICK_SLOP := 72.0
+const CLICK_SLOP := 92.0
 
 var _last_mouse_pos := Vector2(-1, -1)
 var _pressed := false

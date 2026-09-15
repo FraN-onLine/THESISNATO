@@ -1,0 +1,63 @@
+﻿func _pair_practice_board(skill: String, index: int) -> bool:
+	if workshop == null or workshop.builder is not Control:
+		return false
+	var tasks: Array = WORKSHOP_TASKS.get(skill, [])
+	if tasks.is_empty():
+		return false
+	var task: Dictionary = tasks[index % tasks.size()]
+	_reset_board_for_task(task)
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	return true
+
+## Shared helper: push a WORKSHOP_TASKS / DFA_LESSON_SPEC task into the builder.
+func _reset_board_for_task(task: Dictionary) -> void:
+	if workshop == null or workshop.builder is not Control:
+		return
+	if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
+		workshop.builder.call("reset_for_task_lists",
+			task.get("instruction", "Build the DFA on the whiteboard."),
+			task["accept"], task["reject"])
+	else:
+		workshop.builder.call("reset_for_task",
+			task.get("instruction", "Build the DFA on the whiteboard."),
+			task.get("accepted", "aa"),
+			task.get("rejected", "ab"))
+	if task.get("seed", false):
+		workshop.builder.call("seed_reference_graph")
+
+func _close_paired_board() -> void:
+	_dfa_practice_board_active = false
+	_adaptive_board_paired = false
+	if workshop:
+		workshop.set_active(false)
+	if sprite:
+		sprite.visible = true
+	_set_player_paused(false)
+
+func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
+	_dfa_board_practice_active = true
+	_dfa_board_practice_skill = skill
+	var skill_tasks: Array = WORKSHOP_TASKS.get(skill, [])
+	_enter_learning_room()
+	if workshop.builder is Control:
+		if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
+			workshop.builder.call("reset_for_task_lists", task["instruction"], task["accept"], task["reject"])
+		else:
+			workshop.builder.call("reset_for_task", task["instruction"], task["accepted"], task["rejected"])
+	workshop.set_active(true)
+	if sprite:
+		sprite.visible = false
+	_set_player_paused(true)
+	question_label.text = "Whiteboard practice %d / %d - %s\n\n%s\n\nBuild the DFA on the board, then press Check task. Any correct construction is accepted; wrong attempts stay here until the build passes." % [_dfa_board_practice_index + 1, skill_tasks.size(), QuestionBank.get_skill_name(skill), task["instruction"]]
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "DFA Lesson Â· Whiteboard practice Â· %s" % QuestionBank.get_skill_name(skill)
+	back_button.visible = false
+	next_button.visible = false
+
+func _on_dfa_practice_answer(selected_index: int) -> void:
+	if _dfa_practice_answered:

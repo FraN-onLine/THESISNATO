@@ -1,0 +1,136 @@
+﻿
+## Get skills sorted by weakness
+func get_skills_by_weakness() -> Array:
+	return knowledge_tracer.get_skills_by_weakness()
+
+## Start adaptive learning for a specific skill
+func start_adaptive_learning(skill: String) -> void:
+	state = SessionState.ADAPTIVE_LEARNING
+	current_learning_skill = skill
+	learning_phase = 0
+	# Keep pretest evidence in the model, but start a fresh mastery evidence window.
+	knowledge_tracer.begin_learning(skill)
+
+## Get the current learning phase
+func get_learning_phase() -> int:
+	return learning_phase
+
+## Advance to the next learning phase
+func advance_learning_phase() -> void:
+	learning_phase += 1
+
+## Check if adaptive learning is complete for the current skill
+func is_skill_learned(skill: String) -> bool:
+	return knowledge_tracer.is_learned(skill)
+
+## Complete adaptive learning
+func complete_adaptive_learning() -> void:
+	adaptive_learning_complete = true
+
+## Record one whiteboard (automata builder) attempt. `stats` comes from the
+## builder's get_attempt_stats(): attempts, wrong_attempts, connections_made,
+## time_seconds. This richer evidence (failed tries, rework, time on task) is
+## stored per skill so the knowledge-tracing algorithms can use it later.
+func record_workshop_attempt(skill: String, correct: bool, stats: Dictionary) -> void:
+	if not workshop_attempts.has(skill):
+		workshop_attempts[skill] = []
+	workshop_attempts[skill].append({
+		"correct": correct,
+		"attempts": stats.get("attempts", 0),
+		"wrong_attempts": stats.get("wrong_attempts", 0),
+		"connections_made": stats.get("connections_made", 0),
+		"time_seconds": stats.get("time_seconds", 0.0),
+	})
+	save_session_data()
+
+## Get the recorded whiteboard analytics per skill.
+func get_workshop_attempts() -> Dictionary:
+	return workshop_attempts.duplicate(true)
+
+## Start the post test
+func start_posttest() -> void:
+	state = SessionState.POST_TEST
+	current_question_index = 0
+	posttest_answers.clear()
+	# Use the same questions as the pretest for comparison
+	posttest_questions = pretest_questions.duplicate()
+	_current_question()
+
+## Get the post test results
+func get_posttest_results() -> Dictionary:
+	var results := {
+		"pretest": _calculate_test_results(pretest_answers),
+		"posttest": _calculate_test_results(posttest_answers),
+		"knowledge_summary": knowledge_tracer.get_full_summary()
+	}
+	return results
+
+## Calculate test results from answers
+func _calculate_test_results(answers: Array) -> Dictionary:
+	var total := answers.size()
+	var correct := 0
+	var skill_results := {}
+	
+	for answer in answers:
+		if answer["correct"]:
+			correct += 1
+		
+		var skill: String = answer["skill"]
+		if not skill_results.has(skill):
+			skill_results[skill] = {"correct": 0, "total": 0}
+		skill_results[skill]["total"] += 1
+		if answer["correct"]:
+			skill_results[skill]["correct"] += 1
+	
+	var percentage := 0.0
+	if total > 0:
+		percentage = float(correct) / float(total) * 100.0
+	
+	# Calculate per-skill percentages
+	for skill in skill_results:
+		var stats: Dictionary = skill_results[skill]
+		stats["percentage"] = float(stats["correct"]) / float(stats["total"]) * 100.0 if stats["total"] > 0 else 0.0
+	
+	return {
+		"total": total,
+		"correct": correct,
+		"percentage": percentage,
+		"skill_results": skill_results
+	}
+
+## Get the current question
+func _current_question() -> void:
+	if current_question_index < pretest_questions.size():
+		current_question = pretest_questions[current_question_index]
+
+## Shuffle questions
+func _shuffle_questions(questions: Array) -> Array:
+	var shuffled := questions.duplicate()
+	# Fisher-Yates shuffle
+	for i in range(shuffled.size() - 1, 0, -1):
+		var j := randi() % (i + 1)
+		var temp = shuffled[i]
+		shuffled[i] = shuffled[j]
+		shuffled[j] = temp
+	return shuffled
+
+## Save session data to JSON
+func save_session_data() -> void:
+	var data := {
+		"profile": profile_manager.get_profile(),
+		"pretest_answers": pretest_answers,
+		"posttest_answers": posttest_answers,
+		"knowledge_tracer": knowledge_tracer.to_dict(),
+		"adaptive_learning_complete": adaptive_learning_complete,
+		"workshop_attempts": workshop_attempts,
+		"timestamp": Time.get_datetime_string_from_system()
+	}
+	
+	var file := FileAccess.open("user://session_data.json", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data, "\t"))
+		file.close()
+	_write_json("user://pretest_data.json", {"profile": profile_manager.get_profile(), "answers": pretest_answers})
+	_write_json("user://posttest_data.json", {"profile": profile_manager.get_profile(), "answers": posttest_answers})
+
+func _write_json(path: String, data: Dictionary) -> void:

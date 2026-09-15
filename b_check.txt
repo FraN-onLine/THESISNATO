@@ -1,0 +1,94 @@
+﻿func _simulate(value: String) -> bool:
+	# Simulation starts at the single, changeable start state, so ANY correct
+	# automaton the learner builds is evaluated properly â€” not a fixed "q0".
+	var current := start_state
+	if not states.has(current):
+		var keys := states.keys()
+		current = keys[0] if not keys.is_empty() else ""
+		if current == "":
+			return false
+	var pos := 0
+	while pos < value.length():
+		# Longest-match: consume multi-character transition labels (e.g. "ab")
+		# whole, while still handling ordinary single-symbol DFAs correctly.
+		var best_length := -1
+		var best_next := ""
+		for transition in transitions:
+			if transition["from"] != current:
+				continue
+			for symbol in transition.get("symbols", [transition.get("symbol", "")]):
+				if symbol.is_empty():
+					continue
+				var symbol_len: int = symbol.length()
+				if symbol_len > best_length and value.substr(pos, symbol_len) == symbol:
+					best_length = symbol_len
+					best_next = transition["to"]
+		if best_length < 0:
+			return false
+		current = best_next
+		pos += best_length
+	return states.get(current, {}).get("accepting", false)
+
+func _check_task() -> void:
+	_cancel_simulation()
+	var acc := accept_strings.duplicate()
+	if acc.is_empty():
+		acc = [accepted_test_string]
+	var rej := reject_strings.duplicate()
+	if rej.is_empty():
+		rej = [rejected_test_string]
+	var correct := true
+	var failure := ""
+	for s in acc:
+		if not _simulate(s):
+			correct = false
+			failure = s
+			break
+	if correct:
+		for s in rej:
+			if _simulate(s):
+				correct = false
+				failure = s
+				break
+	var message := ""
+	if correct:
+		message = "Task passed! The DFA accepts ALL required strings (%d) and rejects ALL required strings (%d)." % [acc.size(), rej.size()]
+	else:
+		message = "Not yet. Your DFA mishandles \"%s\" â€” check its accepting states and transitions, then press Check task again." % failure
+	status_label.text = message
+	if correct:
+		task_done = true
+		_timer_stop()
+	_record_attempt(correct, message)
+	evaluated.emit(correct, message)
+
+class GraphCanvas extends Control:
+	## Light-blue line palette for arrows, self-loop arcs and arrowheads.
+	const EDGE_COLOR := Color(0.35, 0.75, 1.0)
+	const EDGE_WIDTH := 4.0
+	const ARROW_LENGTH := 16.0
+	const ARROW_HALF_WIDTH := 8.0
+	## Lateral offset that puts "forward" arrows in one lane and their matching
+	## "return" arrows in a second lane, so in/out arrows never overlap.
+	const PAIR_LANE := 15.0
+	## Extra lateral offset between parallel arrows travelling the same way.
+	const PAIR_STEP := 16.0
+	## Self-loop radius measured beyond the node edge.
+	const LOOP_EXTRA := 46.0
+	## Radial gap between stacked self-loops on the same node.
+	const LOOP_STACK := 48.0
+	const LABEL_FONT_SIZE := 22
+
+	var builder: Control
+	var node_radius := 46.0
+	var hit_radius := 96.0
+	var hovered_state := ""
+	var preview_mouse := Vector2(-1e6, -1e6)
+
+	func set_builder(value: Control) -> void:
+		builder = value
+		mouse_exited.connect(_on_mouse_exited)
+		_update_cursor()
+
+	func _on_mouse_exited() -> void:
+		hovered_state = ""

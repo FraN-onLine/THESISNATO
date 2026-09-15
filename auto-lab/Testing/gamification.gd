@@ -46,9 +46,9 @@ func get_xp_to_next_level() -> int:
 	return LEVELS[idx]["xp"]
 
 func get_level_progress() -> float:
-	var idx := clampi(get_level() - 1, 0, LEVELS.size() - 2)
-	var base := LEVELS[idx]["xp"]
-	var next := LEVELS[idx + 1]["xp"]
+	var idx = clampi(get_level() - 1, 0, LEVELS.size() - 2)
+	var base = LEVELS[idx]["xp"]
+	var next = LEVELS[idx + 1]["xp"]
 	return clampf(float(total_xp - base) / float(maxi(next - base, 1)), 0.0, 1.0)
 
 ## A correct answer: 10 XP x streak multiplier; every 3-streak grants a bonus.
