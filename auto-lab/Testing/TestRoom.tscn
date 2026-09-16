@@ -1,12 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://tunrcosipylp"]
 
-[ext_resource type="Script" path="res://Testing/test_room.gd" id="1_room"]
+[ext_resource type="Script" uid="uid://dlvr17gisu6eq" path="res://Testing/test_room.gd" id="1_room"]
 [ext_resource type="PackedScene" uid="uid://ck16644gt46b6" path="res://Player/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://Testing/AutomataWorkshopBillboard.tscn" id="3_workshop"]
-[ext_resource type="PackedScene" path="res://Testing/TestPanelBillboard.tscn" id="4_panel"]
-
-[sub_resource type="StandardMaterial3D" id="mat_floor"]
-albedo_color = Color(0.08, 0.14, 0.2, 1)
+[ext_resource type="PackedScene" uid="uid://duycvv8vogh32" path="res://Testing/TestPanelBillboard.tscn" id="4_panel"]
 
 [sub_resource type="Environment" id="environment"]
 background_mode = 1
@@ -15,25 +12,26 @@ ambient_light_source = 3
 ambient_light_color = Color(0.5, 0.6, 0.8, 1)
 ambient_light_energy = 1.2
 
-[node name="TestRoom" type="Node3D"]
+[sub_resource type="StandardMaterial3D" id="mat_floor"]
+albedo_color = Color(0.08, 0.14, 0.2, 1)
+
+[node name="TestRoom" type="Node3D" unique_id=1358247271]
 script = ExtResource("1_room")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1594958006]
 environment = SubResource("environment")
 
-[node name="Floor" type="CSGBox3D" parent="."]
-position = Vector3(0, -0.5, -2)
+[node name="Floor" type="CSGBox3D" parent="." unique_id=435684460]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -2)
+use_collision = true
 size = Vector3(20, 1, 14)
 material = SubResource("mat_floor")
-use_collision = true
 
-[node name="CharacterBody3D" parent="." instance=ExtResource("2_player")]
-position = Vector3(0, 1, 3)
+[node name="CharacterBody3D" parent="." unique_id=274200726 instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 3)
 
-[node name="TestPanel" parent="." instance=ExtResource("4_panel")]
-position = Vector3(-4.8, 2.5, -4)
-scale = Vector3(1, 1, 1)
+[node name="TestPanel" parent="." unique_id=1226927967 instance=ExtResource("4_panel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.8, 2.5, -4)
 
-[node name="Workshop" parent="." instance=ExtResource("3_workshop")]
-position = Vector3(4.8, 2.5, -4)
-scale = Vector3(1, 1, 1)
+[node name="Workshop" parent="." unique_id=608501893 instance=ExtResource("3_workshop")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.8, 2.5, -4)

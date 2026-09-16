@@ -35,7 +35,7 @@ var posttest_answers: Array = []
 # Adaptive learning data
 var adaptive_learning_complete: bool = false
 
-## The algorithm chosen BEFORE entering the Testing Grounds (HMM=0, BKT=1, DKT=2).
+## The algorithm chosen BEFORE entering the Testing Grounds (HMM=0, BKT=1, KST=2).
 var selected_algorithm: int = -1
 
 ## Gamification tracker (XP, streaks, badges, mastery stars) for the session.
@@ -52,7 +52,7 @@ func _init() -> void:
 	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
 	gamification = Gamification.new()
 
-## Set the algorithm type (HMM, BKT, or DKT)
+## Set the algorithm type (HMM, BKT, or KST)
 func set_algorithm_type(algo_type: int) -> void:
 	knowledge_tracer.set_algorithm_type(algo_type)
 	selected_algorithm = algo_type
@@ -207,7 +207,14 @@ func get_correct_answer_index() -> int:
 	return current_question.get("correct", -1)
 
 ## Get the analysis summary after pretest
+## Pretest-derived priors are applied once, when the analysis is first built.
+var _priors_applied: bool = false
+
 func get_analysis_summary() -> Dictionary:
+	if not _priors_applied:
+		_priors_applied = true
+		# The pretest IS the starting estimate: BKT P(L0), HMM Pi, KST state.
+		knowledge_tracer.apply_pretest_priors(pretest_answers)
 	return knowledge_tracer.get_full_summary()
 
 ## Get the weakest skill (for adaptive learning focus)

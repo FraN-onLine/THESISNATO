@@ -43,6 +43,7 @@ var mode_group: ButtonGroup
 var mode_buttons: Dictionary = {}
 var connection_status: Label
 var simulate_button: Button
+var sim_keyboard_title: Label
 var simulation_keyboard_active := false
 ## Shown on the whiteboard only in FREE BUILD mode; the host sets the callback
 ## so the learner can leave their custom sandbox and keep learning.
@@ -201,7 +202,7 @@ func _apply_instruction_text() -> void:
 	# Push the (possibly new) instruction into the on-screen heading label.
 	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
 	if heading:
-		heading.text = task_instruction + "\nTAP A NODE to select it, then drag it to move. To draw an arrow: tap a symbol below, tap Connect, then tap the source node and the target node. \"Set as Start\" picks the single start state; double-tap an empty spot to add a node there."
+		heading.text = task_instruction + "\nDrag a node to move it — nodes space themselves apart so they never overlap. Pick a symbol, then click source -> target to draw arrows. Use \"Set as Start\" to choose the single start state. Incoming and outgoing arrows between two nodes are drawn in separate lanes."
 
 ## Snapshot of the attempt analytics for the host lesson / algorithms.
 func get_attempt_stats() -> Dictionary:
@@ -467,9 +468,11 @@ func _refresh() -> void:
 			status_label.text = "Step %d/%d — at %s | remaining: '%s'" % [sim_pos, sim_input.length(), sim_current, sim_input.substr(sim_pos)]
 		else:
 			status_label.text = "Start: %s | Selected: %s | Symbol: %s | Nodes: %d" % [start_state, selected_state, active_symbol, states.size()]
+	if sim_keyboard_title:
+		sim_keyboard_title.text = "SIMULATION KEYBOARD | INPUT: '%s'" % (input_line.text if input_line else "")
 	var keyboard_title := get_node_or_null("VBoxContainer/KeyboardTitle")
 	if keyboard_title:
-		keyboard_title.text = "SYMBOL: %s\nINPUT: %s" % [active_symbol if active_symbol != "" else "-", input_line.text if input_line else ""]
+		keyboard_title.text = "SYMBOL KEYS | ACTIVE SYMBOL: %s" % active_symbol
 	if connection_status:
 		if edit_mode == EditMode.CONNECT:
 			connection_status.text = "Source: %s\nTarget: %s" % [connect_source if connect_source != "" else "none", selected_state if selected_state != connect_source else "click target"]
@@ -531,13 +534,25 @@ func _clear_symbol() -> void:
 	active_symbol = ""
 	_refresh()
 
-## A palette tap does double duty so ONE strip of keys drives the whole board:
-## it becomes the ACTIVE transition symbol for Connect mode, and - if the
-## Simulate field is focused - it also types that character for simulation.
-func _on_palette_symbol(symbol: String) -> void:
+func _on_virtual_key(symbol: String) -> void:
 	if input_line and (input_line.has_focus() or simulation_keyboard_active):
 		input_line.text += symbol
-	_set_symbol(symbol)
+	else:
+		_set_symbol(symbol)
+
+func _on_virtual_clear() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active):
+		input_line.text = ""
+	else:
+		_clear_symbol()
+
+func _on_virtual_delete() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active) and not input_line.text.is_empty():
+		input_line.text = input_line.text.substr(0, input_line.text.length() - 1)
+
+func _on_virtual_space() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active):
+		input_line.text += " "
 
 func _create_button_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

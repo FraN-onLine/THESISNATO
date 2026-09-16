@@ -23,8 +23,14 @@ const ALGORITHMS := {
 		"callout": "HMM",
 		"tagline": "Bayesian filtering over a hidden 'knows / doesn't know' state per skill.",
 		"accent": Color(0.35, 0.8, 1.0, 1.0),
-		"how_works": "Each DFA skill is its own small Hidden Markov Model with two HIDDEN states: 'knows' and 'doesn't know'. The learner's answers (right / wrong) are the only VISIBLE states. Every answer runs one step of the forward algorithm:\n  1. TRANSITION — a small learning probability P(T) can flip 'doesn't know -> knows' and a forgetting probability P(F) can flip 'knows -> doesn't know'.\n  2. LIKELIHOOD — the answer is explained by P(slip) when the learner knows and P(guess) when they do not.\n  3. BAYES UPDATE — the posterior P(knows | answer) is computed with Bayes' rule, so a correct answer raises the estimate and a wrong one lowers it.\nThe hidden state is never observed directly - the model can only infer it from answers, which is exactly what a real 'is the user learning?' tracker must do.",
-		"formula": "P(knows_t) = P(knows_{t-1})*(1 - P_forget) + (1 - P(knows_{t-1})) * P_learn\nP(answer=correct) = P(knows_t)*(1 - P_slip) + (1 - P(knows_t))*P_guess\nP(knows_t | answer) = ( P(answer | knows_t) * P(knows_t) ) / P(answer)",
+		"how_works": """Each DFA skill is its own small Hidden Markov Model with two HIDDEN states: "knows" and "doesn't know". The learner's answers (right / wrong) are the only VISIBLE states. Every answer runs one step of the forward algorithm:
+  1. TRANSITION — a small learning probability P(T) can flip "doesn't know -> knows" and a forgetting probability P(F) can flip "knows -> doesn't know".
+  2. LIKELIHOOD — the answer is explained by P(slip) when the learner knows and P(guess) when they do not.
+  3. BAYES UPDATE — the posterior P(knows | answer) is computed with Bayes' rule, so a correct answer raises the estimate and a wrong one lowers it.
+The hidden state is never observed directly - the model can only infer it from answers, which is exactly what a real "is the user learning?" tracker must do.""",
+		"formula": """P(knows_t) = P(knows_{t-1})*(1 - P_forget) + (1 - P(knows_{t-1})) * P_learn
+P(answer=correct) = P(knows_t)*(1 - P_slip) + (1 - P(knows_t))*P_guess
+P(knows_t | answer) = ( P(answer | knows_t) * P(knows_t) ) / P(answer)""",
 		"params": [
 			{"symbol": "P(learn)", "name": "Learning rate", "meaning": "Chance a 'doesn't know' hidden state becomes 'knows' after one practice."},
 			{"symbol": "P(forget)", "name": "Forgetting rate", "meaning": "Chance a 'knows' hidden state slips back to 'doesn't know'."},
@@ -55,8 +61,16 @@ const ALGORITHMS := {
 		"callout": "BKT",
 		"tagline": "The classic 4-parameter per-skill model used in intelligent tutoring systems.",
 		"accent": Color(0.95, 0.75, 0.3, 1.0),
-		"how_works": "BKT is the classic knowledge-tracing model from intelligent tutoring systems (Corbett & Anderson, 1995). Each skill keeps four parameters:\n  P(L0) — the learner's chance of already knowing the skill before the first practice.\n  P(T)  — the chance the learner LEARNS the skill after one more practice opportunity.\n  P(G)  — the chance of GUESSING a correct answer while still not knowing.\n  P(S)  — the chance of SLIPPING (a careless wrong answer) while actually knowing.\nEvery answer re-weights P(Learned) using Bayes: first apply P(T) (learning opportunity), then scale by the likelihood of the observed answer. Mastery requires repeated evidence — several consecutive updates pushed past the threshold — so it is intentionally conservative and easy to explain in a thesis.",
-		"formula": "P(L_t) = P(L_{t-1})*(1 - P(S)) + (1 - P(L_{t-1})) * P(T)\nP(correct) = P(L_t)*(1 - P(S)) + (1 - P(L_t)) * P(G)\nanswer correct : P(L_t|correct) = P(L_t)*(1 - P(S)) / P(correct)\nanswer wrong   : P(L_t|wrong)   = P(L_t)*P(S) / (1 - P(correct))",
+		"how_works": """BKT is the classic knowledge-tracing model from intelligent tutoring systems (Corbett & Anderson, 1995). Each skill keeps four parameters:
+  P(L0) — the learner's chance of already knowing the skill before the first practice.
+  P(T)  — the chance the learner LEARNS the skill after one more practice opportunity.
+  P(G)  — the chance of GUESSING a correct answer while still not knowing.
+  P(S)  — the chance of SLIPPING (a careless wrong answer) while actually knowing.
+Every answer re-weights P(Learned) using Bayes: first apply P(T) (learning opportunity), then scale by the likelihood of the observed answer. Mastery requires repeated evidence — several consecutive updates pushed past the threshold — so it is intentionally conservative and easy to explain in a thesis.""",
+		"formula": """P(L_t) = P(L_{t-1})*(1 - P(S)) + (1 - P(L_{t-1})) * P(T)
+P(correct) = P(L_t)*(1 - P(S)) + (1 - P(L_t)) * P(G)
+answer correct : P(L_t|correct) = P(L_t)*(1 - P(S)) / P(correct)
+answer wrong   : P(L_t|wrong)   = P(L_t)*P(S) / (1 - P(correct))""",
 		"params": [
 			{"symbol": "P(L0)", "name": "Prior knowledge", "meaning": "Initial chance the learner already knows the skill before practice."},
 			{"symbol": "P(T)", "name": "Transition / learning", "meaning": "Chance of acquiring the skill after one practice opportunity."},
@@ -87,8 +101,10 @@ const ALGORITHMS := {
 		"callout": "KST",
 		"tagline": "A knowledge-space model: mastering one DFA skill lights up its prerequisites.",
 		"accent": Color(0.65, 1.0, 0.55, 1.0),
-		"how_works": "KST models the learner knowledge as a SPACE of skill states connected by PREREQUISITE edges: definition -> identification/simulation -> building -> set_builder/list. Every skill carries a mastery probability SEEDED from the pretest, and every answer updates the observed skill with Bayes rule. The KST twist is propagation: mastering a higher skill lifts its prerequisites (downward closure of the knowledge state), and a skill whose prerequisites are all mastered gets a readiness bonus on its learning transition. One knowledge space covers all six DFA skills at once, so the model explains both what the learner knows and what has just come within reach.",
-		"formula": "P(master | answer) via Bayes, with P(answer | master) = 1 - P(slip) and P(answer | not master) = P(guess\nreadiness: if all prerequisites >= 70%, the learning transition gains +0.25\nclosure: P(prerequisite) >= 0.95 * P(mastered child)",
+		"how_works": """KST models the learner knowledge as a SPACE of skill states connected by PREREQUISITE edges: definition -> identification/simulation -> building -> set_builder/list. Every skill carries a mastery probability SEEDED from the pretest, and every answer updates the observed skill with Bayes rule. The KST twist is propagation: mastering a higher skill lifts its prerequisites (downward closure of the knowledge state), and a skill whose prerequisites are all mastered gets a readiness bonus on its learning transition. One knowledge space covers all six DFA skills at once, so the model explains both what the learner knows and what has just come within reach.""",
+		"formula": """P(master | answer) via Bayes, with P(answer | master) = 1 - P(slip) and P(answer | not master) = P(guess
+readiness: if all prerequisites >= 70%, the learning transition gains +0.25
+closure: P(prerequisite) >= 0.95 * P(mastered child)""",
 		"params": [
 			{"symbol": "P(learn)", "name": "Learning rate", "meaning": "How strongly one answer moves a skill toward mastery."},
 			{"symbol": "Readiness", "name": "Fringe bonus", "meaning": "Extra learning strength when every prerequisite is already mastered."},
@@ -112,7 +128,6 @@ const ALGORITHMS := {
 		],
 		"needs_summary": "Needs: pretest-derived starting state, prerequisite lattice, live updates with closure, hold-out post test.",
 	},
-}
 
 ## The full description dictionary for one algorithm type. Every screen and the
 ## thesis write-up read the model through these small, single-purpose getters, so
@@ -173,7 +188,16 @@ static func catalog_pipeline_summary(algo_type: int) -> String:
 
 static func catalog_how_learns_flavor(algo_type: int) -> String:
 	var n: Dictionary = catalog_needs(algo_type)
-	return "HOW THIS ALGORITHM LEARNS THROUGH THE 3 PHASES\n1. INPUT (pretest only)\n%s\n\n2. LEARNING (analyse + terminate)\n%s\n%s\n\n3. POST TEST (prove the theory)\n%s" % [
+	return """HOW THIS ALGORITHM LEARNS THROUGH THE 3 PHASES
+1. INPUT (pretest only)
+%s
+
+2. LEARNING (analyse + terminate)
+%s
+%s
+
+3. POST TEST (prove the theory)
+%s""" % [
 	n.get("inputs", ""),
 	n.get("learning", ""),
 	n.get("termination", ""),

@@ -6,10 +6,6 @@ signal evaluated(correct: bool, message: String)
 enum EditMode { SELECT, CONNECT, MOVE }
 
 ## Visual radius of every state circle (shared by the builder and canvas).
-## The transition symbols offered on the board. Kept small and large so a
-## mouse click or a VR laser can both hit them comfortably.
-const PALETTE_SYMBOLS := ["0", "1", "a", "b", "#", "@"]
-
 const NODE_RADIUS := 46.0
 
 @export_multiline var task_instruction: String = "Build a DFA that ACCEPTS abuc and REJECTS accc."
@@ -43,6 +39,7 @@ var mode_group: ButtonGroup
 var mode_buttons: Dictionary = {}
 var connection_status: Label
 var simulate_button: Button
+var sim_keyboard_title: Label
 var simulation_keyboard_active := false
 ## Shown on the whiteboard only in FREE BUILD mode; the host sets the callback
 ## so the learner can leave their custom sandbox and keep learning.
@@ -201,7 +198,7 @@ func _apply_instruction_text() -> void:
 	# Push the (possibly new) instruction into the on-screen heading label.
 	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
 	if heading:
-		heading.text = task_instruction + "\nTAP A NODE to select it, then drag it to move. To draw an arrow: tap a symbol below, tap Connect, then tap the source node and the target node. \"Set as Start\" picks the single start state; double-tap an empty spot to add a node there."
+		heading.text = task_instruction + "\nDrag a node to move it — nodes space themselves apart so they never overlap. Pick a symbol, then click source -> target to draw arrows. Use \"Set as Start\" to choose the single start state. Incoming and outgoing arrows between two nodes are drawn in separate lanes."
 
 ## Snapshot of the attempt analytics for the host lesson / algorithms.
 func get_attempt_stats() -> Dictionary:
@@ -230,7 +227,7 @@ func _on_sandbox_exit_pressed() -> void:
 		sandbox_exit_callback.call()
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(1240, 660)
+	custom_minimum_size = Vector2(1400, 760)
 	_build_ui()
 	_seed_task_graph()
 	_refresh()
@@ -239,134 +236,110 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var root := VBoxContainer.new()
 	root.name = "VBoxContainer"
-	root.add_theme_constant_override("separation", 6)
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.offset_left = 10
-	root.offset_top = 8
-	root.offset_right = -10
-	root.offset_bottom = -8
+	root.add_theme_constant_override("separation", 8)
 	add_child(root)
-
-	_add_heading_row(root)
-	_add_instruction_label(root)
-	_add_workspace_row(root)
-	_add_simulate_row(root)
-	_add_symbol_palette(root)
-
-	status_label = Label.new()
-	status_label.name = "StatusLabel"
-	status_label.add_theme_font_size_override("font_size", 17)
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	root.add_child(status_label)
-
-## Title plus the optional exit buttons, kept on ONE compact row so the board
-## canvas below keeps as much height as possible.
-func _add_heading_row(root: VBoxContainer) -> void:
-	var heading_row := HBoxContainer.new()
-	heading_row.add_theme_constant_override("separation", 12)
-	root.add_child(heading_row)
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var heading := Label.new()
 	heading.text = "AUTOMATA WORKSHOP"
-	heading.add_theme_font_size_override("font_size", 22)
-	heading_row.add_child(heading)
-
+	heading.add_theme_font_size_override("font_size", 24)
+	root.add_child(heading)
 	sandbox_exit_button = Button.new()
 	sandbox_exit_button.name = "SandboxExitButton"
-	sandbox_exit_button.text = "Done - exit sandbox"
-	sandbox_exit_button.custom_minimum_size = Vector2(300, 44)
+	sandbox_exit_button.text = "✅ Done — exit sandbox"
+	sandbox_exit_button.custom_minimum_size = Vector2(320, 48)
 	sandbox_exit_button.visible = false
 	sandbox_exit_button.add_theme_font_size_override("font_size", 17)
 	sandbox_exit_button.pressed.connect(_on_sandbox_exit_pressed)
-	heading_row.add_child(sandbox_exit_button)
-
+	root.add_child(sandbox_exit_button)
 	if show_back_to_lab:
 		var back_button := Button.new()
 		back_button.text = "Back to Lab"
-		back_button.custom_minimum_size = Vector2(190, 44)
+		back_button.custom_minimum_size = Vector2(200, 48)
 		back_button.pressed.connect(func(): get_tree().change_scene_to_file("res://World/World.tscn"))
-		heading_row.add_child(back_button)
-
-func _add_instruction_label(root: VBoxContainer) -> void:
+		root.add_child(back_button)
 	var instruction := Label.new()
 	instruction.name = "InstructionLabel"
-	instruction.text = task_instruction
+	instruction.text = task_instruction + "\nBuild on the board on the right. Tap \"Add node\" for a new state, pick a symbol, then tap source -> target to draw arrows. Drag any node to move it. \"Set as Start\" marks the one start state."
 	instruction.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instruction.add_theme_font_size_override("font_size", 16)
-	instruction.custom_minimum_size = Vector2(0, 40)
 	root.add_child(instruction)
 
-## The board (left) and the compact tool panel (right).
-func _add_workspace_row(root: VBoxContainer) -> void:
 	var workspace := HBoxContainer.new()
 	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.add_theme_constant_override("separation", 12)
+	workspace.add_theme_constant_override("separation", 16)
 	root.add_child(workspace)
-
 	var graph_panel := PanelContainer.new()
-	graph_panel.custom_minimum_size = Vector2(880, 380)
+	graph_panel.custom_minimum_size = Vector2(1080, 430)
 	graph_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	graph_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	graph_panel.add_theme_stylebox_override("panel", _create_panel_style())
 	workspace.add_child(graph_panel)
 	graph = GraphCanvas.new()
-	graph.custom_minimum_size = Vector2(880, 380)
+	graph.custom_minimum_size = Vector2(1080, 430)
 	graph.set_builder(self)
 	graph_panel.add_child(graph)
 
-	var tools := VBoxContainer.new()
-	tools.custom_minimum_size = Vector2(300, 0)
-	tools.add_theme_constant_override("separation", 6)
-	tools.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	workspace.add_child(tools)
-	_add_mode_buttons(tools)
-	_add_node_tools(tools)
-
-## EDIT MODE buttons, laid out in a row so the side panel stays SHORTER than
-## the board instead of stretching it.
-func _add_mode_buttons(tools: VBoxContainer) -> void:
+	var mode_frame := PanelContainer.new()
+	mode_frame.custom_minimum_size = Vector2(280, 430)
+	mode_frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	mode_frame.add_theme_stylebox_override("panel", _create_panel_style())
+	workspace.add_child(mode_frame)
+	var mode_panel := VBoxContainer.new()
+	mode_panel.add_theme_constant_override("separation", 8)
+	mode_frame.add_child(mode_panel)
 	var mode_title := Label.new()
 	mode_title.text = "EDIT MODE"
-	mode_title.add_theme_font_size_override("font_size", 19)
-	tools.add_child(mode_title)
+	mode_title.add_theme_font_size_override("font_size", 22)
+	mode_panel.add_child(mode_title)
 	var mode_help := Label.new()
-	mode_help.text = "Select: tap a node, then drag it to move\nConnect: pick a symbol, tap source, tap target\nMove: drag a node freely"
+	mode_help.text = "Add node: places a new state on the board\nSelect: tap a node to pick it\nConnect: pick a symbol, then tap source -> target\n\"Set as Start\" fixes the one start state"
 	mode_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	mode_help.add_theme_font_size_override("font_size", 14)
-	tools.add_child(mode_help)
+	mode_panel.add_child(mode_help)
 	mode_group = ButtonGroup.new()
 	mode_group.allow_unpress = true
-	var mode_grid := GridContainer.new()
-	mode_grid.columns = 3
-	mode_grid.add_theme_constant_override("h_separation", 6)
-	tools.add_child(mode_grid)
-	_add_mode_button(mode_grid, "Select", EditMode.SELECT, true)
-	_add_mode_button(mode_grid, "Connect", EditMode.CONNECT)
-	_add_mode_button(mode_grid, "Move", EditMode.MOVE)
-
-## Node tools in a two-column grid: shorter and far easier to hit with a laser.
-func _add_node_tools(tools: VBoxContainer) -> void:
+	_add_mode_button(mode_panel, "Select", EditMode.SELECT, true)
+	_add_mode_button(mode_panel, "Connect", EditMode.CONNECT)
+	_add_mode_button(mode_panel, "Move", EditMode.MOVE)
 	var node_actions := Label.new()
 	node_actions.text = "NODE TOOLS"
-	node_actions.add_theme_font_size_override("font_size", 19)
-	tools.add_child(node_actions)
-	var action_grid := GridContainer.new()
-	action_grid.columns = 2
-	action_grid.add_theme_constant_override("h_separation", 6)
-	action_grid.add_theme_constant_override("v_separation", 6)
-	tools.add_child(action_grid)
-	_add_action_button(action_grid, "Add node", _add_state)
-	_add_action_button(action_grid, "Set as Start", _make_start_selected)
-	_add_action_button(action_grid, "Accepting", _toggle_accepting)
-	_add_action_button(action_grid, "Delete", _delete_selected)
-	_add_action_button(action_grid, "Undo", _undo_transition)
-	_add_action_button(action_grid, "Remove symbol", _remove_active_transition)
-	connection_status = Label.new()
-	connection_status.name = "ConnectionStatus"
-	connection_status.add_theme_font_size_override("font_size", 15)
-	connection_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tools.add_child(connection_status)
+	node_actions.add_theme_font_size_override("font_size", 16)
+	mode_panel.add_child(node_actions)
+	_add_action_button(mode_panel, "Add node", _add_state)
+	_add_action_button(mode_panel, "Toggle accepting", _toggle_accepting)
+	_add_action_button(mode_panel, "Set as Start", _make_start_selected)
+	_add_action_button(mode_panel, "Delete selected", _delete_selected)
+	_add_action_button(mode_panel, "Undo transition", _undo_transition)
+	_add_action_button(mode_panel, "Remove active symbol", _remove_active_transition)
 
-func _add_simulate_row(root: VBoxContainer) -> void:
+	var keyboard_panel := VBoxContainer.new()
+	keyboard_panel.add_theme_constant_override("separation", 4)
+	keyboard_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	root.add_child(keyboard_panel)
+	var keyboard_title := Label.new()
+	keyboard_title.text = "SYMBOL KEYS | ACTIVE SYMBOL: %s" % active_symbol
+	keyboard_title.name = "KeyboardTitle"
+	keyboard_title.add_theme_font_size_override("font_size", 18)
+	keyboard_panel.add_child(keyboard_title)
+	var keyboard := GridContainer.new()
+	keyboard.columns = 20
+	keyboard.add_theme_constant_override("h_separation", 3)
+	keyboard.add_theme_constant_override("v_separation", 3)
+	keyboard_panel.add_child(keyboard)
+	for symbol in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+		var key := _make_keyboard_key(symbol)
+		key.pressed.connect(_on_virtual_key.bind(symbol))
+		keyboard.add_child(key)
+	var clear_key := _make_keyboard_key("Clear")
+	clear_key.custom_minimum_size = Vector2(110, 48)
+	clear_key.pressed.connect(_on_virtual_clear)
+	keyboard.add_child(clear_key)
+	var delete_key := _make_keyboard_key("del")
+	delete_key.custom_minimum_size = Vector2(90, 48)
+	delete_key.pressed.connect(_on_virtual_delete)
+	keyboard.add_child(delete_key)
+	var space_key := _make_keyboard_key("space")
+	space_key.custom_minimum_size = Vector2(110, 48)
+	space_key.pressed.connect(_on_virtual_space)
+	keyboard.add_child(space_key)
+
 	var simulate := HBoxContainer.new()
 	simulate.add_theme_constant_override("separation", 8)
 	root.add_child(simulate)
@@ -374,15 +347,15 @@ func _add_simulate_row(root: VBoxContainer) -> void:
 	label.text = "Simulate:"
 	simulate.add_child(label)
 	input_line = LineEdit.new()
-	input_line.custom_minimum_size = Vector2(260, 48)
-	input_line.placeholder_text = "type a string below"
+	input_line.placeholder_text = "any string"
+	input_line.custom_minimum_size = Vector2(300, 52)
 	input_line.focus_entered.connect(func(): simulation_keyboard_active = true)
 	input_line.focus_exited.connect(func(): simulation_keyboard_active = false)
 	simulate.add_child(input_line)
 	simulate_button = Button.new()
 	simulate_button.text = "Simulate"
-	simulate_button.custom_minimum_size = Vector2(160, 48)
-	simulate_button.add_theme_font_size_override("font_size", 17)
+	simulate_button.custom_minimum_size = Vector2(190, 52)
+	simulate_button.add_theme_font_size_override("font_size", 18)
 	simulate_button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	simulate_button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
 	simulate_button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
@@ -390,43 +363,47 @@ func _add_simulate_row(root: VBoxContainer) -> void:
 	simulate.add_child(simulate_button)
 	var check_button := Button.new()
 	check_button.text = "Check task"
-	check_button.custom_minimum_size = Vector2(170, 48)
-	check_button.add_theme_font_size_override("font_size", 17)
+	check_button.custom_minimum_size = Vector2(210, 52)
+	check_button.add_theme_font_size_override("font_size", 18)
 	check_button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	check_button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
 	check_button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
 	check_button.pressed.connect(_check_task)
 	simulate.add_child(check_button)
 
-## ONE compact strip of large symbols used by BOTH jobs on this board: choosing
-## the transition symbol to draw, and typing the string to simulate. This single
-## row replaced two 20-column alphanumeric keyboards, so nothing on the board is
-## pushed off screen any more.
-func _add_symbol_palette(root: VBoxContainer) -> void:
-	var palette_row := HBoxContainer.new()
-	palette_row.add_theme_constant_override("separation", 6)
-	root.add_child(palette_row)
-	var palette_title := Label.new()
-	palette_title.name = "KeyboardTitle"
-	palette_title.add_theme_font_size_override("font_size", 15)
-	palette_title.custom_minimum_size = Vector2(210, 0)
-	palette_row.add_child(palette_title)
-	for symbol in PALETTE_SYMBOLS:
+	# On-screen keyboard for typing test strings (PC and VR alike).
+	var sim_kb_row := VBoxContainer.new()
+	sim_kb_row.add_theme_constant_override("separation", 4)
+	sim_keyboard_title = Label.new()
+	sim_keyboard_title.name = "SimKeyboardTitle"
+	sim_keyboard_title.add_theme_font_size_override("font_size", 16)
+	sim_kb_row.add_child(sim_keyboard_title)
+	var sim_grid := GridContainer.new()
+	sim_grid.columns = 20
+	sim_grid.add_theme_constant_override("h_separation", 3)
+	sim_grid.add_theme_constant_override("v_separation", 3)
+	for symbol in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
 		var key := _make_keyboard_key(symbol)
-		key.pressed.connect(_on_palette_symbol.bind(symbol))
-		palette_row.add_child(key)
-	var space_key := _make_keyboard_key("space")
-	space_key.custom_minimum_size = Vector2(110, 54)
-	space_key.pressed.connect(_on_simulation_space)
-	palette_row.add_child(space_key)
-	var delete_key := _make_keyboard_key("del")
-	delete_key.custom_minimum_size = Vector2(84, 54)
-	delete_key.pressed.connect(_on_simulation_backspace)
-	palette_row.add_child(delete_key)
-	var clear_key := _make_keyboard_key("Clear")
-	clear_key.custom_minimum_size = Vector2(110, 54)
-	clear_key.pressed.connect(_on_simulation_clear)
-	palette_row.add_child(clear_key)
+		key.pressed.connect(_on_simulation_key.bind(symbol))
+		sim_grid.add_child(key)
+	var sim_space := _make_keyboard_key("space")
+	sim_space.custom_minimum_size = Vector2(170, 50)
+	sim_space.pressed.connect(_on_simulation_space)
+	sim_grid.add_child(sim_space)
+	var sim_del := _make_keyboard_key("del")
+	sim_del.custom_minimum_size = Vector2(90, 50)
+	sim_del.pressed.connect(_on_simulation_backspace)
+	sim_grid.add_child(sim_del)
+	var sim_clear := _make_keyboard_key("Clear")
+	sim_clear.custom_minimum_size = Vector2(130, 50)
+	sim_clear.pressed.connect(_on_simulation_clear)
+	sim_grid.add_child(sim_clear)
+	sim_kb_row.add_child(sim_grid)
+	root.add_child(sim_kb_row)
+
+	status_label = Label.new()
+	status_label.add_theme_font_size_override("font_size", 18)
+	root.add_child(status_label)
 
 func _seed_task_graph() -> void:
 	# Every workshop starts with only the required initial state. Learners build
@@ -467,22 +444,24 @@ func _refresh() -> void:
 			status_label.text = "Step %d/%d — at %s | remaining: '%s'" % [sim_pos, sim_input.length(), sim_current, sim_input.substr(sim_pos)]
 		else:
 			status_label.text = "Start: %s | Selected: %s | Symbol: %s | Nodes: %d" % [start_state, selected_state, active_symbol, states.size()]
+	if sim_keyboard_title:
+		sim_keyboard_title.text = "SIMULATION KEYBOARD | INPUT: '%s'" % (input_line.text if input_line else "")
 	var keyboard_title := get_node_or_null("VBoxContainer/KeyboardTitle")
 	if keyboard_title:
-		keyboard_title.text = "SYMBOL: %s\nINPUT: %s" % [active_symbol if active_symbol != "" else "-", input_line.text if input_line else ""]
+		keyboard_title.text = "SYMBOL KEYS | ACTIVE SYMBOL: %s" % active_symbol
 	if connection_status:
 		if edit_mode == EditMode.CONNECT:
 			connection_status.text = "Source: %s\nTarget: %s" % [connect_source if connect_source != "" else "none", selected_state if selected_state != connect_source else "click target"]
 		else:
 			connection_status.text = "Selected: %s\nStart: %s" % [selected_state, start_state]
 
-func _add_mode_button(parent: Container, label: String, mode: EditMode, selected := false) -> void:
+func _add_mode_button(parent: VBoxContainer, label: String, mode: EditMode, selected := false) -> void:
 	var button := Button.new()
 	button.text = label
 	button.toggle_mode = true
 	button.button_group = mode_group
-	button.custom_minimum_size = Vector2(92, 46)
-	button.add_theme_font_size_override("font_size", 16)
+	button.custom_minimum_size = Vector2(250, 48)
+	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.12, 0.2, 0.38, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.2, 0.4, 0.7, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.55, 0.48, 1)))
@@ -505,11 +484,11 @@ func _on_mode_toggled(toggled_on: bool, mode: EditMode) -> void:
 		if select_button:
 			select_button.button_pressed = true
 
-func _add_action_button(parent: Container, label: String, action: Callable) -> void:
+func _add_action_button(parent: VBoxContainer, label: String, action: Callable) -> void:
 	var button := Button.new()
 	button.text = label
-	button.custom_minimum_size = Vector2(145, 44)
-	button.add_theme_font_size_override("font_size", 14)
+	button.custom_minimum_size = Vector2(250, 48)
+	button.add_theme_font_size_override("font_size", 15)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.5, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.25, 0.45, 0.75, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
@@ -519,7 +498,7 @@ func _add_action_button(parent: Container, label: String, action: Callable) -> v
 func _make_keyboard_key(symbol: String) -> Button:
 	var button := Button.new()
 	button.text = symbol
-	button.custom_minimum_size = Vector2(56, 54)
+	button.custom_minimum_size = Vector2(64, 50)
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", 20)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.1, 0.16, 0.3, 1)))
@@ -531,13 +510,25 @@ func _clear_symbol() -> void:
 	active_symbol = ""
 	_refresh()
 
-## A palette tap does double duty so ONE strip of keys drives the whole board:
-## it becomes the ACTIVE transition symbol for Connect mode, and - if the
-## Simulate field is focused - it also types that character for simulation.
-func _on_palette_symbol(symbol: String) -> void:
+func _on_virtual_key(symbol: String) -> void:
 	if input_line and (input_line.has_focus() or simulation_keyboard_active):
 		input_line.text += symbol
-	_set_symbol(symbol)
+	else:
+		_set_symbol(symbol)
+
+func _on_virtual_clear() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active):
+		input_line.text = ""
+	else:
+		_clear_symbol()
+
+func _on_virtual_delete() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active) and not input_line.text.is_empty():
+		input_line.text = input_line.text.substr(0, input_line.text.length() - 1)
+
+func _on_virtual_space() -> void:
+	if input_line and (input_line.has_focus() or simulation_keyboard_active):
+		input_line.text += " "
 
 func _create_button_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

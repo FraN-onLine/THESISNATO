@@ -1,7 +1,7 @@
 extends Node3D
 ## Controller for the Algorithm Select screen that appears BEFORE the Testing
 ## Grounds opens. The learner picks the knowledge-tracing algorithm that will
-## drive the whole session (HMM, BKT, or DKT) and reads exactly HOW each one
+## drive the whole session (HMM, BKT, or KST) and reads exactly HOW each one
 ## learns through the three phases:
 ##   1. PRETEST  -> pretest answers are the ONLY input / starting elements.
 ##   2. LEARNING -> interactive answers analyse mastery; terminate when learnt.
@@ -25,7 +25,7 @@ const SessionManager = preload("res://Testing/session_manager.gd")
 
 var session = null
 
-# The algorithm the learner has committed to (HMM=0, BKT=1, DKT=2).
+# The algorithm the learner has committed to (HMM=0, BKT=1, KST=2).
 var _selected: int = AlgorithmCatalog.TYPE_HMM
 # Which algorithm's full description is currently on screen (browsing).
 var _viewing: int = AlgorithmCatalog.TYPE_HMM

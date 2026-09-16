@@ -1,24 +1,24 @@
 extends RefCounted
 ## Knowledge Tracer Manager (thin FACADE).
-## Owns the per-skill HMM/BKT model maps + the single DKT network, and simply
+## Owns the per-skill HMM/BKT model maps + the single KST model, and simply
 ## ORCHESTRATES them. Each algorithm is a self-contained module (hmm.gd / bkt.gd
-## / dkt.gd) that records its OWN prediction history and scores itself — this
+## / kst.gd) that records its OWN prediction history and scores itself — this
 ## file no longer computes predictions centrally.
 ##
 ## All three run in parallel on every observation so the driver can compare
 ## which model predicts best (used to pick the best one for the POC).
 
-const SKILL_ORDER := ["simulation", "identification", "definition", "building", "regex", "set_builder", "list"]
+const SKILL_ORDER := ["simulation", "identification", "definition", "building", "set_builder", "list"]
 
 # Algorithm type selection (the one that DRIVES the lesson's mastery decisions)
-enum AlgorithmType { HMM, BKT, DKT }
+enum AlgorithmType { HMM, BKT, KST }
 
 var algorithm_type: int = AlgorithmType.HMM
 
 # Per-skill models
 var hmm_models: Dictionary = {}  # skill -> HMM instance (self-contained)
 var bkt_models: Dictionary = {}  # skill -> BKT instance (self-contained)
-var dkt_model = null              # single DKT network (self-contained)
+var kst_model = null              # single KST model (self-contained)
 
 # Per-skill question statistics
 var skill_stats: Dictionary = {}  # skill -> {correct: int, total: int}
@@ -42,8 +42,8 @@ func get_algorithm_name() -> String:
 			return "HMM (Hidden Markov Model)"
 		AlgorithmType.BKT:
 			return "BKT (Bayesian Knowledge Tracing)"
-		AlgorithmType.DKT:
-			return "DKT (Deep Knowledge Tracing)"
+		AlgorithmType.KST:
+			return "KST (Knowledge Space Tracing)"
 	return "HMM"
 
 func get_algorithm_callout() -> String:
@@ -52,8 +52,8 @@ func get_algorithm_callout() -> String:
 			return "HMM"
 		AlgorithmType.BKT:
 			return "BKT"
-		AlgorithmType.DKT:
-			return "DKT"
+		AlgorithmType.KST:
+			return "KST"
 	return "HMM"
 
 func set_state_hint(value: String) -> void:
@@ -64,7 +64,7 @@ func set_state_hint(value: String) -> void:
 func get_algorithm_comparison() -> Dictionary:
 	var hmm_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
 	var bkt_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
-	var dkt_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
+	var kst_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
 	for skill in SKILL_ORDER:
 		if hmm_models.has(skill):
 			var hs: Dictionary = hmm_models[skill].get_prediction_stats()
@@ -74,17 +74,17 @@ func get_algorithm_comparison() -> Dictionary:
 			var bs: Dictionary = bkt_models[skill].get_prediction_stats()
 			bkt_stats["hits"] += bs["hits"]
 			bkt_stats["total"] += bs["total"]
-	if dkt_model:
-		var ds: Dictionary = dkt_model.get_prediction_stats()
-		dkt_stats["hits"] = ds["hits"]
-		dkt_stats["total"] = ds["total"]
+	if kst_model:
+		var ds: Dictionary = kst_model.get_prediction_stats()
+		kst_stats["hits"] = ds["hits"]
+		kst_stats["total"] = ds["total"]
 	hmm_stats["accuracy"] = (float(hmm_stats["hits"]) / float(hmm_stats["total"]) * 100.0) if hmm_stats["total"] > 0 else 0.0
 	bkt_stats["accuracy"] = (float(bkt_stats["hits"]) / float(bkt_stats["total"]) * 100.0) if bkt_stats["total"] > 0 else 0.0
-	dkt_stats["accuracy"] = (float(dkt_stats["hits"]) / float(dkt_stats["total"]) * 100.0) if dkt_stats["total"] > 0 else 0.0
+	kst_stats["accuracy"] = (float(kst_stats["hits"]) / float(kst_stats["total"]) * 100.0) if kst_stats["total"] > 0 else 0.0
 	return {
 		"HMM": hmm_stats,
 		"BKT": bkt_stats,
-		"DKT": dkt_stats,
+		"KST": kst_stats,
 	}
 
 func _init(algo_type: int = AlgorithmType.HMM) -> void:
@@ -104,7 +104,7 @@ func _initialize_models() -> void:
 		skill_stats[skill] = {"correct": 0, "total": 0}
 		learning_stats[skill] = {"correct": 0, "total": 0}
 	
-	dkt_model = load("res://Testing/Algorithms/dkt.gd").new()
+	kst_model = load("res://Testing/Algorithms/kst.gd").new()
 
 ## Set the algorithm type
 func set_algorithm_type(algo_type: int) -> void:
@@ -134,8 +134,8 @@ func record_observation(skill: String, correct: bool) -> void:
 		hmm_models[skill].update(correct, state_hint)
 	if bkt_models.has(skill):
 		bkt_models[skill].update(correct, state_hint)
-	if dkt_model:
-		dkt_model.update(skill, correct, state_hint)
+	if kst_model:
+		kst_model.update(skill, correct, state_hint)
 
 ## Mark the start of adaptive evidence for a skill without discarding its pretest model.
 func begin_learning(skill: String) -> void:
@@ -160,9 +160,9 @@ func get_knowledge_probability(skill: String) -> float:
 		AlgorithmType.BKT:
 			if bkt_models.has(skill):
 				return bkt_models[skill].get_knowledge_probability()
-		AlgorithmType.DKT:
-			if dkt_model:
-				return dkt_model.get_knowledge_probability(skill)
+		AlgorithmType.KST:
+			if kst_model:
+				return kst_model.get_knowledge_probability(skill)
 	return 0.3
 
 ## Get the mastery percentage for a skill
@@ -185,9 +185,9 @@ func get_expected_accuracy(skill: String) -> float:
 		AlgorithmType.BKT:
 			if bkt_models.has(skill):
 				return bkt_models[skill].get_expected_accuracy()
-		AlgorithmType.DKT:
-			if dkt_model:
-				return dkt_model.get_expected_accuracy(skill)
+		AlgorithmType.KST:
+			if kst_model:
+				return kst_model.get_expected_accuracy(skill)
 	return 0.3
 
 ## Get the skill with the lowest knowledge (weakest skill)
@@ -200,6 +200,30 @@ func get_weakest_skill() -> String:
 			lowest = prob
 			weakest = skill
 	return weakest
+
+## Seed every model from the PRETEST results. The pretest IS the starting
+## estimate: P(L0) for BKT, the initial distribution Pi for HMM, and the
+## starting knowledge state for KST. Called once when the pretest ends.
+func apply_pretest_priors(pretest_answers: Array) -> void:
+	var priors := {}
+	for skill in SKILL_ORDER:
+		var correct := 0
+		var total := 0
+		for answer in pretest_answers:
+			if answer.get("skill", "") == skill:
+				total += 1
+				if answer.get("correct", false):
+					correct += 1
+		# Laplace-smoothed starting accuracy: (correct + 1) / (total + 2)
+		priors[skill] = clampf(float(correct + 1) / float(total + 2), 0.05, 0.95)
+	for skill in SKILL_ORDER:
+		if hmm_models.has(skill):
+			hmm_models[skill].p_knows = priors[skill]
+		if bkt_models.has(skill):
+			bkt_models[skill].p_L0 = priors[skill]
+			bkt_models[skill].p_learned = priors[skill]
+	if kst_model:
+		kst_model.seed_from_pretest(priors)
 
 ## Get all skills sorted by knowledge (weakest first)
 func get_skills_by_weakness() -> Array:
@@ -246,8 +270,8 @@ func get_model(skill: String):
 			return hmm_models.get(skill)
 		AlgorithmType.BKT:
 			return bkt_models.get(skill)
-		AlgorithmType.DKT:
-			return dkt_model
+		AlgorithmType.KST:
+			return kst_model
 	return null
 
 ## Serialize to dictionary for saving
@@ -259,7 +283,7 @@ func to_dict() -> Dictionary:
 			"learning_stats": learning_stats,
 		"hmm_models": {},
 		"bkt_models": {},
-		"dkt_model": null
+		"kst_model": null
 	}
 	
 	for skill in SKILL_ORDER:
@@ -268,8 +292,8 @@ func to_dict() -> Dictionary:
 		if bkt_models.has(skill):
 			data["bkt_models"][skill] = bkt_models[skill].to_dict()
 	
-	if dkt_model:
-		data["dkt_model"] = dkt_model.to_dict()
+	if kst_model:
+		data["kst_model"] = kst_model.to_dict()
 	
 	return data
 
@@ -299,10 +323,10 @@ func from_dict(data: Dictionary) -> void:
 		if bkt_data.has(skill):
 			bkt_models[skill].from_dict(bkt_data[skill])
 	
-	# Load DKT model
-	var dkt_data = data.get("dkt_model")
-	if dkt_data is Dictionary and dkt_model:
-		dkt_model.from_dict(dkt_data)
+	# Load KST model
+	var kst_data = data.get("kst_model")
+	if kst_data is Dictionary and kst_model:
+		kst_model.from_dict(kst_data)
 
 ## Reset all models
 func reset() -> void:

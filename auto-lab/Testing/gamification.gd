@@ -10,7 +10,7 @@ const LEVELS := [
 	{"xp": 150,  "title": "State Explorer"},
 	{"xp": 400,  "title": "Transition Tracer"},
 	{"xp": 800,  "title": "Movement Analyst"},
-	{"xp": 1400, "title": "Regex Reader"},
+	{"xp": 1400, "title": "Pattern Reader"},
 	{"xp": 2200, "title": "DFA Architect"},
 	{"xp": 3200, "title": "Automata Master"},
 ]

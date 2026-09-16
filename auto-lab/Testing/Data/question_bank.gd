@@ -1,6 +1,6 @@
 extends RefCounted
 ## Question bank for the DFA pretest and post test.
-## 30 questions segmented across 7 DFA skill domains.
+## Segmented across 6 DFA skill domains.
 
 const SKILLS := {
 	"simulation": {
@@ -18,10 +18,6 @@ const SKILLS := {
 	"building": {
 		"name": "DFA Building",
 		"description": "Build a DFA without errors (in general)"
-	},
-	"regex": {
-		"name": "DFA from Regex",
-		"description": "Identify Regex and convert them to a DFA"
 	},
 	"set_builder": {
 		"name": "DFA from Set Builder",
@@ -287,60 +283,6 @@ const QUESTIONS := [
 		],
 		"correct": 1,
 		"explanation": "2 states: q0 (start, no '1' seen yet, non-accepting) and q1 (at least one '1' seen, accepting). On '0', q0 stays at q0 and q1 stays at q1. On '1', both go to q1."
-	},
-
-	# ===== DFA FROM REGEX (4 questions) =====
-	{
-		"id": 20,
-		"skill": "regex",
-		"question": "The regular expression a*b represents which language?",
-		"options": [
-			"Strings with one or more 'a's followed by one 'b'",
-			"Strings with zero or more 'a's followed by one 'b'",
-			"Strings with 'a' and 'b' in any order",
-			"Strings ending with 'ab'"
-		],
-		"correct": 1,
-		"explanation": "The '*' (Kleene star) means zero or more. So a*b means zero or more 'a's followed by exactly one 'b'."
-	},
-	{
-		"id": 21,
-		"skill": "regex",
-		"question": "To convert the regex (a|b)* to a DFA, the language is:",
-		"options": [
-			"All strings over {a, b}",
-			"Only the empty string",
-			"Strings with only 'a's",
-			"Strings with only 'b's"
-		],
-		"correct": 0,
-		"explanation": "(a|b)* means zero or more of either 'a' or 'b', which is all possible strings over the alphabet {a, b}. The DFA needs just 1 state (accepting) with self-loops on both 'a' and 'b'."
-	},
-	{
-		"id": 22,
-		"skill": "regex",
-		"question": "The regex (ab)+ represents:",
-		"options": [
-			"Zero or more repetitions of 'ab'",
-			"One or more repetitions of 'ab'",
-			"Exactly one 'ab'",
-			"Strings containing 'a' and 'b' separately"
-		],
-		"correct": 1,
-		"explanation": "The '+' operator means one or more. So (ab)+ means one or more repetitions of the string 'ab': ab, abab, ababab, etc."
-	},
-	{
-		"id": 23,
-		"skill": "regex",
-		"question": "Which DFA would accept the language defined by the regex 0*10*?",
-		"options": [
-			"A DFA that accepts strings with exactly one '1'",
-			"A DFA that accepts strings with at least one '1'",
-			"A DFA that accepts strings ending in '1'",
-			"A DFA that accepts only the string '10'"
-		],
-		"correct": 0,
-		"explanation": "0*10* means zero or more 0s, then exactly one 1, then zero or more 0s. So the language is all strings over {0,1} with exactly one '1'."
 	},
 
 	# ===== DFA FROM SET BUILDER (4 questions) =====

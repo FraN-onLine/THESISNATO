@@ -124,48 +124,6 @@ const CONTENT := {
 			}
 		]
 	},
-	"regex": {
-		"objective": "By the end of this activity, you will be able to interpret regular expressions and convert them into equivalent DFAs.",
-		"definition": "Regular expressions (regex) are a notation for describing regular languages. Key operators include: concatenation (ab means 'a' followed by 'b'), union (a|b means 'a' or 'b'), Kleene star (a* means zero or more 'a's), and plus (a+ means one or more 'a's). Converting a regex to a DFA involves understanding the language it describes and then designing a DFA that recognizes exactly that language.",
-		"example": "Convert the regex a*b to a DFA:\n\nLanguage: zero or more 'a's followed by exactly one 'b'\n\nStates:\n  q0: start, haven't seen 'b' yet\n  q1: accepting, just saw the 'b'\n\nTransitions:\n  δ(q0, a) = q0 (stay, more 'a's)\n  δ(q0, b) = q1 (saw the 'b')\n  δ(q1, a) = q2 (trap - no more 'a's allowed)\n  δ(q1, b) = q2 (trap - only one 'b' allowed)\n  δ(q2, a) = q2, δ(q2, b) = q2 (trap state)\n\nF = {q1}",
-		"application": "Regular expressions are used in programming languages for pattern matching. For example, validating email addresses uses a regex pattern. The regex engine internally converts the pattern to a DFA to efficiently check if input strings match the pattern. Understanding this conversion helps in writing efficient regex patterns.",
-		"guided": "Let's convert (a|b)*a to a DFA together:\n\nLanguage: any string over {a, b} that ends with 'a'\n\nStep 1: What do we need to track? The last character seen.\n\nStep 2: States:\n  q0: start, no characters seen yet\n  q1: last character was 'a' (accepting)\n  q2: last character was 'b' (not accepting)\n\nStep 3: Transitions:\n  δ(q0, a) = q1, δ(q0, b) = q2\n  δ(q1, a) = q1, δ(q1, b) = q2\n  δ(q2, a) = q1, δ(q2, b) = q2\n\nStep 4: F = {q1}\n\nTest: 'aba' → q0 --a--> q1 --b--> q2 --a--> q1. Accepted (ends in 'a'). ✓\nTest: 'ab' → q0 --a--> q1 --b--> q2. Rejected (ends in 'b'). ✓",
-		"challenge_questions": [
-			{
-				"question": "The regex (ab)* represents which language?",
-				"options": [
-					"Zero or more repetitions of 'ab'",
-					"One or more repetitions of 'ab'",
-					"All strings with 'a' and 'b'",
-					"Only the string 'ab'"
-				],
-				"correct": 0,
-				"explanation": "(ab)* means zero or more repetitions of the string 'ab': ε, ab, abab, ababab, etc."
-			},
-			{
-				"question": "To convert the regex a(a|b)* to a DFA, the language is:",
-				"options": [
-					"All strings starting with 'a'",
-					"All strings ending with 'a'",
-					"All strings containing 'a'",
-					"Only the string 'a'"
-				],
-				"correct": 0,
-				"explanation": "a(a|b)* means one 'a' followed by zero or more of either 'a' or 'b'. This is all strings over {a,b} that start with 'a'."
-			},
-			{
-				"question": "The regex 0*1* represents:",
-				"options": [
-					"Zero or more 0s followed by zero or more 1s",
-					"Strings with alternating 0s and 1s",
-					"Strings with at least one 0 and one 1",
-					"Only the empty string"
-				],
-				"correct": 0,
-				"explanation": "0*1* means zero or more 0s, then zero or more 1s. The language includes ε, 0, 1, 00, 01, 001, 011, 000111, etc."
-			}
-		]
-	},
 	"set_builder": {
 		"objective": "By the end of this activity, you will be able to interpret set builder notation and construct DFAs that recognize the described languages.",
 		"definition": "Set builder notation describes a language as {w ∈ Σ* | condition(w)}, meaning 'the set of all strings w over alphabet Σ such that condition(w) is true'. To build a DFA from set builder notation, you must understand the condition and design states that track the necessary information to determine if the condition is satisfied.",

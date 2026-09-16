@@ -1,25 +1,25 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://duycvv8vogh32"]
 
-[ext_resource type="Script" path="res://Testing/test_panel.gd" id="1_panel"]
+[ext_resource type="Script" uid="uid://4u8pn85jtypo" path="res://Testing/test_panel.gd" id="1_panel"]
 
 [sub_resource type="StandardMaterial3D" id="mat_back"]
 albedo_color = Color(0.04, 0.06, 0.1, 1)
 
-[node name="TestPanelBillboard" type="Node3D"]
+[node name="TestPanelBillboard" type="Node3D" unique_id=741021755]
 script = ExtResource("1_panel")
 
-[node name="SubViewport" type="SubViewport" parent="."]
+[node name="SubViewport" type="SubViewport" parent="." unique_id=690528654]
 transparent_bg = true
 handle_input_locally = false
 size = Vector2i(1600, 1000)
 render_target_update_mode = 4
 
-[node name="Backdrop" type="CSGBox3D" parent="."]
-position = Vector3(0, 0, -0.3)
+[node name="Backdrop" type="CSGBox3D" parent="." unique_id=656271713]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.3)
+visible = false
 size = Vector3(5.9, 4.1, 0.18)
 material = SubResource("mat_back")
 
-[node name="Billboard" type="Sprite3D" parent="."]
-; This panel floats in space and always faces the viewer (turns toward camera).
-billboard = 1
+[node name="Billboard" type="Sprite3D" parent="." unique_id=860178281]
 pixel_size = 0.0032
+billboard = 1
