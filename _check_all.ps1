@@ -1,4 +1,4 @@
-$exe = 'c:\Autolab\_godot\Godot_v4.7-stable_win64_console.exe'
+$exe = 'C:\Autolab\_godot\Godot_v4.7-stable_win64.exe'
 $proj = 'c:\Autolab\auto-lab'
 $files = Get-ChildItem -Path $proj -Recurse -Include *.gd | Sort-Object FullName
 Write-Output ("SCRIPTS: " + $files.Count)

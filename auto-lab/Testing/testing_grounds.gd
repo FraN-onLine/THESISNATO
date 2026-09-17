@@ -205,7 +205,10 @@ func _ready() -> void:
 	# (HMM / BKT / KST). If we arrived without a choice, send the learner there —
 	# the Grounds are locked until an algorithm is picked.
 	if session.selected_algorithm < 0:
-		get_tree().change_scene_to_file("res://Testing/AlgorithmSelect.tscn")
+		# Scene swaps are not allowed while the parent is still busy adding its
+		# children during _ready() (Godot raises "busy adding/removing children").
+		# Deferring the change lets the current frame finish first.
+		get_tree().change_scene_to_file.call_deferred("res://Testing/AlgorithmSelect.tscn")
 		return
 	session.set_algorithm_type(session.selected_algorithm)
 	gamification_sync()
