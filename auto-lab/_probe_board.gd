@@ -1,179 +1,243 @@
 extends SceneTree
-## Deep probe: dumps the whole control tree with rects, then tests the mode
-## buttons, symbol palette, connect flow and drag with CORRECT event ordering.
 
-var _vp: SubViewport = null
-var _inst: Control = null
-var _frames := 0
-var _step := 0
-var _log: PackedStringArray = []
-var _connect_btn: Button = null
-var _select_btn: Button = null
+## Headless interaction probe for the Automata whiteboard.
+## Verifies, without a human, that: the palette below the board is on-screen and
+## clickable, mode switching works (Connect/Move), node dragging works, and the
+## double-tap node stamp works. Writes a report next to the project.
+
+const OUT_PATH := "C:/Autolab/_probe3_out.txt"
+const VW := 1800
+const VH := 1100
+
+var log_lines: Array[String] = []
+var viewport: SubViewport
+var builder: Control
 
 
 func _initialize() -> void:
-	_vp = SubViewport.new()
-	_vp.size = Vector2i(1800, 1100)
-	_vp.handle_input_locally = false
-	root.add_child(_vp)
-	_inst = (load("res://Testing/AutomataWorkshop.tscn") as PackedScene).instantiate()
-	_vp.add_child(_inst)
+	await _run()
+	_write_report()
+	quit()
 
 
-func _process(_delta: float) -> bool:
-	if _inst == null:
-		return false
-	_frames += 1
-	if _frames < 8:
-		return false
-	match _step:
-		0:
-			_dump_tree()
-		1:
-			_dump_mode_buttons()
-		2:
-			_click_mode_button()
-		3:
-			_log.append("  AFTER click: edit_mode=%s  connect.pressed=%s  select.pressed=%s" % [
-				str(_inst.get("edit_mode")),
-				str(_connect_btn.button_pressed) if _connect_btn else "n/a",
-				str(_select_btn.button_pressed) if _select_btn else "n/a"])
-		4:
-			_test_connect_forced()
-		5:
-			_test_drag()
-		6:
-			_test_double_tap()
-		7:
-			_test_simulate()
-		8:
-			print("\n".join(_log))
-			quit()
-	_step += 1
-	_frames = 0
-	return false
+func _log(text: String) -> void:
+	log_lines.append(text)
 
 
-func _walk(node: Node, depth: int = 0) -> void:
-	for child in node.get_children():
-		if child is Control:
-			var c: Control = child
-			var r: Rect2 = c.get_global_rect()
-			var extra := ""
-			if c is Button:
-				var b: Button = c
-				extra = " text='%s' toggle=%s pressed=%s" % [b.text, str(b.toggle_mode), str(b.button_pressed)]
-			_log.append("  %s%s [%s] (%.0f,%.0f %.0fx%.0f) vis=%s%s" % [
-				"  ".repeat(depth), c.name, c.get_class(), r.position.x, r.position.y,
-				r.size.x, r.size.y, str(c.visible), extra])
-		_walk(child, depth + 1)
-
-
-func _dump_tree() -> void:
-	_log.append("======== CONTROL TREE (1800x1100) ========")
-	_walk(_inst)
-
-
-func _dump_mode_buttons() -> void:
-	_log.append("======== MODE BUTTONS ========")
-	for key in [0, 1, 2, 3]:
-		var b: Button = _inst.get("mode_buttons").get(key)
-		if b == null:
-			continue
-		_log.append("  mode %d '%s' rect=%s pressed=%s" % [key, b.text, str(b.get_global_rect()), str(b.button_pressed)])
-		if key == 1:
-			_connect_btn = b
-		if key == 0:
-			_select_btn = b
-
-
-func _click_mode_button() -> void:
-	var r: Rect2 = _connect_btn.get_global_rect()
-	_log.append("  clicking Connect at %s" % str(r.get_center()))
-	_press_at(r.get_center())
-
-
-func _down_at(pos: Vector2) -> void:
-	var ev := InputEventMouseButton.new()
-	ev.button_index = MOUSE_BUTTON_LEFT
-	ev.pressed = true
-	ev.position = pos
-	ev.global_position = pos
-	_vp.push_input(ev, true)
-
-
-func _up_at(pos: Vector2) -> void:
-	var ev := InputEventMouseButton.new()
-	ev.button_index = MOUSE_BUTTON_LEFT
-	ev.pressed = false
-	ev.position = pos
-	ev.global_position = pos
-	_vp.push_input(ev, true)
-
-
-func _press_at(pos: Vector2) -> void:
-	_down_at(pos)
-	_up_at(pos)
-
-
-func _motion(pos: Vector2, held: bool = false) -> void:
-	var ev := InputEventMouseMotion.new()
-	ev.position = pos
-	ev.global_position = pos
-	ev.button_mask = MOUSE_BUTTON_MASK_LEFT if held else 0
-	_vp.push_input(ev, true)
-
-
-func _test_connect_forced() -> void:
-	_log.append("======== CONNECT (forced edit_mode=CONNECT) ========")
-	_inst.call("cancel_pointer_interaction")
-	_inst.set("edit_mode", 1)
-	_inst.set("active_symbol", "b")
-	var states: Dictionary = _inst.get("states")
-	var names: Array = states.keys()
-	if names.size() < 2:
-		_log.append("  [SKIP] fewer than 2 nodes")
+func _write_report() -> void:
+	var f := FileAccess.open(OUT_PATH, FileAccess.WRITE)
+	if f == null:
 		return
-	var a: Vector2 = states[names[0]]["position"]
-	var b: Vector2 = states[names[1]]["position"]
-	_log.append("  tap %s@%s then %s@%s" % [names[0], str(a), names[1], str(b)])
-	_press_at(a)
-	_log.append("  after 1st tap: source=%s" % str(_inst.get("connect_source")))
-	_press_at(b)
-	_log.append("  after 2nd tap: transitions=%s" % str(_inst.get("transitions")))
+	f.store_string("\n".join(log_lines))
+	f.close()
+
+
+func _run() -> void:
+	var packed: PackedScene = load("res://Testing/AutomataWorkshop.tscn")
+	viewport = SubViewport.new()
+	viewport.size = Vector2i(VW, VH)
+	viewport.handle_input_locally = false
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(viewport)
+	builder = packed.instantiate()
+	viewport.add_child(builder)
+	await process_frame
+	await process_frame
+
+	_log("=== BUILDER READY ===")
+	_log("builder size = %s" % str(builder.size))
+
+	var controls := _all_controls(builder)
+	_log("=== CONTROL COUNT: %d ===" % controls.size())
+	_report_layout(controls)
+	await _test_modes(controls)
+	await _test_symbol(controls)
+	await _test_drag()
+	await _test_double_tap()
+	await _test_simulate_and_check(controls)
+
+
+# ---------------------------------------------------------------- layout
+func _all_controls(node: Node, out: Array = []) -> Array:
+	for child in node.get_children():
+		if child is Button or child is LineEdit:
+			out.append(child)
+		_all_controls(child, out)
+	return out
+
+
+func _report_layout(controls: Array) -> void:
+	var off_screen: Array[String] = []
+	for control in controls:
+		var rect: Rect2 = control.get_global_rect()
+		var text := "<LineEdit>"
+		if control is Button:
+			text = control.text
+			_log("BTN %-24s rect=%s visible=%s" % [text.substr(0, 24), str(rect), str(control.visible)])
+		var inside := rect.position.x >= -1.0 and rect.position.y >= -1.0 \
+			and rect.end.x <= float(VW) + 1.0 and rect.end.y <= float(VH) + 1.0
+		if not inside:
+			off_screen.append("%s at %s" % [text, str(rect)])
+	_log("OFF-SCREEN CONTROLS: %d" % off_screen.size())
+	for entry in off_screen:
+		_log("   OFFSCREEN %s" % entry)
+
+
+func _find_button(controls: Array, text: String) -> Button:
+	for control in controls:
+		if control is Button and control.text == text:
+			return control
+	return null
+
+
+# ---------------------------------------------------------------- clicks
+func _click(control: Control) -> void:
+	await _click_at(control.get_global_rect().get_center())
+
+
+func _click_at(pos: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = pos
+	viewport.push_input(down, true)
+	await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = pos
+	viewport.push_input(up, true)
+	await process_frame
+	await process_frame
+
+
+# ---------------------------------------------------------------- tests
+func _test_modes(controls: Array) -> void:
+	_log("=== TEST: MODE SWITCHING ===")
+	for label in ["Connect", "Move", "Select"]:
+		var btn: Button = _find_button(controls, label)
+		if btn == null:
+			_log("MISSING MODE BUTTON: %s" % label)
+			continue
+		await _click(btn)
+		_log("clicked %-8s -> edit_mode=%d (0=SELECT 1=CONNECT 2=MOVE) pressed=%s" % [
+			label, builder.edit_mode, str(btn.button_pressed)])
+
+
+func _test_symbol(controls: Array) -> void:
+	_log("=== TEST: SYMBOL PALETTE ===")
+	for label in ["1", "0", "a"]:
+		var btn: Button = _find_button(controls, label)
+		if btn == null:
+			_log("MISSING SYMBOL KEY: %s" % label)
+			continue
+		await _click(btn)
+		_log("clicked symbol '%s' -> active_symbol=%s" % [label, builder.active_symbol])
+
+
+func _graph() -> Control:
+	return builder.get("graph")
+
+
+func _drag(from_pos: Vector2, to_pos: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = from_pos
+	viewport.push_input(down, true)
+	await process_frame
+	# Several intermediate motion events, exactly like a real drag.
+	for step in range(1, 6):
+		var motion := InputEventMouseMotion.new()
+		motion.position = from_pos.lerp(to_pos, float(step) / 5.0)
+		viewport.push_input(motion, true)
+		await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = to_pos
+	viewport.push_input(up, true)
+	await process_frame
+	await process_frame
 
 
 func _test_drag() -> void:
-	_log.append("======== DRAG (press, move, release) ========")
-	_inst.set("edit_mode", 0)
-	var states: Dictionary = _inst.get("states")
+	_log("=== TEST: DRAG A NODE ===")
+	var graph: Control = _graph()
+	if graph == null:
+		_log("FAIL: no graph canvas found on builder")
+		return
+	# Force SELECT mode through the public mode entry point.
+	var states: Dictionary = builder.get("states")
 	var names: Array = states.keys()
-	var before: Vector2 = states[names[0]]["position"]
-	_motion(before)
-	_down_at(before)
-	_motion(before + Vector2(60, 40), true)
-	_motion(before + Vector2(140, 100), true)
-	_up_at(before + Vector2(140, 100))
-	_log.append("  %s before=%s after=%s" % [names[0], str(before), str((_inst.get("states")[names[0]])["position"])])
+	if names.is_empty():
+		_log("FAIL: no states to drag")
+		return
+	var node_name: String = names[0]
+	var before: Vector2 = states[node_name]["position"]
+	var origin: Vector2 = graph.get_global_rect().position
+	await _drag(origin + before, origin + before + Vector2(120, 90))
+	var after: Vector2 = builder.get("states")[node_name]["position"]
+	var moved: float = before.distance_to(after)
+	_log("drag %s: before=%s after=%s moved=%.1f px -> %s" % [
+		node_name, str(before), str(after), moved,
+		"PASS" if moved > 10.0 else "FAIL"])
 
 
 func _test_double_tap() -> void:
-	_log.append("======== DOUBLE-TAP EMPTY BOARD (spawn node) ========")
-	_inst.set("edit_mode", 0)
-	var before: int = (_inst.get("states") as Dictionary).size()
-	var spot := Vector2(900.0, 500.0)
-	_press_at(spot)
-	_press_at(spot + Vector2(6, 4))
-	var after: int = (_inst.get("states") as Dictionary).size()
-	_log.append("  states %d -> %d (expect +1)" % [before, after])
+	_log("=== TEST: DOUBLE-TAP EMPTY BOARD ===")
+	var graph: Control = _graph()
+	if graph == null:
+		_log("FAIL: no graph canvas")
+		return
+	var origin: Vector2 = graph.get_global_rect().position
+	var size: Vector2 = graph.size
+	# Leave CONNECT mode if active so the tap stamps a node.
+	builder.call("_set_edit_mode", 0)
+	await process_frame
+	var before_count: int = (builder.get("states") as Dictionary).size()
+	var spot := Vector2(-1, -1)
+	for row in range(1, 8):
+		for col in range(1, 8):
+			var candidate := Vector2(size.x * float(col) / 8.0, size.y * float(row) / 8.0)
+			if graph.call("_node_at", candidate) == "":
+				spot = candidate
+				break
+		if spot.x >= 0.0:
+			break
+	if spot.x < 0.0:
+		_log("FAIL: no empty spot found")
+		return
+	await _click_at(origin + spot)
+	await _click_at(origin + spot)
+	var after_count: int = (builder.get("states") as Dictionary).size()
+	_log("tap at %s : states %d -> %d -> %s" % [
+		str(spot), before_count, after_count,
+		"PASS" if after_count > before_count else "FAIL"])
 
 
-func _test_simulate() -> void:
-	_log.append("======== SIMULATE ========")
-	_inst.call("reset_for_free_build")
-	var line = _inst.get("input_line")
-	line.text = "aab"
-	_inst.call("_simulate_input")
-	_log.append("  input='%s' running=%s finished=%s accepted=%s msg=%s" % [line.text,
-		str(_inst.get("simulation_running")), str(_inst.get("sim_finished")),
-		str(_inst.get("sim_accepted")), str(_inst.get("sim_message"))])
+func _test_simulate_and_check(controls: Array) -> void:
+	_log("=== TEST: SIMULATE + CHECK TASK BUTTONS ===")
+	var simulate: Button = _find_button(controls, "Simulate")
+	var check: Button = _find_button(controls, "Check task")
+	_log("Simulate button found=%s | Check task button found=%s" % [
+		str(simulate != null), str(check != null)])
+	if simulate != null:
+		_log("Simulate rect=%s visible=%s" % [str(simulate.get_global_rect()), str(simulate.visible)])
+	if check != null:
+		_log("Check rect=%s visible=%s" % [str(check.get_global_rect()), str(check.visible)])
+	var input_control: LineEdit = builder.get("input_line")
+	if input_control == null:
+		_log("FAIL: simulation input LineEdit missing")
+	else:
+		_log("input_line rect=%s visible=%s" % [
+			str(input_control.get_global_rect()), str(input_control.visible)])
+		input_control.text = "1010"
+	if simulate != null:
+		await _click(simulate)
+		_log("after Simulate click: running=%s current=%s" % [
+			str(builder.get("simulation_running")), str(builder.get("sim_current"))])
+	if check != null:
+		await _click(check)
+		var status: Label = builder.get("status_label")
+		_log("after Check click: status='%s'" % (status.text if status else "<none>"))

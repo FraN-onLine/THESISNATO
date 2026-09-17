@@ -39,7 +39,6 @@ var connect_source: String = ""
 var graph: Control
 var status_label: Label
 var input_line: LineEdit
-var mode_group: ButtonGroup
 var mode_buttons: Dictionary = {}
 var connection_status: Label
 var simulate_button: Button
@@ -333,8 +332,11 @@ func _add_mode_buttons(tools: VBoxContainer) -> void:
 	mode_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mode_help.add_theme_font_size_override("font_size", 14)
 	tools.add_child(mode_help)
-	mode_group = ButtonGroup.new()
-	mode_group.allow_unpress = true
+	# NO ButtonGroup here on purpose. A ButtonGroup fires "toggled" TWICE per tap
+	# (once un-pressing the old button, once pressing the new one), and the old
+	# else-branch re-pressed Select - so tapping Connect bounced straight back to
+	# Select and Connect/Move were literally unreachable, for mouse AND VR laser.
+	# The mode row is exclusive by hand in _on_mode_button_pressed() instead.
 	var mode_grid := GridContainer.new()
 	mode_grid.columns = 3
 	mode_grid.add_theme_constant_override("h_separation", 6)
@@ -480,30 +482,33 @@ func _add_mode_button(parent: Container, label: String, mode: EditMode, selected
 	var button := Button.new()
 	button.text = label
 	button.toggle_mode = true
-	button.button_group = mode_group
 	button.custom_minimum_size = Vector2(92, 46)
 	button.add_theme_font_size_override("font_size", 16)
 	button.add_theme_stylebox_override("normal", _create_button_style(Color(0.12, 0.2, 0.38, 1)))
 	button.add_theme_stylebox_override("hover", _create_button_style(Color(0.2, 0.4, 0.7, 1)))
 	button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.55, 0.48, 1)))
 	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1, 1))
-	# Connect "toggled" (not "pressed") AFTER the initial state is set, so the
-	# initial button_pressed doesn't re-fire the handler during construction.
+	# "pressed" fires exactly ONCE per tap, so switching modes can never be
+	# re-entered halfway through a gesture the way "toggled" could.
 	button.button_pressed = selected
-	button.toggled.connect(_on_mode_toggled.bind(mode))
+	button.pressed.connect(_on_mode_button_pressed.bind(mode))
 	mode_buttons[mode] = button
 	parent.add_child(button)
 
-func _on_mode_toggled(toggled_on: bool, mode: EditMode) -> void:
-	if toggled_on:
+## Switches the board to `mode`. Tapping the ALREADY active mode simply keeps it
+## active, so the board can never end up without a usable interaction mode.
+func _on_mode_button_pressed(mode: EditMode) -> void:
+	if edit_mode != mode:
 		_set_edit_mode(mode)
-	else:
-		# allow_unpress lets a cursor/controller click on the active mode switch
-		# it OFF; fall back to Select so a usable interaction mode always exists.
-		_set_edit_mode(EditMode.SELECT)
-		var select_button: Button = mode_buttons.get(EditMode.SELECT)
-		if select_button:
-			select_button.button_pressed = true
+	_sync_mode_buttons()
+
+## Lights up exactly the active mode button. Uses set_pressed_no_signal() so
+## highlighting can never re-trigger the mode handler.
+func _sync_mode_buttons() -> void:
+	for mode in mode_buttons:
+		var button: Button = mode_buttons[mode]
+		if is_instance_valid(button):
+			button.set_pressed_no_signal(mode == edit_mode)
 
 func _add_action_button(parent: Container, label: String, action: Callable) -> void:
 	var button := Button.new()
@@ -565,6 +570,7 @@ func _set_edit_mode(mode: EditMode) -> void:
 	edit_mode = mode
 	dragging_state = ""
 	connect_source = ""
+	_sync_mode_buttons()
 	if graph:
 		graph._update_cursor()
 	_refresh()
@@ -1309,56 +1315,67 @@ class GraphCanvas extends Control:
 			return
 		if event is InputEventMouseMotion:
 			preview_mouse = event.position
+			# A live drag always wins over hover feedback, so a mouse drag and a
+			# VR-laser drag follow exactly the same code path.
+			if builder.dragging_state != "":
+				builder.move_state(builder.dragging_state, event.position + builder.drag_offset)
+				accept_event()
+				return
 			var new_hover := _node_at(event.position)
 			if new_hover != hovered_state:
 				hovered_state = new_hover
 				queue_redraw()
 			if builder.edit_mode == builder.EditMode.CONNECT and builder.connect_source != "":
 				queue_redraw()
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			var hit := _node_at(event.position)
-			if hit == "":
-				# Empty-canvas click cancels a pending connection.
-				if builder.edit_mode == builder.EditMode.CONNECT and builder.connect_source != "":
-					builder.connect_source = ""
-					builder._refresh()
-					accept_event()
-				return
-				# Double-tap an empty area of the board to stamp a new state there
-				# (works with a mouse OR a VR laser pointer).
-				if builder.edit_mode != builder.EditMode.CONNECT:
-					var now := Time.get_ticks_msec()
-					if now - _last_empty_tap_ms < 500 and event.position.distance_to(_last_empty_tap_pos) <= 90.0:
-						_last_empty_tap_ms = 0
-						if builder.has_method("spawn_state_at"):
-							builder.call("spawn_state_at", event.position)
-						accept_event()
-						return
-					_last_empty_tap_ms = now
-					_last_empty_tap_pos = event.position
-				accept_event()
-				return
-			if builder.edit_mode == builder.EditMode.CONNECT:
-				if builder.connect_source == "":
-					builder.connect_source = hit
-					builder.select_state(hit)
-				elif builder.connect_source == hit:
-					builder.connect_source = ""  # clicking the source again cancels
-					builder._refresh()
-				else:
-					builder.select_state(builder.connect_source)
-					builder.connect_selected(hit)
-					builder.connect_source = ""
-				accept_event()
+			return
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_handle_press(event.position)
 			else:
-				# Select AND Move in one gesture: click and drag a node to move it.
+				# Release ends any drag, so the node stops where the learner left it.
+				builder.dragging_state = ""
+			accept_event()
+
+	## One tap on the board. Decides between cancelling a pending connection,
+	## stamping a brand-new node (double tap on empty space), connecting two
+	## nodes, or selecting + arming a drag. One place, one decision - so the
+	## board behaves the same for a mouse and for a VR laser pointer.
+	func _handle_press(pos: Vector2) -> void:
+		var hit := _node_at(pos)
+		if hit == "":
+			if builder.edit_mode == builder.EditMode.CONNECT and builder.connect_source != "":
+				builder.connect_source = ""
+				builder._refresh()
+				return
+			var now := Time.get_ticks_msec()
+			# 600 ms / 120 px of tolerance is deliberately generous: a controller
+			# laser wobbles far more than a mouse, and a missed double-tap used to
+			# feel like the board ignoring the learner.
+			if now - _last_empty_tap_ms < 600 and pos.distance_to(_last_empty_tap_pos) <= 120.0:
+				_last_empty_tap_ms = 0
+				builder.spawn_state_at(pos)
+				return
+			_last_empty_tap_ms = now
+			_last_empty_tap_pos = pos
+			return
+		if builder.edit_mode == builder.EditMode.CONNECT:
+			if builder.connect_source == "":
+				# First tap picks the source node.
+				builder.connect_source = hit
 				builder.select_state(hit)
-				builder.dragging_state = hit
-				builder.drag_offset = builder.states[hit]["position"] - event.position
-				accept_event()
-		if event is InputEventMouseMotion and builder.dragging_state != "":
-			builder.move_state(builder.dragging_state, event.position + builder.drag_offset)
-			accept_event()
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-			builder.dragging_state = ""
-			accept_event()
+			elif builder.connect_source == hit:
+				# Tapping the source again cancels the pending connection.
+				builder.connect_source = ""
+				builder._refresh()
+			else:
+				# Second tap on a different node draws the arrow.
+				builder.select_state(builder.connect_source)
+				builder.connect_selected(hit)
+				builder.connect_source = ""
+			return
+		# Select mode: select the node and ARM a drag. Whether it actually moves
+		# is decided by the motion/release events above, so a simple tap is a
+		# selection and a tap-and-drag is a move - no separate mode needed.
+		builder.select_state(hit)
+		builder.dragging_state = hit
+		builder.drag_offset = builder.states[hit]["position"] - pos
