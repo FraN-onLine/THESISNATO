@@ -48,8 +48,8 @@ const WORKSHOP_TASKS := {
 }
 
 # The ordered DFA-centered course. The whole lesson is taught as ONE sequence of
-# topics (each folds in the relevant 7 segments under the hood), then adaptive
-# review re-visits each skill in the learner's weakest-first order, then post test.
+# topics covering all six skills in order, then adaptive review re-visits each
+# skill in the learner's weakest-first order, then the post test.
 # "demo" steps first show "explain" text (what the language means) and then pass a
 # flexible task to the whiteboard: the learner may build ANY correct automaton —
 # validation uses the accept/reject string lists, so any valid construction passes.

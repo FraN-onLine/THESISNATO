@@ -8,6 +8,9 @@ extends SceneTree
 
 const BOARD_W := 1800.0
 const BOARD_H := 1100.0
+## Minimum side length a tappable control must have to stay comfortable with a
+## mouse cursor AND a wobbly VR laser pointer.
+const MIN_TAP_PX := 44.0
 
 var _failures: Array[String] = []
 var _builder: Control
@@ -34,6 +37,7 @@ func _process(_delta: float) -> bool:
 
 	_run_layout_checks()
 	_run_behaviour_checks()
+	_run_interaction_checks()
 	_report()
 	return true
 
@@ -51,6 +55,30 @@ func _inside_board(rect: Rect2) -> bool:
 		and rect.end.x <= BOARD_W + 1.0 and rect.end.y <= BOARD_H + 1.0
 
 
+## Converts a control's screen-space rect into BOARD-LOCAL coordinates. The
+## headless SceneTree puts the board somewhere in the middle of the root
+## viewport, so global_position alone would produce false "off-board" failures.
+func _board_rect_of(node: Control) -> Rect2:
+	var origin: Vector2 = _builder.global_position
+	return Rect2(node.global_position - origin, node.size)
+
+
+func _dump_tree() -> void:
+	var queue: Array = [[_builder, 0]]
+	while not queue.is_empty():
+		var entry: Array = queue.pop_front()
+		var node: Control = entry[0]
+		var depth: int = entry[1]
+		var rect := Rect2(node.global_position, node.size)
+		var minsize := node.custom_minimum_size
+		print("TREE %-46s vis=%-5s pos=%-16s size=%-14s min=%s" % [
+			"  ".repeat(depth) + str(node.name), str(node.visible),
+			str(rect.position.round()), str(rect.size.round()), str(minsize.round())])
+		for child in node.get_children():
+			if child is Control:
+				queue.append([child, depth + 1])
+
+
 func _run_layout_checks() -> void:
 	var graph: Control = _builder.get("graph")
 	_note(graph != null, "graph_exists", "graph=%s" % graph)
@@ -60,6 +88,9 @@ func _run_layout_checks() -> void:
 	# 1. The canvas must have a real drawing area.
 	_note(graph.size.x > 400.0 and graph.size.y > 200.0,
 		"canvas_has_area", "canvas size=%s" % str(graph.size))
+
+	# 2. Dump the whole Control tree so any row pushed off the board is visible.
+	_dump_tree()
 
 	# 2. Every key control must sit INSIDE the board rectangle (nothing cut off).
 	var key_nodes := {
@@ -72,9 +103,29 @@ func _run_layout_checks() -> void:
 		if node == null:
 			_note(false, "control_present:" + label, "missing")
 			continue
-		var rect := Rect2(node.global_position, node.size)
+		var rect := _board_rect_of(node)
 		_note(_inside_board(rect), "control_on_screen:" + label,
 			"pos=%s size=%s" % [str(rect.position.round()), str(rect.size)])
+
+	# 3. Every button on the board must be a comfortably tappable size, because
+	#    the same board is used with a mouse AND a VR laser pointer.
+	var too_small: Array[String] = []
+	for node in _collect_controls(_builder):
+		if node is Button:
+			var smallest: float = minf(node.size.x, node.size.y)
+			if smallest < MIN_TAP_PX - 0.5:
+				too_small.append("%s(%d)" % [str(node.name), int(smallest)])
+	_note(too_small.is_empty(), "buttons_tappable_min_%dpx" % int(MIN_TAP_PX),
+		"offenders=%s" % str(too_small))
+
+
+func _collect_controls(node: Node) -> Array[Control]:
+	var found: Array[Control] = []
+	for child in node.get_children():
+		if child is Control:
+			found.append(child)
+			found.append_array(_collect_controls(child))
+	return found
 
 
 func _run_behaviour_checks() -> void:
@@ -117,6 +168,7 @@ func _run_behaviour_checks() -> void:
 	names = states.keys()
 	_builder.call("_set_symbol", "a")
 	_builder.set("connect_source", names[0])
+	_builder.call("select_state", names[0])
 	_builder.call("connect_selected", names[1])
 	_builder.call("select_state", names[1])
 	_builder.call("_toggle_accepting")

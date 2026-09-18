@@ -51,7 +51,7 @@ func _show_intro() -> void:
 	if test_mode == "posttest":
 		test_panel.show_intro("You will now take the POST-TEST on DFA (Deterministic Finite Automata).\n\nAnswer each question to the best of your ability. Some questions show a diagram, and some hands-on tasks require you to BUILD the DFA on the automata board and press \"Check task\" to submit.\n\nPress Start to begin.")
 	else:
-		test_panel.show_intro("You will now take the PRETEST on DFA (Deterministic Finite Automata).\n\nThe questions cover 7 skill areas and mix multiple-choice, diagram and hands-on board tasks. For hands-on tasks, build the DFA on the automata board and press \"Check task\" to submit - only a correct build continues.\n\nPress Start to begin.")
+		test_panel.show_intro("You will now take the PRETEST on DFA (Deterministic Finite Automata).\n\nThe questions cover all 6 skill areas and mix multiple-choice, diagram and hands-on board tasks. For hands-on tasks, build the DFA on the automata board and press \"Check task\" to submit - only a correct build continues.\n\nPress Start to begin.")
 
 func _on_start_pressed() -> void:
 	_show_current_question()
