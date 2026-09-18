@@ -1,0 +1,26 @@
+TOTAL LINES 245
+  20 func _initialize() -> void:
+  29 func _process(_delta: float) -> bool:
+  45 func _note(ok: bool, label: String, detail: String) -> void:
+  53 func _inside_board(rect: Rect2) -> bool:
+  61 func _board_rect_of(node: Control) -> Rect2:
+  66 func _dump_tree() -> void:
+  82 func _run_layout_checks() -> void:
+ 122 func _collect_controls(node: Node) -> Array[Control]:
+ 133 func _fresh_pair() -> Array:
+ 140 func _count_nodes_outside_board() -> int:
+ 152 func _run_behaviour_checks() -> void:
+ 191 func _find_button(needle: String, exact := false) -> Button:
+ 204 func _click(button: Button) -> void:
+ 212 func _mouse_button(pressed: bool, at: Vector2, double_click := false) -> InputEventMouseButton:
+ 221 func _mouse_motion(at: Vector2) -> InputEventMouseMotion:
+ 229 func _tap_graph(graph: Control, at: Vector2) -> void:
+ 234 func _state_position(state_name: String) -> Vector2:
+ 241 func _report() -> void:
+--- helper usage ---
+_run_interaction_checks      [40]
+_count_nodes_outside_board   [140, 161]
+_fresh_pair                  [133, 165, 175]
+_collect_controls            [113, 122, 127, 192]
+_run_layout_checks           [38, 82]
+_run_behaviour_checks        [39, 152]

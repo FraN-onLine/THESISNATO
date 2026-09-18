@@ -128,30 +128,42 @@ func _collect_controls(node: Node) -> Array[Control]:
 	return found
 
 
-func _run_behaviour_checks() -> void:
-	# --- nodes are always created INSIDE the board ---------------------------
+## Resets the board and returns the two node names it now holds (the seeded start
+## state plus one added node), so every behaviour check starts from a known graph.
+func _fresh_pair() -> Array:
+	_builder.call("reset_for_free_build")
+	_builder.call("_add_state")
+	var states: Dictionary = _builder.get("states")
+	return states.keys()
+
+
+func _count_nodes_outside_board() -> int:
 	var graph: Control = _builder.get("graph")
 	var board := Rect2(Vector2.ZERO, graph.size)
-	_builder.call("reset_for_free_build")
-	for i in 4:
-		_builder.call("_add_state")
 	var states: Dictionary = _builder.get("states")
 	var outside := 0
 	for state_name in states:
 		var pos: Vector2 = states[state_name]["position"]
 		if not board.has_point(pos):
 			outside += 1
-	_note(outside == 0, "nodes_spawn_inside_board",
-		"nodes=%d outside=%d board=%s" % [states.size(), outside, str(board.size)])
+	return outside
+
+
+func _run_behaviour_checks() -> void:
+	var graph: Control = _builder.get("graph")
+	var board := Rect2(Vector2.ZERO, graph.size)
+
+	# --- nodes are always created INSIDE the board ---------------------------
+	_builder.call("reset_for_free_build")
+	for i in 4:
+		_builder.call("_add_state")
+	var states: Dictionary = _builder.get("states")
+	_note(_count_nodes_outside_board() == 0, "nodes_spawn_inside_board",
+		"nodes=%d board=%s" % [states.size(), str(board.size)])
 
 	# --- clicking 2 nodes in Connect mode must create a transition ----------
-	_builder.call("reset_for_free_build")
-	_builder.call("_add_state")           # q0 -> q1
+	var names := _fresh_pair()
 	_builder.call("_set_symbol", "a")
-	var names: Array = states.keys()
-	# re-read after reset
-	states = _builder.get("states")
-	names = states.keys()
 	_builder.set("connect_source", names[0])
 	_builder.call("select_state", names[0])
 	_builder.call("connect_selected", names[1])
@@ -160,12 +172,7 @@ func _run_behaviour_checks() -> void:
 		"transitions=%d from=%s to=%s" % [transitions.size(), names[0], names[1]])
 
 	# --- simulator follows transitions and reports acceptance ---------------
-	var sim_ok := true
-	var detail := ""
-	_builder.call("reset_for_free_build")
-	_builder.call("_add_state")
-	states = _builder.get("states")
-	names = states.keys()
+	names = _fresh_pair()
 	_builder.call("_set_symbol", "a")
 	_builder.set("connect_source", names[0])
 	_builder.call("select_state", names[0])
@@ -174,9 +181,61 @@ func _run_behaviour_checks() -> void:
 	_builder.call("_toggle_accepting")
 	var accepted: bool = _builder.call("test_string", "a")
 	var rejected: bool = _builder.call("test_string", "b")
-	sim_ok = accepted and not rejected
-	detail = "accept('a')=%s accept('b')=%s" % [str(accepted), str(rejected)]
-	_note(sim_ok, "simulate_follows_graph", detail)
+	_note(accepted and not rejected, "simulate_follows_graph",
+		"accept('a')=%s accept('b')=%s" % [str(accepted), str(rejected)])
+
+
+## Finds a Button in the board whose label matches `needle`. With `exact` the
+## whole label must match, which is how the mode row (Select / Connect / Move)
+## is picked out from action buttons such as "Delete selected".
+func _find_button(needle: String, exact := false) -> Button:
+	for node in _collect_controls(_builder):
+		if not node is Button:
+			continue
+		var label := str(node.text).strip_edges().to_lower()
+		var wanted := needle.strip_edges().to_lower()
+		if (exact and label == wanted) or (not exact and wanted in label):
+			return node
+	return null
+
+
+## Presses a button the way a learner does. Toggle buttons also have their
+## toggle state flipped, so both `pressed` and `toggled` handlers run.
+func _click(button: Button) -> void:
+	if button == null:
+		return
+	if button.toggle_mode:
+		button.button_pressed = true
+	button.emit_signal("pressed")
+
+
+func _mouse_button(pressed: bool, at: Vector2, double_click := false) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = pressed
+	event.position = at
+	event.double_click = double_click
+	return event
+
+
+func _mouse_motion(at: Vector2) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.position = at
+	return event
+
+
+## Press+release ON the graph canvas, exactly like a mouse click or a VR laser
+## tap that lands on the board surface.
+func _tap_graph(graph: Control, at: Vector2) -> void:
+	graph.call("_gui_input", _mouse_button(true, at))
+	graph.call("_gui_input", _mouse_button(false, at))
+
+
+func _state_position(state_name: String) -> Vector2:
+	var states: Dictionary = _builder.get("states")
+	if states.has(state_name):
+		return states[state_name]["position"]
+	return Vector2.ZERO
 
 
 func _report() -> void:

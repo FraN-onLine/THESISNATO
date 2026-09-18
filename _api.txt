@@ -1,0 +1,314 @@
+    4| signal evaluated(correct: bool, message: String)
+    6| enum EditMode { SELECT, CONNECT, MOVE }
+   11| const PALETTE_SYMBOLS := ["0", "1", "a", "b", "#", "@"]
+   13| const NODE_RADIUS := 46.0
+   22| var accept_strings: Array = []
+   23| var reject_strings: Array = []
+   27| var states: Dictionary = {}
+   28| var transitions: Array[Dictionary] = []
+   29| var selected_state: String = "q0"
+   32| var start_state: String = "q0"
+   33| var next_state_id: int = 5
+   34| var active_symbol: String = "a"
+   35| var dragging_state: String = ""
+   36| var drag_offset := Vector2.ZERO
+   37| var edit_mode: EditMode = EditMode.SELECT
+   38| var connect_source: String = ""
+   39| var graph: Control
+   40| var status_label: Label
+   41| var input_line: LineEdit
+   42| var mode_buttons: Dictionary = {}
+   43| var connection_status: Label
+   44| var simulate_button: Button
+   45| var simulation_keyboard_active := false
+   48| var sandbox_exit_button: Button
+   49| var sandbox_exit_callback: Callable = Callable()
+   52| var simulation_running := false
+   53| var sim_input := ""
+   54| var sim_pos := 0
+   55| var sim_current := ""
+   56| var sim_active_transition := {}
+   57| var sim_finished := false
+   58| var sim_accepted := false
+   59| var sim_message := ""
+   60| var sim_timer := 0.0
+   61| var sim_flash := 0.0
+   62| var sim_step_duration := 1.0
+   63| var undo_stack: Array[Dictionary] = []
+   64| var last_transition_from := ""
+   65| var last_transition_to := ""
+   68| var attempt_count := 0
+   69| var wrong_attempt_count := 0
+   70| var connection_edits := 0
+   71| var task_done := false
+   72| var free_build_mode := false
+   73| var task_started_msec := 0
+   74| var active_seconds := 0.0
+   75| var _last_time := 0
+   76| var last_attempt_stats: Dictionary = {
+   85| func _process(delta: float) -> void:
+  103| func _timer_start() -> void:
+  108| func _timer_stop() -> void:
+  116| func reset_for_task(new_instruction: String, accepted: String, rejected: String) -> void:
+  133| func reset_for_task_lists(new_instruction: String, accepted: Array, rejected: Array) -> void:
+  147| func _wipe_graph() -> void:
+  176| func reset_for_free_build() -> void:
+  196| func test_string(value: String) -> bool:
+  199| func _apply_instruction_text() -> void:
+  201| 	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
+  206| func get_attempt_stats() -> Dictionary:
+  209| func _record_attempt(correct: bool, message: String) -> void:
+  222| func cancel_pointer_interaction() -> void:
+  227| func _on_sandbox_exit_pressed() -> void:
+  231| func _ready() -> void:
+  238| func _build_ui() -> void:
+  239| 	var root := VBoxContainer.new()
+  263| func _add_heading_row(root: VBoxContainer) -> void:
+  264| 	var heading_row := HBoxContainer.new()
+  267| 	var heading := Label.new()
+  282| 		var back_button := Button.new()
+  288| func _add_instruction_label(root: VBoxContainer) -> void:
+  289| 	var instruction := Label.new()
+  298| func _add_workspace_row(root: VBoxContainer) -> void:
+  299| 	var workspace := HBoxContainer.new()
+  304| 	var graph_panel := PanelContainer.new()
+  315| 	var tools := VBoxContainer.new()
+  325| func _add_mode_buttons(tools: VBoxContainer) -> void:
+  326| 	var mode_title := Label.new()
+  330| 	var mode_help := Label.new()
+  340| 	var mode_grid := GridContainer.new()
+  349| func _add_node_tools(tools: VBoxContainer) -> void:
+  350| 	var node_actions := Label.new()
+  354| 	var action_grid := GridContainer.new()
+  371| func _add_simulate_row(root: VBoxContainer) -> void:
+  372| 	var simulate := HBoxContainer.new()
+  375| 	var label := Label.new()
+  393| 	var check_button := Button.new()
+  407| func _add_symbol_palette(root: VBoxContainer) -> void:
+  408| 	var palette_row := HBoxContainer.new()
+  411| 	var palette_title := Label.new()
+  417| 		var key := _make_keyboard_key(symbol)
+  420| 	var space_key := _make_keyboard_key("space")
+  424| 	var delete_key := _make_keyboard_key("del")
+  428| 	var clear_key := _make_keyboard_key("Clear")
+  433| func _seed_task_graph() -> void:
+  446| func seed_reference_graph() -> void:
+  464| func _refresh() -> void:
+  472| 	var keyboard_title := get_node_or_null("VBoxContainer/KeyboardTitle")
+  481| func _add_mode_button(parent: Container, label: String, mode: EditMode, selected := false) -> void:
+  482| 	var button := Button.new()
+  500| func _on_mode_button_pressed(mode: EditMode) -> void:
+  507| func _sync_mode_buttons() -> void:
+  509| 		var button: Button = mode_buttons[mode]
+  513| func _add_action_button(parent: Container, label: String, action: Callable) -> void:
+  514| 	var button := Button.new()
+  524| func _make_keyboard_key(symbol: String) -> Button:
+  525| 	var button := Button.new()
+  535| func _clear_symbol() -> void:
+  542| func _on_palette_symbol(symbol: String) -> void:
+  547| func _create_button_style(color: Color) -> StyleBoxFlat:
+  548| 	var style := StyleBoxFlat.new()
+  557| func _create_panel_style() -> StyleBoxFlat:
+  558| 	var style := StyleBoxFlat.new()
+  569| func _set_edit_mode(mode: EditMode) -> void:
+  578| func _set_symbol(symbol: String) -> void:
+  585| func _add_state() -> void:
+  586| 	var bounds := _board_rect()
+  587| 	var margin := _board_margin()
+  590| 	var base := Vector2(bounds.size.x * 0.5, bounds.size.y * 0.45)
+  592| 		var from_pos: Vector2 = states[selected_state]["position"]
+  593| 		var step_x := minf(240.0, bounds.size.x * 0.22)
+  595| 		var offset := Vector2(step_x, 56.0)
+  606| func spawn_state_at(screen_pos: Vector2) -> void:
+  609| func _create_state_at(spawn_pos: Vector2, announce: bool) -> void:
+  612| 	var state_name := "q%d" % next_state_id
+  625| func _board_rect() -> Rect2:
+  632| func _board_margin() -> float:
+  638| func _find_free_position(base: Vector2) -> Vector2:
+  639| 	var bounds := _board_rect()
+  640| 	var margin := _board_margin()
+  643| 	var min_separation: float = NODE_RADIUS * 2.0 + 34.0
+  645| 	var step_radii: Array[float] = [90.0, 155.0, 230.0]
+  648| 			var candidate: Vector2 = base + Vector2.from_angle(TAU * float(angle_index) / 12.0) * step_radius
+  654| 	var grid_step: float = min_separation * 0.6
+  655| 	var y: float = margin
+  657| 		var x: float = margin
+  659| 			var candidate: Vector2 = Vector2(x, y)
+  666| func _is_free_spot(candidate: Vector2, min_separation: float) -> bool:
+  672| func _toggle_accepting() -> void:
+  680| func _make_start_selected() -> void:
+  693| func _delete_selected() -> void:
+  708| func select_state(state_name: String) -> void:
+  718| func move_state(state_name: String, state_position: Vector2) -> void:
+  722| 	var position := state_position
+  723| 	var bounds := graph.size if graph else Vector2(1080, 430)
+  728| 	var min_separation: float = (NODE_RADIUS * 2.0 + 24.0) if graph else 118.0
+  730| 		var pushed := false
+  734| 			var other_pos: Vector2 = states[other_name]["position"]
+  735| 			var delta := position - other_pos
+  736| 			var distance := delta.length()
+  747| func connect_selected(target: String) -> void:
+  770| func _save_undo_state() -> void:
+  775| func _undo_transition() -> void:
+  779| 	var snapshot: Dictionary = undo_stack.pop_back()
+  786| func _remove_active_transition() -> void:
+  790| 		var transition: Dictionary = transitions[index]
+  799| func _append_string(symbol: String) -> void:
+  804| func _string_backspace() -> void:
+  808| func _string_clear() -> void:
+  812| func _simulate_input() -> void:
+  816| 	var value := input_line.text if input_line else ""
+  825| func start_simulation(value: String) -> void:
+  843| func _advance_simulation() -> void:
+  847| 		var accepted: bool = states.get(sim_current, {}).get("accepting", false)
+  850| 	var remaining := sim_input.substr(sim_pos)
+  851| 	var best_len := -1
+  852| 	var best_to := ""
+  853| 	var best_symbol := ""
+  860| 			var sl: int = symbol.length()
+  866| 		var shown := remaining.substr(0, 1)
+  873| 		var accepted: bool = states.get(best_to, {}).get("accepting", false)
+  878| func _finish_simulation(accepted: bool, reason: String) -> void:
+  889| func _cancel_simulation() -> void:
+  901| func _on_simulation_key(symbol: String) -> void:
+  909| func _on_simulation_backspace() -> void:
+  915| func _on_simulation_clear() -> void:
+  921| func _on_simulation_space() -> void:
+  929| func _simulate(value: String) -> bool:
+  932| 	var current := start_state
+  934| 		var keys := states.keys()
+  938| 	var pos := 0
+  942| 		var best_length := -1
+  943| 		var best_next := ""
+  950| 				var symbol_len: int = symbol.length()
+  960| func _check_task() -> void:
+  967| 	var acc := accept_strings.duplicate()
+  970| 	var rej := reject_strings.duplicate()
+  973| 	var correct := true
+  974| 	var failure := ""
+  986| 	var message := ""
+  998| class GraphCanvas extends Control:
+ 1000| 	const EDGE_COLOR := Color(0.35, 0.75, 1.0)
+ 1001| 	const EDGE_WIDTH := 4.0
+ 1002| 	const ARROW_LENGTH := 16.0
+ 1003| 	const ARROW_HALF_WIDTH := 8.0
+ 1006| 	const PAIR_LANE := 15.0
+ 1008| 	const PAIR_STEP := 16.0
+ 1010| 	const LOOP_EXTRA := 46.0
+ 1012| 	const LOOP_STACK := 48.0
+ 1013| 	const LABEL_FONT_SIZE := 22
+ 1015| 	var builder: Control
+ 1016| 	var node_radius := 46.0
+ 1017| 	var hit_radius := 96.0
+ 1018| 	var hovered_state := ""
+ 1019| 	var preview_mouse := Vector2(-1e6, -1e6)
+ 1022| 	var _last_empty_tap_pos := Vector2(-1e6, -1e6)
+ 1023| 	var _last_empty_tap_ms := 0
+ 1025| 	func set_builder(value: Control) -> void:
+ 1030| 	func _on_mouse_exited() -> void:
+ 1034| 	func _update_cursor() -> void:
+ 1037| 	func _draw() -> void:
+ 1047| 	func _draw_simulation_overlay() -> void:
+ 1050| 		var flash_color := Color(0.2, 0.9, 0.45, 0.25) if builder.sim_accepted else Color(0.95, 0.25, 0.25, 0.28)
+ 1053| 		var banner := "ACCEPTED" if builder.sim_accepted else "REJECTED"
+ 1054| 		var banner_color := Color(0.15, 0.7, 0.4, 1.0) if builder.sim_accepted else Color(0.95, 0.3, 0.3, 1.0)
+ 1055| 		var font := ThemeDB.fallback_font
+ 1056| 		var banner_font_size := 44
+ 1057| 		var w := font.get_string_size(banner, HORIZONTAL_ALIGNMENT_CENTER, -1, banner_font_size)
+ 1058| 		var center := Vector2(size.x * 0.5, size.y * 0.42)
+ 1064| 	func _draw_transitions() -> void:
+ 1068| 		var drawn_loops := {}
+ 1072| 			var node_name: String = transition["from"]
+ 1073| 			var index: int = drawn_loops.get(node_name, 0)
+ 1080| 		var groups := _group_pair_edges()
+ 1082| 			var group: Dictionary = groups[key]
+ 1083| 			var forward: Array = group["forward"]
+ 1084| 			var backward: Array = group["backward"]
+ 1086| 				var total := forward.size()
+ 1097| 	func _group_pair_edges() -> Dictionary:
+ 1098| 		var groups := {}
+ 1100| 			var from_node: String = transition["from"]
+ 1101| 			var to_node: String = transition["to"]
+ 1104| 			var a := from_node if from_node < to_node else to_node
+ 1105| 			var b := to_node if from_node < to_node else from_node
+ 1106| 			var key: Array = [a, b]
+ 1118| 	func _is_active_transition(transition: Dictionary) -> bool:
+ 1119| 		var active: Dictionary = builder.sim_active_transition
+ 1124| 	func _draw_paired_edge(transition: Dictionary, from_node: String, to_node: String, lane: float) -> void:
+ 1125| 		var states: Dictionary = builder.states
+ 1128| 		var center_a: Vector2 = states[from_node]["position"]
+ 1129| 		var center_b: Vector2 = states[to_node]["position"]
+ 1130| 		var delta := center_b - center_a
+ 1131| 		var length := delta.length()
+ 1134| 		var direction := delta / length
+ 1135| 		var side := Vector2(-direction.y, direction.x)
+ 1136| 		var offset := side * lane
+ 1138| 		var reach := sqrt(maxf(node_radius * node_radius - lane * lane, 0.0))
+ 1139| 		var start := center_a + offset + direction * reach
+ 1140| 		var tip := center_b + offset - direction * reach
+ 1144| 		var active: bool = _is_active_transition(transition) and (builder.simulation_running or builder.sim_finished)
+ 1145| 		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else EDGE_COLOR
+ 1146| 		var edge_width := EDGE_WIDTH + 3.0 if active else EDGE_WIDTH
+ 1149| 		var arrow_base := tip - direction * ARROW_LENGTH
+ 1150| 		var head := PackedVector2Array([tip, arrow_base + side * ARROW_HALF_WIDTH, arrow_base - side * ARROW_HALF_WIDTH])
+ 1154| 			var t := fmod(Time.get_ticks_msec() * 0.0005, 1.0)
+ 1157| 		var symbols: Array = transition.get("symbols", [transition.get("symbol", "")])
+ 1159| 			var label_side := 15.0 if absf(lane) < 0.5 else (absf(lane) + 15.0) * signf(lane)
+ 1165| 	func _draw_self_loop(transition: Dictionary, index: int) -> void:
+ 1166| 		var states: Dictionary = builder.states
+ 1167| 		var node_name: String = transition["from"]
+ 1170| 		var center: Vector2 = states[node_name]["position"]
+ 1171| 		var loop_angle := _loop_angle_for(node_name)
+ 1172| 		var sweep := 1.2
+ 1173| 		var loop_radius := node_radius + LOOP_EXTRA + index * LOOP_STACK
+ 1174| 		var p0 := center + Vector2.from_angle(loop_angle - sweep) * node_radius
+ 1175| 		var p1 := center + Vector2.from_angle(loop_angle + sweep) * node_radius
+ 1176| 		var control := center + Vector2.from_angle(loop_angle) * loop_radius
+ 1178| 		var points := PackedVector2Array()
+ 1181| 		var active: bool = _is_active_transition(transition) and (builder.simulation_running or builder.sim_finished)
+ 1182| 		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else EDGE_COLOR
+ 1183| 		var edge_width := EDGE_WIDTH + 3.0 if active else EDGE_WIDTH
+ 1187| 		var incoming := (p1 - control).normalized()
+ 1188| 		var arrow_base := p1 - incoming * ARROW_LENGTH
+ 1189| 		var arrow_side := Vector2(-incoming.y, incoming.x)
+ 1190| 		var head := PackedVector2Array([p1, arrow_base + arrow_side * ARROW_HALF_WIDTH, arrow_base - arrow_side * ARROW_HALF_WIDTH])
+ 1194| 			var t := fmod(Time.get_ticks_msec() * 0.0005, 1.0)
+ 1197| 		var symbols: Array = transition.get("symbols", [transition.get("symbol", "")])
+ 1199| 			var mid := (p0 + 2.0 * control + p1) / 4.0
+ 1200| 			var outward := (mid - center).normalized() if (mid - center).length() > 0.001 else Vector2.UP
+ 1205| 	func _loop_angle_for(node_name: String) -> float:
+ 1206| 		var states: Dictionary = builder.states
+ 1207| 		var center: Vector2 = states[node_name]["position"]
+ 1208| 		var direction_sum := Vector2.ZERO
+ 1210| 			var from_node: String = transition["from"]
+ 1211| 			var to_node: String = transition["to"]
+ 1222| 	func _quad_bezier(p0: Vector2, control: Vector2, p1: Vector2, t: float) -> Vector2:
+ 1223| 		var s := 1.0 - t
+ 1228| 	func _draw_label(text_value: String, pos: Vector2) -> void:
+ 1231| 		var font := ThemeDB.fallback_font
+ 1232| 		var text_size := font.get_string_size(text_value, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_FONT_SIZE)
+ 1233| 		var box := Rect2(pos.x - text_size.x * 0.5 - 7.0, pos.y - 15.0, text_size.x + 14.0, 30.0)
+ 1239| 	func _draw_states() -> void:
+ 1241| 			var state: Dictionary = builder.states[state_name]
+ 1242| 			var state_position: Vector2 = state["position"]
+ 1243| 			var color := Color(0.2, 0.75, 0.55) if state["accepting"] else Color(0.16, 0.3, 0.7)
+ 1262| 					var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+ 1269| 			var font := ThemeDB.fallback_font
+ 1270| 			var name_size := font.get_string_size(state_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 20)
+ 1275| 				var start_triangle := PackedVector2Array([
+ 1286| 	func _draw_connect_preview() -> void:
+ 1291| 		var source_pos: Vector2 = builder.states[builder.connect_source]["position"]
+ 1292| 		var target := preview_mouse
+ 1295| 		var delta := target - source_pos
+ 1298| 		var direction := delta.normalized()
+ 1299| 		var side := Vector2(-direction.y, direction.x)
+ 1300| 		var start := source_pos + direction * (node_radius + 4.0)
+ 1301| 		var line_end := target - direction * (node_radius + 4.0) if hovered_state != "" else target
+ 1303| 		var arrow_base := line_end - direction * ARROW_LENGTH
+ 1304| 		var head := PackedVector2Array([line_end, arrow_base + side * ARROW_HALF_WIDTH, arrow_base - side * ARROW_HALF_WIDTH])
+ 1307| 	func _node_at(pos: Vector2) -> String:
+ 1313| 	func _gui_input(event: InputEvent) -> void:
+ 1324| 			var new_hover := _node_at(event.position)
+ 1343| 	func _handle_press(pos: Vector2) -> void:
+ 1344| 		var hit := _node_at(pos)
+ 1350| 			var now := Time.get_ticks_msec()
