@@ -1,0 +1,4 @@
+# Godot executable / local engine files
+_godot/*.exe
+_godot/*.zip
+_godot/*.7z
