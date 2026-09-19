@@ -1,4 +1,50 @@
-# Godot executable / local engine files
-_godot/*.exe
-_godot/*.zip
-_godot/*.7z
+# ============================================================
+# Adapto / Autolab - git ignore rules
+# Keep the repository source-only: no engines, no binaries, no
+# local scratch/diagnostic files.
+# ============================================================
+
+# --- Local Godot engine drop (178 MB+). Never commit the engine. ---
+_godot/
+*.exe
+*.pck
+*.zip
+*.7z
+
+# --- Godot editor / import cache ---
+.godot/
+*.translation
+
+# --- Godot exported builds (executables and heavy artifacts) ---
+build/
+builds/
+export/
+exports/
+*.apk
+*.aab
+*.ipa
+*.app/
+*.x86_64
+*.x86
+*.dmg
+*.msi
+
+# --- Local scratch / diagnostic helpers used while developing ---
+_*.py
+_*.txt
+_*.ps1
+_*.log
+_*.json
+*.bak
+*.bak2
+*.tmp
+
+# --- XR cache ---
+openxr_action_map.tres.bak
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
