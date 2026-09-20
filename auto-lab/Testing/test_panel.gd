@@ -191,10 +191,12 @@ func _make_button(text_value: String, color: Color) -> Button:
 
 func _panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.06, 0.12, 0.96)
-	style.set_corner_radius_all(22)
+	style.bg_color = Color(0.05, 0.08, 0.14, 0.97)
+	style.set_corner_radius_all(26)
 	style.set_border_width_all(2)
-	style.border_color = Color(0.3, 0.55, 0.9, 0.7)
+	style.border_color = Color(0.35, 0.6, 0.95, 0.55)
+	style.shadow_color = Color(0, 0, 0, 0.45)
+	style.shadow_size = 24
 	return style
 
 # ===== Public API used by the room controller =====
@@ -231,14 +233,17 @@ func show_question(question: Dictionary, number: int, total: int) -> void:
 	_options_box.visible = true
 	_hands_on_box.visible = false
 	_feedback_label.text = ""
-	_back_button.visible = true
+	_back_button.visible = false  # No back navigation during the test.
 	_start_button.visible = false
 	_next_button.visible = false
 	_clear_options()
 	var options: Array = question.get("options", [])
+	var letters := ["A", "B", "C", "D", "E", "F"]
 	for i in range(options.size()):
-		var btn := _make_button(str(options[i]), Color(0.12, 0.18, 0.32, 1))
-		btn.custom_minimum_size.x = 1250
+		var letter: String = letters[i] if i < letters.size() else str(i + 1)
+		var btn := _make_button("%s.  %s" % [letter, str(options[i])], Color(0.12, 0.18, 0.32, 1))
+		btn.custom_minimum_size = Vector2(1250, 56)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 20)
 		btn.pressed.connect(func(): answer_selected.emit(i))
 		_options_box.add_child(btn)
@@ -254,7 +259,7 @@ func show_hands_on(question: Dictionary, number: int, total: int) -> void:
 	_hands_on_box.visible = true
 	_hands_on_hint.text = "Build the DFA on the automata board using states, accepting toggles and transitions. Then press \"Check task\" on the board to submit. Wrong builds stay here until fixed - only a correct build continues."
 	_feedback_label.text = ""
-	_back_button.visible = true
+	_back_button.visible = false  # No back navigation during the test.
 	_start_button.visible = false
 	_next_button.visible = false
 	_clear_options()

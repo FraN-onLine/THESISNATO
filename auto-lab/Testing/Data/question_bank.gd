@@ -30,397 +30,113 @@ const SKILLS := {
 }
 
 const QUESTIONS := [
-	# ===== SIMULATION (5 questions) =====
-	{
-		"id": 1,
-		"skill": "simulation",
-		"question": "Given a DFA with states {q0, q1}, start state q0, accepting state q1, and transitions: δ(q0, 'a') = q1, δ(q1, 'a') = q0, what is the result of processing the string 'aaa'?",
-		"options": [
-			"q0 (rejected)",
-			"q1 (accepted)",
-			"q0 (accepted)",
-			"q1 (rejected)"
-		],
-		"correct": 1,
-		"explanation": "Starting at q0: 'a' → q1, 'a' → q0, 'a' → q1. Final state q1 is accepting, so the string 'aaa' is accepted."
-	},
-	{
-		"id": 2,
-		"skill": "simulation",
-		"question": "A DFA has states {A, B, C}, start A, accepting {C}, with δ(A, '0') = A, δ(A, '1') = B, δ(B, '0') = C, δ(B, '1') = B, δ(C, '0') = C, δ(C, '1') = C. Which of the following strings is ACCEPTED?",
-		"options": [
-			"'01'",
-			"'10'",
-			"'00'",
-			"'11'"
-		],
-		"correct": 1,
-		"explanation": "'10': A --1--> B --0--> C. Final state C is accepting, so '10' is accepted. '01': A --0--> A --1--> B (rejected). '00': A --0--> A --0--> A (rejected). '11': A --1--> B --1--> B (rejected)."
-	},
-	{
-		"id": 3,
-		"skill": "simulation",
-		"question": "Consider a DFA with start state q0, accepting state q2, and transitions: δ(q0, 'x') = q1, δ(q1, 'x') = q2, δ(q2, 'x') = q2. What happens when the string 'xxx' is processed?",
-		"options": [
-			"Ends in q2, accepted",
-			"Ends in q1, rejected",
-			"Ends in q0, rejected",
-			"Ends in q2, rejected"
-		],
-		"correct": 0,
-		"explanation": "q0 --x--> q1 --x--> q2 --x--> q2. Final state q2 is accepting, so 'xxx' is accepted."
-	},
-	{
-		"id": 4,
-		"skill": "simulation",
-		"question": "A DFA recognizes strings ending in 'ab'. States: q0 (start), q1, q2 (accepting). Transitions: δ(q0,'a')=q1, δ(q0,'b')=q0, δ(q1,'a')=q1, δ(q1,'b')=q2, δ(q2,'a')=q1, δ(q2,'b')=q0. Which string is REJECTED?",
-		"options": [
-			"'ab'",
-			"'aab'",
-			"'ba'",
-			"'bab'"
-		],
-		"correct": 2,
-		"explanation": "'ba': q0 --b--> q0 --a--> q1. Final state q1 is not accepting, so 'ba' is rejected. 'ab': q0--a-->q1--b-->q2 (accepted). 'aab': q0--a-->q1--a-->q1--b-->q2 (accepted). 'bab': q0--b-->q0--a-->q1--b-->q2 (accepted)."
-	},
-	{
-		"id": 5,
-		"skill": "simulation",
-		"question": "Given a DFA with δ(q0, '0') = q0, δ(q0, '1') = q1, δ(q1, '0') = q2, δ(q1, '1') = q1, δ(q2, '0') = q2, δ(q2, '1') = q2, start q0, accepting {q2}. The string '101' is processed. What is the final state?",
-		"options": [
-			"q0",
-			"q1",
-			"q2",
-			"Undefined"
-		],
-		"correct": 2,
-		"explanation": "q0 --1--> q1 --0--> q2 --1--> q2. Final state is q2."
-	},
-
-	# ===== IDENTIFICATION OF DIAGRAM (4 questions) =====
-	{
-		"id": 6,
-		"skill": "identification",
-		"question": "A diagram shows a machine with multiple transitions from a single state on the same input symbol, and includes ε-transitions. This diagram represents a(n):",
-		"options": [
-			"DFA",
-			"NFA",
-			"ε-NFA",
-			"Both B and C"
-		],
-		"correct": 3,
-		"explanation": "Multiple transitions on the same symbol indicates an NFA. ε-transitions indicate an ε-NFA. Since it has both, it's an ε-NFA, which is a type of NFA, so 'Both B and C' is correct."
-	},
-	{
-		"id": 7,
-		"skill": "identification",
-		"question": "A state diagram has exactly one transition per input symbol from every state, and no ε-transitions. This is a:",
-		"options": [
-			"DFA",
-			"NFA",
-			"ε-NFA",
-			"Turing Machine"
-		],
-		"correct": 0,
-		"explanation": "A DFA has exactly one transition per input symbol from each state, with no ε-transitions. This is the defining characteristic of a DFA."
-	},
-	{
-		"id": 8,
-		"skill": "identification",
-		"question": "You see a diagram where state q0 has δ(q0, 'a') = {q1, q2}. This is NOT a DFA because:",
-		"options": [
-			"It has multiple accepting states",
-			"It has multiple transitions on the same symbol from one state",
-			"It has no start state",
-			"It has too few states"
-		],
-		"correct": 1,
-		"explanation": "A DFA requires exactly one transition per input symbol from each state. Having δ(q0, 'a') = {q1, q2} means multiple possible next states, which is a characteristic of an NFA, not a DFA."
-	},
-	{
-		"id": 9,
-		"skill": "identification",
-		"question": "Which of the following is a valid DFA diagram characteristic?",
-		"options": [
-			"Multiple start states",
-			"ε-transitions between states",
-			"Exactly one transition per input symbol from each state",
-			"Transitions that consume no input"
-		],
-		"correct": 2,
-		"explanation": "A DFA has exactly one transition per input symbol from each state. It has a single start state, no ε-transitions, and every transition consumes exactly one input symbol."
-	},
-
-	# ===== DFA DEFINITION AND PARTS (5 questions) =====
-	{
-		"id": 10,
-		"skill": "definition",
-		"question": "What is the formal 5-tuple definition of a DFA?",
-		"options": [
-			"(Q, Σ, δ, q0, F)",
-			"(Q, Σ, δ, F, q0)",
-			"(Σ, Q, δ, q0, F)",
-			"(Q, δ, Σ, q0, F)"
-		],
-		"correct": 0,
-		"explanation": "A DFA is formally defined as a 5-tuple (Q, Σ, δ, q0, F) where Q is the set of states, Σ is the input alphabet, δ is the transition function, q0 is the start state, and F is the set of accepting states."
-	},
-	{
-		"id": 11,
-		"skill": "definition",
-		"question": "In the DFA 5-tuple (Q, Σ, δ, q0, F), what does 'δ' represent?",
-		"options": [
-			"The set of accepting states",
-			"The transition function",
-			"The input alphabet",
-			"The start state"
-		],
-		"correct": 1,
-		"explanation": "δ (delta) is the transition function that maps (state, input symbol) pairs to a next state: δ: Q × Σ → Q."
-	},
-	{
-		"id": 12,
-		"skill": "definition",
-		"question": "What does 'F' represent in the DFA 5-tuple?",
-		"options": [
-			"The set of all states",
-			"The input alphabet",
-			"The set of accepting (final) states",
-			"The transition function"
-		],
-		"correct": 2,
-		"explanation": "F is the set of accepting (or final) states, a subset of Q. A string is accepted by the DFA if processing it ends in a state that is in F."
-	},
-	{
-		"id": 13,
-		"skill": "definition",
-		"question": "What is the role of q0 in a DFA?",
-		"options": [
-			"It is the only accepting state",
-			"It is the start (initial) state",
-			"It is the state that processes the last symbol",
-			"It is the transition function"
-		],
-		"correct": 1,
-		"explanation": "q0 is the start (initial) state. All processing of input strings begins at q0. It is a single, unique state in Q."
-	},
-	{
-		"id": 14,
-		"skill": "definition",
-		"question": "Which of the following is TRUE about the transition function δ in a DFA?",
-		"options": [
-			"It can be undefined for some inputs",
-			"It can return multiple states",
-			"It must be defined for every state and every input symbol",
-			"It can include ε-transitions"
-		],
-		"correct": 2,
-		"explanation": "In a DFA, δ must be a total function: defined for every state in Q and every symbol in Σ. It returns exactly one next state, and there are no ε-transitions."
-	},
-
-	# ===== DFA BUILDING (5 questions) =====
-	{
-		"id": 15,
-		"skill": "building",
-		"question": "To build a DFA that accepts strings ending with '01', what is the minimum number of states needed?",
-		"options": [
-			"2 states",
-			"3 states",
-			"4 states",
-			"5 states"
-		],
-		"correct": 1,
-		"explanation": "A DFA for strings ending in '01' needs 3 states: one to track 'no progress', one to track 'just saw 0', and one accepting state for 'just saw 01'."
-	},
-	{
-		"id": 16,
-		"skill": "building",
-		"question": "When building a DFA that accepts strings with an even number of 'a's, what is the key design consideration?",
-		"options": [
-			"Use one state to track parity (even/odd)",
-			"Use one state per character in the alphabet",
-			"Use a state for each possible string length",
-			"Use ε-transitions to skip characters"
-		],
-		"correct": 0,
-		"explanation": "For parity tracking, you need 2 states: one for 'even count so far' and one for 'odd count so far'. Each 'a' toggles between them. This is the minimal DFA design."
-	},
-	{
-		"id": 17,
-		"skill": "building",
-		"question": "You need to build a DFA for the language {w | w contains the substring 'aba'}. What is the correct approach?",
-		"options": [
-			"Track the longest suffix of 'aba' seen so far",
-			"Create a state for every possible string",
-			"Use a single state with self-loops",
-			"Use ε-transitions to handle the substring"
-		],
-		"correct": 0,
-		"explanation": "The standard approach is to track how much of 'aba' has been matched as a suffix. States represent: no match, matched 'a', matched 'ab', and matched 'aba' (accepting, with self-loop)."
-	},
-	{
-		"id": 18,
-		"skill": "building",
-		"question": "When constructing a DFA, what must be true about the start state?",
-		"options": [
-			"It must also be an accepting state",
-			"There must be exactly one start state",
-			"It must have no incoming transitions",
-			"It must be labeled q0"
-		],
-		"correct": 1,
-		"explanation": "A DFA has exactly one start state. It may or may not be accepting, may have incoming transitions, and can be labeled with any name (q0 is conventional but not required)."
-	},
-	{
-		"id": 19,
-		"skill": "building",
-		"question": "To build a DFA that accepts strings over {0,1} with at least one '1', the minimal DFA has:",
-		"options": [
-			"1 state",
-			"2 states",
-			"3 states",
-			"4 states"
-		],
-		"correct": 1,
-		"explanation": "2 states: q0 (start, no '1' seen yet, non-accepting) and q1 (at least one '1' seen, accepting). On '0', q0 stays at q0 and q1 stays at q1. On '1', both go to q1."
-	},
-
-	# ===== DFA FROM SET BUILDER (4 questions) =====
-	{
-		"id": 24,
-		"skill": "set_builder",
-		"question": "The set builder notation {w ∈ {a,b}* | w ends with 'a'} defines:",
-		"options": [
-			"All strings ending with 'a'",
-			"All strings starting with 'a'",
-			"All strings containing 'a'",
-			"All strings of length 1"
-		],
-		"correct": 0,
-		"explanation": "The notation reads: 'the set of all strings w over alphabet {a,b} such that w ends with the character a'. This is the language of all strings ending in 'a'."
-	},
-	{
-		"id": 25,
-		"skill": "set_builder",
-		"question": "For the set {w ∈ {0,1}* | |w| is even}, what DFA design is needed?",
-		"options": [
-			"2 states tracking even/odd length",
-			"1 state with self-loops",
-			"3 states for length tracking",
-			"A state for each possible length"
-		],
-		"correct": 0,
-		"explanation": "Track parity of string length: q0 (even length, accepting) and q1 (odd length, non-accepting). Each input symbol toggles between them."
-	},
-	{
-		"id": 26,
-		"skill": "set_builder",
-		"question": "The set {w ∈ {a,b}* | w contains at least two 'a's} requires a DFA with:",
-		"options": [
-			"2 states",
-			"3 states",
-			"4 states",
-			"5 states"
-		],
-		"correct": 1,
-		"explanation": "3 states: q0 (0 'a's seen), q1 (1 'a' seen), q2 (2+ 'a's seen, accepting). On 'a', move to the next state. On 'b', stay in the current state."
-	},
-	{
-		"id": 27,
-		"skill": "set_builder",
-		"question": "The set builder {w ∈ {0,1}* | w does NOT contain '00'} represents:",
-		"options": [
-			"All strings without consecutive zeros",
-			"All strings without any zeros",
-			"All strings with at least one zero",
-			"All strings ending in zero"
-		],
-		"correct": 0,
-		"explanation": "The condition 'does NOT contain 00' means no two consecutive zeros appear anywhere in the string. This is the language of strings without the substring '00'."
-	},
-
-	# ===== DFA FROM LIST (3 questions) =====
-	{
-		"id": 28,
-		"skill": "list",
-		"question": "Given the list of accepted strings {ε, a, aa, aaa, ...} (all strings of only 'a's), the DFA should:",
-		"options": [
-			"Accept all strings of 'a's, reject any string with 'b'",
-			"Accept only 'a' and 'aa'",
-			"Accept strings with both 'a' and 'b'",
-			"Reject the empty string"
-		],
-		"correct": 0,
-		"explanation": "The list represents the language a* (all strings of 'a's including empty). The DFA needs 2 states: q0 (accepting, start) and q1 (trap state for any 'b'). On 'a', stay at q0. On 'b', go to q1."
-	},
-	{
-		"id": 29,
-		"skill": "list",
-		"question": "The list of strings {ab, aab, aaab, ...} represents the language:",
-		"options": [
-			"a+b (one or more 'a's followed by one 'b')",
-			"ab* (one 'a' followed by zero or more 'b's)",
-			"(ab)* (zero or more repetitions of 'ab')",
-			"a*b (zero or more 'a's followed by one 'b')"
-		],
-		"correct": 0,
-		"explanation": "The pattern is one or more 'a's followed by exactly one 'b'. This is a+b in regex notation. The DFA needs 3 states: q0 (start), q1 (saw at least one 'a'), q2 (accepting, saw the 'b')."
-	},
-	{
-		"id": 30,
-		"skill": "list",
-		"question": "Given the list {01, 001, 0001, ...} (strings with one or more 0s followed by a 1), what is the minimal DFA design?",
-		"options": [
-			"3 states: track 'no 0s yet', 'saw 0s', 'saw the 1' (accepting)",
-			"2 states: one for 0s, one for 1s",
-			"4 states: one per character position",
-			"1 state with self-loops"
-		],
-		"correct": 0,
-		"explanation": "3 states: q0 (start, no 0s yet), q1 (saw one or more 0s), q2 (accepting, saw the final 1). On '0' at q0, go to q1. On '0' at q1, stay at q1. On '1' at q1, go to q2. Any other transition goes to a trap state."
-	},
-	# ===== IMAGE QUESTION (shows a diagram on the floating panel) =====
-	{
-		"id": 31,
-		"skill": "simulation",
-		"type": "image",
-		"image": "res://Testing/Data/images/dfa_ends_a.svg",
-		"question": "Study the DFA diagram shown above (start state q0, accepting state q1). Which of the following strings does it ACCEPT?",
-		"options": [
-			"'ba'",
-			"'ab'",
-			"'b'",
-			"'aab'"
-		],
-		"correct": 0,
-		"explanation": "The diagram has q0 --a--> q1 and q0 --b--> q0 (a self-loop). The only way to reach the accepting state q1 is with the symbol 'a', and once at q1 there are no outgoing arrows, so the DFA accepts exactly strings ending in 'a'. 'ba' ends in 'a' and is accepted."
-	},
-	# ===== HANDS-ON QUESTION (must build + submit on the automata board) =====
-	{
-		"id": 32,
-		"skill": "building",
-		"type": "handson",
-		"question": "Build a DFA on the automata board that ACCEPTS strings ending in 'ab' over {a, b} and REJECTS everything else.",
-		"task": {
-			"instruction": "Build a DFA over {a,b} that ACCEPTS strings ending in 'ab' and REJECTS others.",
-			"accept": ["ab", "aab", "bab"],
-			"reject": ["a", "aa", "ba"]
-		},
-		"explanation": "A correct DFA accepts 'ab', 'aab', 'bab' and rejects 'a', 'aa', 'ba'. You must build it on the board and press Check task to submit — only a correct build lets you continue."
-	},
-	{
-		"id": 33,
-		"skill": "building",
-		"type": "handson",
-		"question": "Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's (the empty string is accepted).",
-		"task": {
-			"instruction": "Build a DFA over {a,b} that ACCEPTS strings with an even number of 'a's.",
-			"accept": ["", "aa", "baab"],
-			"reject": ["a", "aba", "aaa"]
-		},
-		"explanation": "Use two states tracking 'even a count' (accepting) and 'odd a count'. A 'b' loops in place; an 'a' flips between the two states. Only this correct build lets you continue."
-	}
+	{"id": 1, "skills": ["simulation"],
+	 "question": "Given a DFA, what is the purpose of simulating an input string?",
+	 "options": ["To change the DFA's states", "To determine the state reached after processing the input", "To add new transitions", "To remove final states"],
+	 "correct": 1,
+	 "explanation": "Simulating a string traces which state the machine reaches after consuming each symbol, so you can decide accept/reject."},
+	{"id": 2, "skills": ["simulation"], "type": "image", "image": "res://Images/q2.png",
+	 "question": "Given this DFA, what state does 1101 lead you to?",
+	 "options": ["q0", "q2", "q1", "none"], "correct": 1,
+	 "explanation": "Trace 1-1-0-1 from the start state of the diagram; the machine lands in q2."},
+	{"id": 3, "skills": ["simulation"], "type": "image", "image": "res://Images/q3.png",
+	 "question": "Given this DFA, what state does 00110 lead you to?",
+	 "options": ["q0", "q2", "q1", "none"], "correct": 2,
+	 "explanation": "Trace 0-0-1-1-0 from the start state of the diagram; the machine lands in q1."},
+	{"id": 4, "skills": ["simulation"], "type": "image", "image": "res://Images/q4.png",
+	 "question": "Given this DFA, what state does 1010 lead you to?",
+	 "options": ["q1", "q3", "q2", "q0"], "correct": 0,
+	 "explanation": "Trace 1-0-1-0 from the start state of the diagram; the machine lands in q1."},
+	{"id": 5, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/q5.png",
+	 "question": "What is the rule of this language considering this diagram?",
+	 "options": ["Language of {1,0} where the string ends with a double digit", "Language of {1,0} where the string ends with an even amount of the same digit", "Language of {1,0} where the string ends with 10", "Language of {1,0} where the string ends with 01"],
+	 "correct": 1,
+	 "explanation": "The diagram's paired states track repeating pairs, so the accepted strings end with an even number of the same digit."},
+	{"id": 6, "skills": ["simulation", "set_builder"],
+	 "question": "Given this List Notation L = { strings that contain an equal amount of a and b }, which of these is a valid string?",
+	 "options": ["abbb", "bbba", "babaaabb", "abababbbaaa"], "correct": 2,
+	 "explanation": "'babaaabb' has four a's and four b's - equal amounts - so it belongs to L."},
+	{"id": 7, "skills": ["definition"],
+	 "question": "Which of the following represents the five components of a finite automaton?",
+	 "options": ["(Q, \u03a3, \u03b4, q\u2080, F)", "(Q, \u03b4, F, \u03a3, q)", "(\u03a3, q\u2080, F, S, \u03b4)", "(Q, \u03a3, S, \u03b4, q1)"],
+	 "correct": 0,
+	 "explanation": "The 5-tuple is (Q, \u03a3, \u03b4, q\u2080, F): states, alphabet, transition function, start state, accepting states."},
+	{"id": 8, "skills": ["definition"],
+	 "question": "What does Q represent in a finite automaton?",
+	 "options": ["Input alphabet", "Set of states", "Transition function", "Set of final states"],
+	 "correct": 1,
+	 "explanation": "Q is the (finite) set of states of the machine."},
+	{"id": 9, "skills": ["definition"],
+	 "question": "What does F represent, commonly shown with a double circle?",
+	 "options": ["Input symbols", "Transition function", "Starting state", "Set of final states"],
+	 "correct": 3,
+	 "explanation": "F is the set of accepting (final) states, drawn with a double circle."},
+	{"id": 10, "skills": ["definition"],
+	 "question": "What is the purpose of the transition function \u03b4?",
+	 "options": ["It determines how the automaton moves between states", "It identifies the final states", "It defines the alphabet", "It selects the starting state"],
+	 "correct": 0,
+	 "explanation": "\u03b4 maps (state, symbol) to the next state - it is how the machine moves."},
+	{"id": 11, "skills": ["identification", "definition"], "type": "image", "image": "res://Images/q11.png",
+	 "question": "Is the diagram below a valid DFA, why or why not?",
+	 "options": ["No, there should not be more than ONE accepting state (F)", "Yes, because DFAs should have more than ONE accepting state (F)", "No, because there is no non-accepting state; states in F should not equal the set of states Q", "Yes, because DFAs can have any number of states F from the set of states Q"],
+	 "correct": 3,
+	 "explanation": "A DFA may have zero, one, or many accepting states - F is any subset of Q, so the diagram is valid."},
+	{"id": 12, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/q12.png",
+	 "question": "What is the rule of this diagram?",
+	 "options": ["String X of {0,1} such that X ends with 01", "String X of {0,1} such that X ends in 10", "String X of {0,1} such that X ends in 1", "String X of {0,1} such that X ends in 0"],
+	 "correct": 2,
+	 "explanation": "The accepting state is reached exactly when the last symbol read is 1."},
+	{"id": 13, "skills": ["list", "set_builder", "building"],
+	 "question": "Which of these rules apply for this language L1, L1 = {00, 01, 10, 11}?",
+	 "options": ["String X of {0,1} such that the length of X is less than 3", "String X of {0,1} such that the length of X is exactly 2", "String X of {0,1} such that X consists of only 0 and 1", "String X of {0,1} such that X starts or ends with 0"],
+	 "correct": 2,
+	 "explanation": "L1 lists every string over {0,1}; the rule 'X consists of only 0 and 1' describes exactly that set."},
+	{"id": 14, "skills": ["list", "building"],
+	 "question": "What should the transition x be for this language L1 to be true? L1 = {1, 01, 001, 0001, 00001, ...}",
+	 "options": ["1", "0", "epsilon", "01"], "correct": 0,
+	 "explanation": "Every string in the list ends with a single 1 preceded by zero or more 0s, so the accepting transition consumes 1."},
+	{"id": 15, "skills": ["building", "simulation"], "type": "image", "image": "res://Images/q15.png",
+	 "question": "In this DFA, what are the transition symbols for x, y, z to describe the language that ends with 001?",
+	 "options": ["0, 1, 1", "0, 0, 1", "1, 1, 1", "1, 0, 1"], "correct": 0,
+	 "explanation": "Reading the arrows on the path that ends in the accepting state gives x=0, y=1, z=1."},
 ]
+## POST TEST = the same 15 pretest items PLUS these 5 hands-on board builds,
+## appended by start_posttest().
+const POSTTEST_QUESTIONS := [
+	{"id": 101, "skills": ["building"], "type": "handson",
+	 "question": "Build a DFA on the automata board that ACCEPTS strings ending in 'ab' over {a, b} and REJECTS everything else.",
+	 "task": {"instruction": "Build a DFA over {a,b} that ACCEPTS strings ending in 'ab' and REJECTS others.",
+			  "accept": ["ab", "aab", "bab"], "reject": ["a", "aa", "ba"]},
+	 "explanation": "Three states: q0 (start), q1 (saw trailing 'a'), q2 (accepting, saw 'ab')."},
+	{"id": 102, "skills": ["building"], "type": "handson",
+	 "question": "Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's (the empty string is accepted).",
+	 "task": {"instruction": "Build a DFA over {a,b} that ACCEPTS strings with an even number of 'a's.",
+			  "accept": ["", "aa", "baab"], "reject": ["a", "aba", "aaa"]},
+	 "explanation": "Two states tracking even/odd 'a' count; 'b' loops in place, 'a' flips between them."},
+	{"id": 103, "skills": ["building", "set_builder"], "type": "handson",
+	 "question": "Build a DFA over {0,1} that ACCEPTS strings ending in '01'.",
+	 "task": {"instruction": "Build a DFA over {0,1} that ACCEPTS strings ending in '01'.",
+			  "accept": ["01", "001", "1101"], "reject": ["0", "1", "10", "010"]},
+	 "explanation": "Track the last two symbols; only the pair 0-then-1 lands in the accepting state."},
+	{"id": 104, "skills": ["building", "list"], "type": "handson",
+	 "question": "Build a DFA over {a,b} that ACCEPTS exactly the strings in the list L = {a, aa} (every other string is rejected).",
+	 "task": {"instruction": "Build a DFA over {a,b} that accepts ONLY 'a' and 'aa'.",
+			  "accept": ["a", "aa"], "reject": ["", "b", "ab", "aaa", "ba"]},
+	 "explanation": "A counting chain q0 -a-> q1 -a-> q2 with everything else sent to a rejecting trap state."},
+	{"id": 105, "skills": ["building", "simulation"], "type": "handson",
+	 "question": "Build a DFA over {0,1} that ACCEPTS strings containing '11' as a substring.",
+	 "task": {"instruction": "Build a DFA over {0,1} that ACCEPTS strings containing '11'.",
+			  "accept": ["11", "011", "1101", "1011"], "reject": ["", "0", "1", "01", "10", "0101"]},
+	 "explanation": "Two states before seeing '11' and one accepting sink state after it."},
+]
+
+## Every skill a question exercises (questions may tag several).
+static func get_question_skills(question: Dictionary) -> Array:
+	if question.has("skills"):
+		return question["skills"]
+	if question.has("skill"):
+		return [question["skill"]]
+	return []
 
 static func get_questions_for_skill(skill: String) -> Array:
 	var result := []

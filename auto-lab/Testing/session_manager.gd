@@ -85,7 +85,8 @@ func start_pretest() -> void:
 	state = SessionState.PRETEST
 	current_question_index = 0
 	pretest_answers.clear()
-	pretest_questions = _shuffle_questions(QuestionBank.QUESTIONS)
+	# The official pretest is exactly the 15 multiple-choice items in fixed order.
+	pretest_questions = QuestionBank.QUESTIONS.duplicate(true)
 	_current_question()
 
 ## Get the current question
@@ -104,11 +105,12 @@ func get_total_questions() -> int:
 func submit_answer(selected_index: int) -> Dictionary:
 	var question: Dictionary = current_question
 	var correct: bool = selected_index == question["correct"]
-	var skill: String = question["skill"]
-	
+	var skills: Array = QuestionBank.get_question_skills(question)
+	var skill: String = str(skills[0]) if not skills.is_empty() else "definition"
 	var answer := {
 		"question_id": question["id"],
 		"skill": skill,
+		"skills": skills,
 		"correct": correct,
 		"selected": selected_index,
 		"correct_index": question["correct"],
@@ -116,41 +118,18 @@ func submit_answer(selected_index: int) -> Dictionary:
 		"options": question["options"],
 		"explanation": question["explanation"]
 	}
-	
-	if state == SessionState.PRETEST:
-		pretest_answers.append(answer)
-		# Record observation in the knowledge tracer
-		knowledge_tracer.set_state_hint("pretest")
-		knowledge_tracer.record_observation(skill, correct)
-		save_session_data()
-	elif state == SessionState.POST_TEST:
-		posttest_answers.append(answer)
-		knowledge_tracer.set_state_hint("posttest")
-		knowledge_tracer.record_observation(skill, correct)
-		save_session_data()
-	
-	# Advance to next question
-	current_question_index += 1
-	
-	if current_question_index >= pretest_questions.size():
-		# Test is complete
-		if state == SessionState.PRETEST:
-			state = SessionState.ANALYSIS
-		elif state == SessionState.POST_TEST:
-			state = SessionState.COMPLETE
-		return {"complete": true, "correct": correct, "skill": skill}
-	
-	_current_question()
-	return {"complete": false, "correct": correct, "skill": skill}
+	return _record_answer(answer, correct, skills)
 
 ## Submit the result of a hands-on (board-built) question. `correct` comes from
 ## the automata board evaluation of the built DFA, not from choosing an option.
 func submit_hands_on(correct: bool, board_message: String) -> Dictionary:
 	var question: Dictionary = current_question
-	var skill: String = question["skill"]
+	var skills: Array = QuestionBank.get_question_skills(question)
+	var skill: String = str(skills[0]) if not skills.is_empty() else "definition"
 	var answer := {
 		"question_id": question["id"],
 		"skill": skill,
+		"skills": skills,
 		"correct": correct,
 		"selected": -1,
 		"correct_index": -1,
@@ -160,36 +139,38 @@ func submit_hands_on(correct: bool, board_message: String) -> Dictionary:
 		"type": "handson",
 		"board_message": board_message,
 	}
-	return _record_answer(answer, correct, skill)
+	return _record_answer(answer, correct, skills)
 
 ## Shared tail for both answer paths: append the answer, feed the tracer, save,
 ## advance to the next question (or flip state), and report completion.
-func _record_answer(answer: Dictionary, correct: bool, skill: String) -> Dictionary:
+func _record_answer(answer: Dictionary, correct: bool, skills: Array) -> Dictionary:
+	var primary: String = str(skills[0]) if not skills.is_empty() else "definition"
 	if state == SessionState.PRETEST:
 		pretest_answers.append(answer)
-		# Record observation in the knowledge tracer
+		# Record one observation per tagged skill (questions may span skills).
 		knowledge_tracer.set_state_hint("pretest")
-		knowledge_tracer.record_observation(skill, correct)
+		for tagged_skill in skills:
+			knowledge_tracer.record_observation(tagged_skill, correct)
 		save_session_data()
 	elif state == SessionState.POST_TEST:
 		posttest_answers.append(answer)
 		knowledge_tracer.set_state_hint("posttest")
-		knowledge_tracer.record_observation(skill, correct)
+		for tagged_skill in skills:
+			knowledge_tracer.record_observation(tagged_skill, correct)
 		save_session_data()
 
 	# Advance to next question
 	current_question_index += 1
-
 	if current_question_index >= pretest_questions.size():
 		# Test is complete
 		if state == SessionState.PRETEST:
 			state = SessionState.ANALYSIS
 		elif state == SessionState.POST_TEST:
 			state = SessionState.COMPLETE
-		return {"complete": true, "correct": correct, "skill": skill}
+		return {"complete": true, "correct": correct, "skill": primary}
 
 	_current_question()
-	return {"complete": false, "correct": correct, "skill": skill}
+	return {"complete": false, "correct": correct, "skill": primary}
 
 ## True when the current question is a hands-on board task (needs the automata
 ## board built and submitted), as opposed to a multiple-choice question.
@@ -274,8 +255,8 @@ func start_posttest() -> void:
 	state = SessionState.POST_TEST
 	current_question_index = 0
 	posttest_answers.clear()
-	# Use the same questions as the pretest for comparison
-	posttest_questions = pretest_questions.duplicate()
+	# Same 15 pretest items for comparison PLUS 5 hands-on DFA builds.
+	posttest_questions = pretest_questions.duplicate() + QuestionBank.POSTTEST_QUESTIONS
 	_current_question()
 
 ## Get the post test results
