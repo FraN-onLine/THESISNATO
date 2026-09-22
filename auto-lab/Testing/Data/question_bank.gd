@@ -29,25 +29,41 @@ const SKILLS := {
 	}
 }
 
+static func image_path_for_topic(topic: String, filename: String) -> String:
+	var normalized_topic := str(topic).strip_edges().to_lower()
+	if normalized_topic.is_empty():
+		normalized_topic = "dfa"
+	return "res://Images/%s/%s" % [normalized_topic, filename]
+
+static func image_for_question(question: Dictionary) -> String:
+	if question.has("image") and typeof(question["image"]) == TYPE_STRING and not str(question["image"]).is_empty():
+		return str(question["image"])
+	var topic := "dfa"
+	if question.has("topic"):
+		topic = str(question["topic"])
+	if question.has("id"):
+		return image_path_for_topic(topic, "q%d.png" % int(question["id"]))
+	return image_path_for_topic(topic, "diagram.png")
+
 const QUESTIONS := [
 	{"id": 1, "skills": ["simulation"],
 	 "question": "Given a DFA, what is the purpose of simulating an input string?",
 	 "options": ["To change the DFA's states", "To determine the state reached after processing the input", "To add new transitions", "To remove final states"],
 	 "correct": 1,
 	 "explanation": "Simulating a string traces which state the machine reaches after consuming each symbol, so you can decide accept/reject."},
-	{"id": 2, "skills": ["simulation"], "type": "image", "image": "res://Images/q2.png",
+	{"id": 2, "skills": ["simulation"], "type": "image", "image": "res://Images/dfa/q2.png",
 	 "question": "Given this DFA, what state does 1101 lead you to?",
 	 "options": ["q0", "q2", "q1", "none"], "correct": 1,
 	 "explanation": "Trace 1-1-0-1 from the start state of the diagram; the machine lands in q2."},
-	{"id": 3, "skills": ["simulation"], "type": "image", "image": "res://Images/q3.png",
+	{"id": 3, "skills": ["simulation"], "type": "image", "image": "res://Images/dfa/q3.png",
 	 "question": "Given this DFA, what state does 00110 lead you to?",
 	 "options": ["q0", "q2", "q1", "none"], "correct": 2,
 	 "explanation": "Trace 0-0-1-1-0 from the start state of the diagram; the machine lands in q1."},
-	{"id": 4, "skills": ["simulation"], "type": "image", "image": "res://Images/q4.png",
+	{"id": 4, "skills": ["simulation"], "type": "image", "image": "res://Images/dfa/q4.png",
 	 "question": "Given this DFA, what state does 1010 lead you to?",
 	 "options": ["q1", "q3", "q2", "q0"], "correct": 0,
 	 "explanation": "Trace 1-0-1-0 from the start state of the diagram; the machine lands in q1."},
-	{"id": 5, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/q5.png",
+	{"id": 5, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/dfa/q5.png",
 	 "question": "What is the rule of this language considering this diagram?",
 	 "options": ["Language of {1,0} where the string ends with a double digit", "Language of {1,0} where the string ends with an even amount of the same digit", "Language of {1,0} where the string ends with 10", "Language of {1,0} where the string ends with 01"],
 	 "correct": 1,
@@ -76,12 +92,12 @@ const QUESTIONS := [
 	 "options": ["It determines how the automaton moves between states", "It identifies the final states", "It defines the alphabet", "It selects the starting state"],
 	 "correct": 0,
 	 "explanation": "\u03b4 maps (state, symbol) to the next state - it is how the machine moves."},
-	{"id": 11, "skills": ["identification", "definition"], "type": "image", "image": "res://Images/q11.png",
+	{"id": 11, "skills": ["identification", "definition"], "type": "image", "image": "res://Images/dfa/q11.png",
 	 "question": "Is the diagram below a valid DFA, why or why not?",
 	 "options": ["No, there should not be more than ONE accepting state (F)", "Yes, because DFAs should have more than ONE accepting state (F)", "No, because there is no non-accepting state; states in F should not equal the set of states Q", "Yes, because DFAs can have any number of states F from the set of states Q"],
 	 "correct": 3,
 	 "explanation": "A DFA may have zero, one, or many accepting states - F is any subset of Q, so the diagram is valid."},
-	{"id": 12, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/q12.png",
+	{"id": 12, "skills": ["identification", "set_builder"], "type": "image", "image": "res://Images/dfa/q12.png",
 	 "question": "What is the rule of this diagram?",
 	 "options": ["String X of {0,1} such that X ends with 01", "String X of {0,1} such that X ends in 10", "String X of {0,1} such that X ends in 1", "String X of {0,1} such that X ends in 0"],
 	 "correct": 2,
@@ -95,7 +111,7 @@ const QUESTIONS := [
 	 "question": "What should the transition x be for this language L1 to be true? L1 = {1, 01, 001, 0001, 00001, ...}",
 	 "options": ["1", "0", "epsilon", "01"], "correct": 0,
 	 "explanation": "Every string in the list ends with a single 1 preceded by zero or more 0s, so the accepting transition consumes 1."},
-	{"id": 15, "skills": ["building", "simulation"], "type": "image", "image": "res://Images/q15.png",
+	{"id": 15, "skills": ["building", "simulation"], "type": "image", "image": "res://Images/dfa/q15.png",
 	 "question": "In this DFA, what are the transition symbols for x, y, z to describe the language that ends with 001?",
 	 "options": ["0, 1, 1", "0, 0, 1", "1, 1, 1", "1, 0, 1"], "correct": 0,
 	 "explanation": "Reading the arrows on the path that ends in the accepting state gives x=0, y=1, z=1."},

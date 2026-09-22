@@ -305,7 +305,7 @@ static func _finish_definition(steps: Array) -> Dictionary:
 
 # ===== 2. IDENTIFICATION OF DIAGRAM ========================================
 
-## Checkpoint with a diagram attached (images live in res://Images/).
+## Checkpoint with a diagram attached (images live under the topic folder, e.g. res://Images/dfa/).
 static func _mc_img(id: String, prompt: String, image: String, options: Array, correct: int, explain := "", hint := "") -> Dictionary:
 	var step := _mc(id, prompt, options, correct, explain, hint)
 	step["checkpoint"]["image"] = image
@@ -348,7 +348,7 @@ static func _module_identification() -> Dictionary:
 		2,
 		"An epsilon transition consumes no input symbol, which only epsilon-NFAs may have.",
 		"Which kind of move lets the machine advance without reading anything?"))
-	steps.append(_mc_img("idn_diagram_1", "Is the diagram below a valid DFA? Why, or why not?", "res://Images/q11.png",
+	steps.append(_mc_img("idn_diagram_1", "Is the diagram below a valid DFA? Why, or why not?", "res://Images/dfa/q11.png",
 		["No: there should not be more than one accepting state in F",
 		"Yes, because DFAs must have more than one accepting state",
 		"No: there is no non-accepting state, since F should not equal Q",
