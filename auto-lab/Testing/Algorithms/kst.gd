@@ -128,6 +128,17 @@ func get_expected_accuracy(skill: String) -> float:
 func get_all_knowledge() -> Dictionary:
 	return knowledge_state.duplicate()
 
+## The current knowledge space: possible areas, their prerequisites, and mastery.
+func get_possible_areas() -> Dictionary:
+	var areas := {}
+	for skill in PREREQUISITES:
+		areas[skill] = {
+			"mastery": get_knowledge_probability(skill),
+			"prerequisites": PREREQUISITES[skill].duplicate(),
+			"ready": _prerequisites_mastered(skill),
+		}
+	return areas
+
 ## How well did the space's predictions match reality? {hits, total, accuracy}
 func get_prediction_stats() -> Dictionary:
 	var hits := 0

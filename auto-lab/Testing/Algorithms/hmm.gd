@@ -18,6 +18,7 @@ var p_knows: float = 0.3      # P(learner knows the skill)
 var observations: Array = []     # bool per answer (true = correct)
 var observation_count: int = 0
 var prediction_log: Array = []   # {predicted: float, correct: bool, phase: String}
+var last_visible_output := ""
 
 func _init(initial_p_knows: float = 0.3, learn_rate: float = 0.1, forget_rate: float = 0.05, guess_rate: float = 0.2, slip_rate: float = 0.1) -> void:
 	p_knows = initial_p_knows
@@ -30,6 +31,7 @@ func _init(initial_p_knows: float = 0.3, learn_rate: float = 0.1, forget_rate: f
 ## Records the prediction this model would have made BEFORE seeing the answer,
 ## so the model can score its own accuracy.
 func update(correct: bool, phase: String = "learning") -> void:
+	last_visible_output = "correct" if correct else "wrong"
 	# Self-record: what did we predict the learner would answer, before the outcome?
 	prediction_log.append({
 		"predicted": get_expected_accuracy(),
@@ -90,6 +92,14 @@ func is_learned(threshold: float = 0.7) -> bool:
 func get_expected_accuracy() -> float:
 	return p_knows * (1.0 - p_slip) + (1.0 - p_knows) * p_guess
 
+## HMM view data: hidden-state belief plus the latest visible observation.
+func get_state_view() -> Dictionary:
+	return {
+		"hidden_states": {"knows": p_knows, "does_not_know": 1.0 - p_knows},
+		"visible_output": last_visible_output,
+		"expected_accuracy": get_expected_accuracy(),
+	}
+
 ## Reset the model to initial state
 func reset() -> void:
 	p_knows = 0.3
@@ -110,6 +120,7 @@ func get_summary() -> Dictionary:
 		"prediction_stats": get_prediction_stats(),
 		"mastery_percentage": get_mastery_percentage(),
 		"is_learned": is_learned()
+		,"last_visible_output": last_visible_output
 	}
 
 ## Serialize to dictionary for saving
@@ -123,6 +134,7 @@ func to_dict() -> Dictionary:
 		"observations": observations.duplicate(),
 		"observation_count": observation_count,
 		"prediction_log": prediction_log.duplicate(true)
+		,"last_visible_output": last_visible_output
 	}
 
 ## Load from dictionary
@@ -135,3 +147,4 @@ func from_dict(data: Dictionary) -> void:
 	observations = data.get("observations", []).duplicate()
 	observation_count = data.get("observation_count", observations.size())
 	prediction_log = data.get("prediction_log", []).duplicate(true)
+	last_visible_output = str(data.get("last_visible_output", ""))

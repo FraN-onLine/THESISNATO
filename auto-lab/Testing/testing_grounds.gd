@@ -6,6 +6,7 @@ const SessionManager = preload("res://Testing/session_manager.gd")
 const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd")
+const LessonEngine = preload("res://Testing/Lessons/lesson_engine.gd")
 
 # How each knowledge-tracing algorithm works — displayed whenever the user picks
 # one, and all three run in parallel so we can compare them for the POC.
@@ -153,6 +154,7 @@ var _results: Dictionary = {}
 # DFA-centered lesson navigation
 var _in_dfa_lesson := false
 var _dfa_lesson_index := 0
+var _lesson_engine: LessonEngine
 var _dfa_practice_index := 0
 var _dfa_practice_skill := "simulation"
 var _dfa_practice_answered := false
@@ -232,9 +234,8 @@ func _ready() -> void:
 func gamification_sync() -> void:
 	_update_stats_panel()
 func _process(_delta: float) -> void:
-	if workshop and workshop.visible:
-		_update_stats_panel()
-		return
+	# The lesson board may stay visible beside the lesson panel. It must not
+	# prevent the panel billboard from receiving pointer input.
 	_update_pointer()
 	_update_stats_panel()
 
@@ -738,11 +739,18 @@ func _show_analysis() -> void:
 func _begin_dfa_lesson() -> void:
 	_in_dfa_lesson = true
 	_dfa_lesson_index = 0
+	_lesson_engine = LessonEngine.new(DFA_LESSON_SPEC)
+	_lesson_engine.start()
 	_dfa_practice_index = 0
 	_dfa_board_practice_index = 0
 	_dfa_board_practice_active = false
 	_dfa_board_practice_skill = "simulation"
 	_show_dfa_lesson_step()
+
+func _advance_lesson_step() -> void:
+	if _lesson_engine:
+		_lesson_engine.advance()
+	_dfa_lesson_index = _lesson_engine.position if _lesson_engine else _dfa_lesson_index + 1
 
 ## Opens the whiteboard in FREE-BUILD sandbox mode (used by the DFA Lesson's
 ## "freebuild" step). The learner can design ANY automaton and explore how
@@ -751,7 +759,7 @@ func _begin_dfa_lesson() -> void:
 func _open_free_build(from_lesson: bool) -> void:
 	if workshop == null or workshop.builder is not Control:
 		if from_lesson:
-			_dfa_lesson_index += 1
+			_advance_lesson_step()
 			_show_dfa_lesson_step()
 		return
 	_in_free_build = true
@@ -786,14 +794,17 @@ func _close_free_build() -> void:
 	_set_player_paused(false)
 	if from_lesson:
 		# Skip past the freebuild step itself and continue the lesson.
-		_dfa_lesson_index += 1
+		_advance_lesson_step()
 		_show_dfa_lesson_step()
 
 func _show_dfa_lesson_step() -> void:
-	if _dfa_lesson_index >= DFA_LESSON_SPEC.size():
+	if _lesson_engine == null:
+		_lesson_engine = LessonEngine.new(DFA_LESSON_SPEC)
+	if _lesson_engine.finished():
 		_finish_dfa_lesson()
 		return
-	var step: Dictionary = DFA_LESSON_SPEC[_dfa_lesson_index]
+	_dfa_lesson_index = _lesson_engine.position
+	var step: Dictionary = _lesson_engine.current()
 	match step["m"]:
 		"content":
 			_show_dfa_content(step)
@@ -828,7 +839,7 @@ func _show_dfa_content(step: Dictionary) -> void:
 		"application": body = AdaptiveContent.get_application(step["skill"])
 		_: body = AdaptiveContent.get_definition(step["skill"])
 	body = "%s\n\n%s" % [step.get("subtitle", ""), body]
-	question_label.text = "Step %d / %d\n\n%s" % [_dfa_lesson_index + 1, DFA_LESSON_SPEC.size(), body]
+	question_label.text = "Step %s\n\n%s" % [_lesson_engine.progress_text(), body]
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
@@ -842,7 +853,7 @@ var _dfa_pending_skill: Dictionary = {}
 
 func _open_dfa_workshop(step: Dictionary) -> void:
 	if workshop == null:
-		_dfa_lesson_index += 1
+		_advance_lesson_step()
 		_show_dfa_lesson_step()
 		return
 	# Show the "what does this mean" explanation first, then pass the build task.
@@ -904,7 +915,7 @@ func _show_dfa_practice(step: Dictionary) -> void:
 	if _dfa_practice_index >= challenges.size():
 		# All questions for this skill are done → close the paired board, continue.
 		_close_paired_board()
-		_dfa_lesson_index += 1
+		_advance_lesson_step()
 		_show_dfa_lesson_step()
 		return
 	var current: Dictionary = challenges[_dfa_practice_index]
@@ -1026,24 +1037,24 @@ func _handle_dfa_lesson_next() -> void:
 		_dfa_pending_skill = {}
 		_activate_dfa_board(pending)
 		return
-	var step: Dictionary = DFA_LESSON_SPEC[_dfa_lesson_index]
+	var step: Dictionary = _lesson_engine.current() if _lesson_engine else DFA_LESSON_SPEC[_dfa_lesson_index]
 	match step["m"]:
 		"content":
-			_dfa_lesson_index += 1
+			_advance_lesson_step()
 			_show_dfa_lesson_step()
 		"practice":
 			var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
 			if _dfa_practice_index >= challenges.size():
 				# All questions answered → next topic.
 				_close_paired_board()
-				_dfa_lesson_index += 1
+				_advance_lesson_step()
 				_show_dfa_lesson_step()
 			else:
 				# Still more questions — show the NEXT one (index already advanced
 				# by _on_dfa_practice_answer) WITHOUT resetting to question 1.
 				_show_dfa_practice(step)
 		_:
-			_dfa_lesson_index += 1
+			_advance_lesson_step()
 			_show_dfa_lesson_step()
 
 func _finish_dfa_lesson() -> void:
@@ -1232,10 +1243,10 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 			_clear_content()
 			workshop.set_active(false)
 			_set_player_paused(false)
-			_dfa_lesson_index += 1
+			_advance_lesson_step()
 			_show_dfa_lesson_step()
 			return
-		_dfa_lesson_index += 1
+		_advance_lesson_step()
 		_clear_content()
 		workshop.set_active(false)
 		_set_player_paused(false)
@@ -1555,6 +1566,8 @@ func _clear_options() -> void:
 
 func _enter_learning_room() -> void:
 	# Learning happens in the walkable room. Only testing screens use the desktop overlay.
+	if workshop:
+		workshop.set_persistent_overlay(true)
 	if overlay_layer:
 		overlay_layer.visible = false
 	if sprite:
@@ -1566,6 +1579,7 @@ func _enter_learning_room() -> void:
 
 func _enter_test_panel() -> void:
 	if workshop:
+		workshop.set_persistent_overlay(false)
 		workshop.set_active(false)
 	if overlay_layer:
 		overlay_layer.visible = true

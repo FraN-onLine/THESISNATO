@@ -72,6 +72,17 @@ const DFA_A_PLUS_B := {
 	},
 }
 
+## Accepts the list {b, ab, aab, ...} = zero or more a's then exactly one b.
+const DFA_A_STAR_B := {
+	"states": ["q0", "q1", "ok", "dead"], "alphabet": ["a", "b"], "start": "q0", "accepting": ["ok"],
+	"transitions": {
+		"q0|a": "q1", "q0|b": "ok",
+		"q1|a": "q1", "q1|b": "ok",
+		"ok|a": "dead", "ok|b": "dead",
+		"dead|a": "dead", "dead|b": "dead",
+	},
+}
+
 ## The examples give '00' and '01' only: an NFA, used to teach identification.
 const NFA_NOT_A_DFA := {
 	"states": ["q0", "q1", "q2"], "alphabet": ["0", "1"], "start": "q0", "accepting": ["q2"],
@@ -407,6 +418,425 @@ static func _module_simulation() -> Dictionary:
 		{"instruction": "Build a DFA over {0,1} that ACCEPTS strings ending in '01' and REJECTS all others, then simulate '1101' and '00110'.", "accept": ["01", "1101", "00110", "101"], "reject": ["1", "0", "10", "110"]}
 	))
 	return _finish_simulation(steps)
+
+# ===== 4. BUILDING =========================================================
+
+static func _module_building() -> Dictionary:
+	var steps: Array = []
+	steps.append(_info(
+		"THE DESIGN RECIPE",
+		"Building a DFA is not guessing: it is a four-step procedure. Follow it and the machine falls out of the language description.",
+		[
+			"1. Write down the language in words: 'strings over {a,b} that end in ab'.",
+			"2. Decide what the machine must REMEMBER after reading a prefix. Memory = states.",
+			"3. One state per distinct memory; mark the memory that means 'accepted so far' as accepting.",
+			"4. Complete delta: give every state one arrow per symbol, adding a trap state if you need to forget.",
+		],
+		"Finally test your design with strings you are sure about: one accepted, one rejected, and one tricky case."
+	))
+	steps.append(_info(
+		"THE TRAP (DEAD) STATE",
+		"Some languages reject a prefix forever - once you see 'b', no continuation can ever be valid. Such a machine needs a TRAP state: a non-accepting state whose arrows all point back to itself.",
+		[
+			"For a+: q0 reads 'a' into q1 (accepting); any 'b' goes to the trap state.",
+			"The trap state is where the machine 'gives up' but keeps running, which keeps the DFA complete.",
+			"A DFA without a trap state is still valid as long as delta is defined for every pair.",
+		],
+		"Trap state = a parking place for hopeless input."
+	))
+	steps.append(_mc("bld_trap_1", "A DFA has states q0, q1, q2 where q2 is accepting, and delta(q2, 'b') is missing. What must be added to make this a complete DFA?",
+		["Remove q2 from F so it has no missing arrows", "Add a new start state", "Change the alphabet to {a}", "Add a transition from the accepting state on 'b'"],
+		3,
+		"Completeness means every state/symbol pair has exactly one transition, so the missing arrow from the accepting state must be added.",
+		"Find the (state, symbol) pair with no arrow and give it one."))
+	steps.append(_build("bld_build_1",
+		"BUILD: strings that end in 'ab'",
+		"Build a DFA over {a,b} that ACCEPTS any string ending in 'ab' (like 'ab', 'aab', 'bab') and REJECTS everything else. The board tests the strings below - any correct construction passes.",
+		["ab", "aab", "bab", "abab"],
+		["", "a", "b", "ba", "aba", "abb"],
+		"q0 means 'the last symbol was not a', q1 means 'the last symbol was a', q2 means 'the last two were ab' (accepting).",
+		"Two states are enough to remember 'ends in a'; the third remembers the full 'ab'."))
+	steps.append(_mc("bld_howto_test", "You built a DFA and think it is right. Which set of test strings gives the strongest check?",
+		["Only strings you know should be accepted",
+			"Only the empty string",
+			"Strings that should be accepted, strings that should be rejected, and tricky edge cases",
+			"Random strings with no expectation"],
+		2,
+		"A machine is correct when it accepts what it should AND rejects what it should. Testing tempting near-misses is what catches bugs.",
+		"A test that only confirms success proves nothing about rejection."))
+	steps.append(_build("bld_build_2",
+		"BUILD: even number of 'a's",
+		"Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's (the empty string counts as even) and REJECTS odd ones.",
+		["", "aa", "abba", "baab"],
+		["a", "aba", "aaa", "abb"],
+		"Two states are enough: 'even so far' and 'odd so far'. Both need an arrow for each symbol, including the self-loop on 'b'.",
+		"'b' never changes the parity, so every 'b' arrow should stay in the same state."))
+	return _finish_building(steps)
+
+# ===== 5. SET BUILDER ======================================================
+
+static func _module_set_builder() -> Dictionary:
+	var steps: Array = []
+	steps.append(_info(
+		"SET-BUILDER NOTATION",
+		"Set-builder notation describes a language by a CONDITION instead of by a pattern: {w in Sigma* : condition}. Read it as 'the set of all strings w in Sigma* such that the condition is true'.",
+		[
+			"{w in {0,1}* : w contains '00'} - the substring 00 appears somewhere.",
+			"{w in {0,1}* : the number of 1s in w is even} - a counting condition.",
+			"{w in {a,b}* : |w| is even} - a length condition (|w| means the length of w).",
+		],
+		"Everything before the colon says which strings are candidates; everything after says which ones survive."
+	))
+	steps.append(_info(
+		"COUNTING BECOMES MEMORY",
+		"Conditions about counting look impossible for a machine with no memory - until you notice that you only need to remember the part of the count that changes the answer.",
+		[
+			"Parity of the number of 1s: two states (even, odd). Counting to a million would be impossible; counting 'odd or even' needs one bit.",
+			"Contains '00': remember 'how much of the pattern I have matched so far' - nothing, one 0, or matched.",
+			"Length is even: two states, toggled by every symbol.",
+		],
+		"The art of set-builder DFAs is choosing the smallest memory that still answers the condition."
+	))
+	steps.append(_mc("set_read_1", "Which strings belong to {w in {0,1}* : w contains '00'}?",
+		["Only '00' itself", "'00', '100', '1001' and '000' - any string with two consecutive 0s", "Only strings that start with 00", "Any string with at least two 0s anywhere"],
+		1,
+		"'Contains' means the substring appears anywhere, so '1001' qualifies even though it starts and ends with 1.",
+		"Compare '1001' (accepted) with '101' (rejected): what is the difference?"))
+	steps.append(_build("set_build_1",
+		"BUILD: contains '00'",
+		"Build a DFA over {0,1} that ACCEPTS exactly the strings containing the substring '00' and REJECTS all others.",
+		["00", "100", "1001", "000"],
+		["0", "1", "10", "101"],
+		"q0 = no 0 seen recently, q1 = the last symbol was 0, q2 = '00' has been seen (accepting, with self-loops on both symbols).",
+		"Once the pattern is found you can never lose it, so the accepting state loops on both symbols."))
+	steps.append(_trace("set_trace_1", "Same machine (accepts strings containing '00'). Where does the run for '1001' stop?",
+		DFA_CONTAINS_00, "1001", "q2",
+		"q0 --1--> q0 --0--> q1 --0--> q2 --1--> q2. The run stops in q2, which is accepting, so '1001' is accepted.",
+		"Watch the second symbol: q1 means 'the last symbol was 0', so the next 0 completes the pattern."))
+	steps.append(_build("set_build_2",
+		"BUILD: no two consecutive 1s",
+		"Build a DFA over {0,1} that ACCEPTS strings with NO two consecutive 1s (the empty string counts) and REJECTS strings that contain '11'.",
+		["", "1", "01", "1010", "0101"],
+		["11", "011", "110", "111"],
+		"q0 = the last symbol was not 1, q1 = the last symbol was 1, dead = '11' has appeared (rejecting, with self-loops).",
+		"Every '0' returns you to the safe state; only a '1' right after a '1' is fatal."))
+	return _finish_set_builder(steps)
+
+static func _finish_set_builder(steps: Array) -> Dictionary:
+	steps.append(_mc("set_len_1", "How many states does a DFA need for {w in {a,b}* : |w| is even}?",
+		["1", "2", "3", "One per symbol in the alphabet"],
+		1,
+		"Two states are enough: 'length even so far' and 'length odd so far'. Every symbol toggles between them.",
+		"Does the exact length matter, or only its parity?"))
+	steps.append(_mc("set_combine_1", "Which of these describes the same language as the list {'', 'aa', 'aaaa', ...}?",
+		["{w in {a}* : |w| is even}", "{w in {a}* : |w| >= 2}", "{w in {a}* : w starts with a}", "{w in {a,b}* : w has no b}"],
+		0,
+		"The list contains the empty string and then even-length runs of a's, so the condition is 'an even number of a symbols'.",
+		"Check which option allows the empty string."))
+
+	return {
+		"skill": "set_builder",
+		"order": 5,
+		"title": "DFA FROM SET BUILDER",
+		"subtitle": "Turn a condition {w : ...} into a machine by choosing the right memory.",
+		"accent": "#c39bff",
+		"intro": _info(
+			"TOPIC 5 - SET-BUILDER NOTATION",
+			"A set-builder description is the most mathematical way to give a language, and also the most compact. Your job is to find the memory that answers the condition - often much smaller than the condition suggests.",
+			[
+				"Sigma* means any string over the alphabet, including the empty string.",
+				"Counting conditions usually reduce to parity or to 'have I seen it yet'.",
+				"Substring conditions reduce to 'how much of the pattern matches so far'.",
+			],
+			"Ask 'what is the least I must remember to answer the condition for every continuation?' and the states appear."
+		),
+		"steps": steps,
+		"remedy": [
+			_info(
+				"TRANSLATE, THEN COUNT",
+				"First translate the condition into plain English, then list what changes the answer.",
+				[
+					"'contains 00' -> the answer can never go back to 'no' once two 0s are seen: a one-way memory.",
+					"'even number of 1s' -> only the parity matters: two states.",
+					"'|w| even' -> every symbol toggles: two states.",
+					"'no 11' -> remember whether the previous symbol was 1, plus a dead state for the moment '11' appears.",
+				],
+				"Write the memory of each state as a sentence. If you cannot, you have too many or too few states."
+			),
+		],
+		"practice": [
+			_build("set_practice_1",
+				"BUILD: even number of 1s",
+				"Build a DFA over {0,1} that ACCEPTS strings containing an EVEN number of 1s (including the empty string) and REJECTS odd ones.",
+				["", "0", "11", "1010"],
+				["1", "10", "111", "010"],
+				"Two states: 'even so far' (accepting) and 'odd so far'. '0' loops in place, '1' swaps between them.",
+				"Only the 1s change the parity, so every 0 arrow stays put."),
+			_trace("set_practice_2", "Machine over {0,1} accepting strings with an even number of 1s. Where does '1010' stop?",
+				DFA_EVEN_ONES, "1010", "even",
+				"even --1--> odd --0--> odd --1--> even --0--> even. It stops in the accepting state, so '1010' is accepted (two 1s).",
+				"Count the 1s: the 0s never move you."),
+			_mc("set_practice_3", "Which of these languages is NOT regular (needs memory that grows with the input)?",
+				["Strings ending in '01'", "Strings with an even number of 1s", "Strings of the form a^n b^n (equal numbers of a's and b's)", "Strings containing '00'"],
+				2,
+				"a^n b^n needs to count the a's and compare - that memory grows without bound, so no finite automaton can do it. The other three need only fixed memories.",
+				"Which condition forces the machine to remember how many a's it saw?"),
+		],
+	}
+
+# ===== 6. DFA FROM LISTS ===================================================
+
+static func _module_list() -> Dictionary:
+	var steps: Array = []
+	steps.append(_info(
+		"LANGUAGES HIDDEN IN A LIST",
+		"A list of accepted strings hides a language: your job is to find the rule that generates ALL of them, then build a machine for that rule - not just for the strings shown.",
+		[
+			"{a, aa, aaa, ...} -> one or more a's -> a+ (the dots mean the pattern continues forever).",
+			"{ab, aab, aaab, ...} -> some a's followed by one b -> a+b.",
+			"{b, ab, aab, ...} -> zero or more a's then a b -> a*b.",
+		],
+		"Always read the shortest string first: it usually reveals whether the pattern allows 'nothing' (the empty string)."
+	))
+	steps.append(_info(
+		"THE FOUR QUESTIONS",
+		"Run this checklist on any list before you draw a single circle.",
+		[
+			"1. Shortest string: is the empty string or a single symbol included? That tells you if q0 is accepting.",
+			"2. Length: does only the LENGTH matter (odd/even), or the symbols?",
+			"3. Repetition: which symbol may repeat, and how often (zero times, one or more)?",
+			"4. Termination: must the string END with a particular symbol?",
+		],
+		"If your answer to all four matches the list, the machine design is almost automatic."
+	))
+	steps.append(_mc("lst_read_1", "What language does the list {ab, aab, aaab, ...} describe?",
+		["All strings containing at least one ab", "One or more a's followed by exactly one b", "Any number of a's, then any number of b's", "Strings with more a's than b's"],
+		1,
+		"The pattern is a^n b for n >= 1: at least one a, then a single b at the end.",
+		"Try a string that fits the list but ends with two b's - it is not in the list."))
+	steps.append(_trace("lst_trace_1", "The machine for a+b is given. Where does the run for 'aab' stop?",
+		DFA_A_PLUS_B, "aab", "ok",
+		"q0 --a--> q1 --a--> q1 --b--> ok. It stops in the accepting state, so 'aab' is accepted.",
+		"q1 keeps absorbing a's; the b is what finishes the job."))
+	steps.append(_build("lst_build_1",
+		"BUILD: infer a+b",
+		"Infer the language from the list {ab, aab, aaab, ...} and build a DFA over {a,b} for it. Strings that do not fit the pattern must be rejected - including 'ba', 'a' and 'abb'.",
+		["ab", "aab", "aaab"],
+		["", "a", "b", "ba", "abb", "abab"],
+		"q0 = no a yet (not accepting), q1 = one or more a's seen, ok = the final b arrived (accepting), dead = anything after that.",
+		"One state counts the a's, one state means 'finished', and anything after the b is fatal."))
+	steps.append(_mc("lst_read_2", "What language does the list {b, ab, aab, aaab, ...} describe?",
+		["One or more a's then exactly one b", "Zero or more a's then exactly one b", "Strings ending in b of any shape", "Strings with equal a's and b's"],
+		1,
+		"Here even the empty prefix is allowed, so the language is a*b: zero or more a's followed by one b.",
+		"Compare with the previous list: the only difference is the string 'b'."))
+	steps.append(_build("lst_build_2",
+		"BUILD: infer a*b",
+		"Build a DFA over {a,b} for the list {b, ab, aab, aaab, ...} - zero or more a's followed by exactly one b.",
+		["b", "ab", "aab", "aaab"],
+		["", "a", "aa", "ba", "abb"],
+		"q0 is the start (accepting only through the b arrow), q1 = 'a's seen', ok = the b arrived (accepting), dead = anything afterwards.",
+		"Note that the empty string is REJECTED here, because a b is still required."))
+	return _finish_list(steps)
+
+static func _finish_list(steps: Array) -> Dictionary:
+	steps.append(_mc("lst_edge_1", "The list is {'aa', 'aaaa', 'aaaaaa', ...}. Which design detail matters most?",
+		["The states must be named by their length", "The parity of the length: start in the accepting 'even' state", "The list has an infinite number of strings", "A trap state is impossible here"],
+		1,
+		"Only even lengths appear, so the machine tracks parity and starts accepting (the empty string is excluded only because the list itself starts at 2, which is an authoring detail - 'length is even' is the rule).",
+		"Compare the lengths in the list: 2, 4, 6 - all even."))
+	steps.append(_mc("lst_generalise_1", "A list shows {'abc', 'aabc', 'aaabc', ...}. What is the correct first step?",
+		["Build a separate machine for each string in the list", "Find the generating rule: one or more a's followed by bc", "Count the letters in the longest string", "Assume the language allows any string with two b's"],
+		1,
+		"From a list you infer the general rule (a^+bc), then build one machine for that rule - never one machine per example.",
+		"A machine must accept infinitely many strings, so it can never be built from examples alone."))
+	steps.append(_mc("lst_reject_1", "For the list {ab, aab, aaab, ...}, which string must the machine REJECT to prove it learned the rule?",
+		["aab", "aaab", "abb", "ab"],
+		2,
+		"'abb' contains a double b, which the rule a+b forbids, so a correct machine must reject it - that test is what separates the rule from the examples.",
+		"Pick a string that looks similar to the list but breaks the pattern."))
+
+	return {
+		"skill": "list",
+		"order": 6,
+		"title": "DFA FROM LISTS",
+		"subtitle": "Infer the hidden rule behind a list of accepted strings.",
+		"accent": "#7fe0dc",
+		"intro": _info(
+			"TOPIC 6 - FROM A LIST TO A MACHINE",
+			"A list shows finitely many accepted strings, but the language behind it is infinite. Inferring the RULE is the skill: once you know the rule, the machine follows from the memory it needs.",
+			[
+				"Read the shortest string first - it reveals whether 'nothing' is allowed.",
+				"Look for repetition: 'one or more', 'zero or more', or 'exactly once'.",
+				"Look for a required ending symbol.",
+				"Then test your machine against strings OUTSIDE the list, including near-misses.",
+			],
+			"Too few states and the machine accepts the wrong strings; too many and you have lost track of the rule."
+		),
+		"steps": steps,
+		"remedy": [
+			_info(
+				"FROM LIST TO RULE",
+				"Write the list in a column, then draw attention to what changes from one line to the next.",
+				[
+					"ab -> aab -> aaab: the number of a's grows, the b stays exactly one.",
+					"b -> ab -> aab: an extra a is inserted at the front; b alone is legal.",
+					"{aa, aaaa}: the lengths jump by two - parity, not counting.",
+				],
+				"Say the rule out loud in words, then ask how many memories it needs. That number is your state count."
+			),
+		],
+		"practice": [
+			_build("lst_practice_1",
+				"BUILD: infer a*b from its list",
+				"Build a DFA over {a,b} accepting exactly the strings in the list {b, ab, aab, aaab, ...} - zero or more a's followed by one b.",
+				["b", "ab", "aab", "aaab"],
+				["", "a", "aa", "bb", "abb"],
+				"Remember: the empty string is rejected, and no symbol may follow the b.",
+				"Where does 'b' from the start state go? That arrow is the whole difference from a+b."),
+			_trace("lst_practice_2", "Machine for a*b (zero or more a's then one b). Where does the run for 'b' stop?",
+				DFA_A_STAR_B, "b", "ok",
+				"q0 --b--> ok. With zero a's the very first symbol already finishes the string, and the run stops in the accepting state.",
+				"Zero a's is allowed, so the first symbol may be the b itself."),
+			_mc("lst_practice_3", "Why can a list never be copied literally into a DFA?",
+				["Because lists are unordered", "Because a list is finite while the language it describes is usually infinite", "Because DFAs cannot store strings", "Because lists use commas"],
+				1,
+				"A DFA accepts an infinite language; a list has finitely many entries. Only the RULE behind the list can be mechanised.",
+				"Compare the size of the list with the size of the language."),
+		],
+	}
+
+
+
+
+static func _finish_building(steps: Array) -> Dictionary:
+	steps.append(_freebuild(
+		"SANDBOX: BUILD ANYTHING",
+		"No task, no marking: add states, wire arrows, toggle accepting states and simulate any string you invent. Try to build a machine that accepts only strings with two 1s, or a machine for your own pattern."
+	))
+	steps.append(_board(
+		"WHITEBOARD CHALLENGE: TARGET 'ab' AT THE END",
+		"Last check on the board. Rebuild the 'ends in ab' language (or keep your earlier design) and use the simulate box to try 'ab', 'aab', 'abab' and then a near-miss such as 'aba'. A correct machine accepts the first three and rejects the last one.",
+		{"instruction": "Build a DFA over {a,b} accepting strings ending in 'ab', then simulate 'ab', 'aab', 'abab' and 'aba'.", "accept": ["ab", "aab", "abab"], "reject": ["a", "aba", "abb"]}
+	))
+
+	return {
+		"skill": "building",
+		"order": 4,
+		"title": "DFA BUILDING",
+		"subtitle": "Design machines from a language description and prove them correct.",
+		"accent": "#ff9f7a",
+		"intro": _info(
+			"TOPIC 4 - BUILDING DFAs",
+			"Now you design the machine instead of reading it. The trick is to think in terms of MEMORY: a DFA state records everything the machine must remember about the input so far. If two prefixes need the same decision for every possible continuation, they share a state.",
+			[
+				"States = distinct pieces of memory",
+				"Accepting states = memories where the string seen so far is in the language",
+				"Trap state = a memory from which nothing is ever accepted",
+				"Every build is judged by testing strings, not by how it looks",
+			],
+			"The whiteboard accepts ANY correct construction - your machine does not have to match the reference one."
+		),
+		"steps": steps,
+		"remedy": [
+			_info(
+				"DESIGN FROM EXAMPLES",
+				"Write your target language as a list of accepted and rejected strings, then ask after each prefix: 'what must I still remember?'",
+				[
+					"For 'ends in ab': after 'a' remember 'last was a'; after 'ab' remember 'done'; otherwise forget.",
+					"For 'even a's': remember only the parity - two memories, two states.",
+					"Add the trap state whenever a prefix can never be repaired.",
+					"Give every state an arrow for every symbol, even if it points back to itself.",
+				],
+				"Test with three strings: one accepted, one rejected, one that nearly works."
+			),
+		],
+		"practice": [
+			_build("bld_practice_1",
+				"BUILD: at least one 'a'",
+				"Build a DFA over {a,b} that ACCEPTS every string containing at least one 'a' and REJECTS only the empty string and all-b strings.",
+				["a", "ab", "ba", "bab"],
+				["", "b", "bb", "bbb"],
+				"q0 = 'no a yet' (not accepting), q1 = 'saw an a' (accepting, and every symbol keeps you there).",
+				"Once an 'a' has been seen the verdict can never change, so q1 needs self-loops on both symbols."),
+			_mc("bld_practice_2", "For the language 'strings over {a,b} ending in ab', why are three states enough?",
+				["Because the alphabet has two symbols", "Because only three different memories matter: not-ending-in-a, ending-in-a, and ending-in-ab", "Because every DFA needs three states", "Because three test strings are used"],
+				1,
+				"Each state stores one distinct memory about the input seen so far; the 'ends in ab' language needs exactly those three memories.",
+				"Count the distinct things the machine must remember."),
+			_trace("bld_practice_3", "Using the machine over {a,b} that accepts one or more a's then a b (a+b), where does the run for 'aaab' stop?",
+				DFA_A_PLUS_B, "aaab", "ok",
+				"q0 --a--> q1 --a--> q1 --a--> q1 --b--> ok. It stops in the accepting state, so 'aaab' is accepted.",
+				"q1 counts the a's; only the final 'b' moves to the accepting state."),
+		],
+	}
+
+
+
+static func _finish_simulation(steps: Array) -> Dictionary:
+	steps.append(_mc("sim_trace_2", "Same machine over {0,1} accepting strings that end in '01'. Where does the run for '00110' stop?",
+		["q0", "q1", "q2", "Nowhere - it stalls"],
+		1,
+		"q0 --0--> q1 --0--> q1 --1--> q2 --1--> q0 --0--> q1. The run stops in q1, so '00110' is rejected (q1 is not accepting).",
+		"Take the symbols one at a time: 0, 0, 1, 1, 0."))
+	steps.append(_mc("sim_reject_rule", "A run on string w ends in state q3, and q3 is NOT in F. What is the verdict?",
+		["w is accepted", "w is rejected", "w is undecided", "The machine is invalid"],
+		1,
+		"The verdict depends only on whether the final state is in F. Ending outside F means rejected.",
+		"Acceptance is decided by the final state alone, not by the states visited on the way."))
+	steps.append(_mc("sim_empty", "A DFA over {0,1} has q0 in F. What does it do with the empty string?",
+		["Accepts it, because the run ends in q0 immediately", "Rejects it, because nothing was read", "Stalls", "It depends on Sigma"],
+		0,
+		"The run for the empty string consumes no symbols, so it ends in the start state. q0 in F means accepted.",
+		"A zero-length string still has a run, and it stops at q0."))
+
+	return {
+		"skill": "simulation",
+		"order": 3,
+		"title": "SIMULATION",
+		"subtitle": "Walk strings through a machine and decide accept or reject - on paper and in the maze.",
+		"accent": "#ffd479",
+		"intro": _info(
+			"TOPIC 3 - SIMULATING A DFA",
+			"Simulation is the skill examiners test most, because it proves you can read a machine. The good news: it is completely mechanical. Start at q0, consume one symbol per arrow, and check the final state against F.",
+			[
+				"Write the chain of states; do not jump ahead.",
+				"One symbol = one arrow. Never skip, never reuse the same arrow twice for two symbols.",
+				"Final state in F -> ACCEPT, otherwise REJECT.",
+			],
+			"The maze checkpoint in this topic is the same computation with your feet: rooms are states, corridors are symbols."
+		),
+		"steps": steps,
+		"remedy": [
+			_info(
+				"TRACE LIKE A MACHINE",
+				"Put your finger on the start state, then move it once per symbol. Say the symbol out loud before you move; this stops the two most common mistakes - skipping a symbol and reading the string backwards.",
+				[
+					"Cover the string with your hand and reveal one symbol at a time.",
+					"After each move, ask: which circle am I on now?",
+					"Only when the string is gone do you look at F.",
+					"If a symbol has no arrow from where you are, the run stops: the string is rejected.",
+				]
+			),
+		],
+		"practice": [
+			_trace("sim_practice_1", "Machine over {0,1} accepting strings that end in '01'. Where does '1010' stop?",
+				DFA_ENDS_01, "1010", "q1",
+				"q0 --1--> q0 --0--> q1 --1--> q2 --0--> q1. It stops in q1, which is not accepting, so '1010' is rejected.",
+				"Four symbols: 1, 0, 1, 0."),
+			_mc("sim_practice_2", "Machine over {0,1} with two states (even, odd), start = even, F = {even}, accepting strings with an EVEN number of 1s. Is '101' accepted?",
+				["Yes: even -1-> odd -0-> odd -1-> even, so it ends in even", "No: it ends in odd",
+					"Only if the empty string counts", "The machine stalls on the second '1'"],
+				0,
+				"Track the parity: even -1-> odd, odd -0-> odd, odd -1-> even. The run ends in an accepting state, so '101' is accepted (two 1s is even).",
+				"Count the 1s as you walk: 1 (odd), still 1 (odd), 2 (even)."),
+			_maze("sim_practice_3", "MAZE PRACTICE: escape with a string that contains '00'",
+				DFA_CONTAINS_00, 1,
+				"Once you have seen '00' the machine is trapped in the accepting room: every further symbol keeps you there.",
+				"You only need two consecutive 0s - try walking 0, 0 first, then the exit."),
+		],
+	}
+
 
 
 static func _finish_identification(steps: Array) -> Dictionary:

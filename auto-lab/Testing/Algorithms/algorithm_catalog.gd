@@ -28,7 +28,7 @@ const ALGORITHMS := {
 		"params": [
 			{"symbol": "P(learn)", "name": "Learning rate", "meaning": "Chance a 'doesn't know' hidden state becomes 'knows' after one practice."},
 			{"symbol": "P(forget)", "name": "Forgetting rate", "meaning": "Chance a 'knows' hidden state slips back to 'doesn't know'."},
-			{"symbol": "P(guess)", "name": "Guessing", "meaning": "Chance of a correct answer despite not knowing."},
+			{"symbol": "P(guess)", "name": "Guessing", "value": 0.25, "meaning": "Default chance of a correct answer despite not knowing; configurable per model."},
 			{"symbol": "P(slip)", "name": "Slipping", "meaning": "Chance of a wrong answer despite knowing."},
 		],
 		"best_for": "Explainable, per-skill probability estimates that behave smoothly even with very little data (an ideal fit for a 6-skill DFA pretest).",

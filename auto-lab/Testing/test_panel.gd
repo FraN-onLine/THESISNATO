@@ -18,8 +18,14 @@ signal answer_selected(selected_index: int)
 signal next_pressed
 signal back_pressed
 
+const PanelSurface = preload("res://Testing/Lessons/panel_surface.gd")
+
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
+
+## A panel bolted to a wall must stay flat (see panel_surface.gd). Set this to
+## true only for a free-standing panel that should turn to face the player.
+@export var face_player := false
 
 const CLICK_SLOP := 92.0
 
@@ -42,6 +48,7 @@ var _feedback_label: Label
 var _back_button: Button
 var _start_button: Button
 var _next_button: Button
+var _answer_locked := false
 
 func set_active(active: bool) -> void:
 	visible = active
@@ -60,7 +67,12 @@ func _ready() -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	sprite.texture = viewport.get_texture()
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	# WALL RULE: this panel hangs on a wall, so it stays FLAT (no billboarding)
+	# and keeps the orientation the room gives it. Only free-standing panels
+	# should face the player.
+	PanelSurface.make_flat(sprite)
+	if face_player:
+		PanelSurface.face_player(sprite)
 	_build_ui()
 	set_active(visible)
 
@@ -217,6 +229,7 @@ func show_intro(body: String) -> void:
 
 ## Renders a multiple-choice / image question with its options.
 func show_question(question: Dictionary, number: int, total: int) -> void:
+	_answer_locked = false
 	_progress_label.text = "Question %d of %d" % [number, total]
 	_question_label.text = question.get("question", "")
 	_question_label.visible = true
@@ -245,12 +258,23 @@ func show_question(question: Dictionary, number: int, total: int) -> void:
 		btn.custom_minimum_size = Vector2(1250, 56)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 20)
-		btn.pressed.connect(func(): answer_selected.emit(i))
+		btn.pressed.connect(func(): _select_answer(btn, i))
 		_options_box.add_child(btn)
+
+func _select_answer(button: Button, selected_index: int) -> void:
+	if _answer_locked:
+		return
+	_answer_locked = true
+	for option in _options_box.get_children():
+		if option is Button:
+			option.disabled = true
+	button.modulate = Color(0.75, 0.9, 1.0, 1.0)
+	answer_selected.emit(selected_index)
 
 ## Renders a hands-on task card. The learner must build the DFA on the automata
 ## board and press its Check task button; the room submits it on success.
 func show_hands_on(question: Dictionary, number: int, total: int) -> void:
+	_answer_locked = false
 	_progress_label.text = "Task %d of %d" % [number, total]
 	_question_label.text = question.get("question", "")
 	_question_label.visible = true

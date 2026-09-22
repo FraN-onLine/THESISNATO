@@ -149,6 +149,43 @@ func _count_nodes_outside_board() -> int:
 	return outside
 
 
+## Interactive paths exercised the way a learner uses them: the real Add node
+## button and real mouse taps on the canvas. These are the checks that catch the
+## "a new state spawns half off the board" and "the tap lands outside the canvas"
+## kinds of bug.
+func _run_interaction_checks() -> void:
+	var graph: Control = _builder.get("graph")
+	if graph == null:
+		_note(false, "interaction_graph", "graph missing")
+		return
+
+	# 1. The Add node button must create a state INSIDE the board rectangle.
+	_builder.call("reset_for_free_build")
+	var before: int = (_builder.get("states") as Dictionary).size()
+	var add_button := _find_button("add node")
+	if add_button != null:
+		_click(add_button)
+		var after: int = (_builder.get("states") as Dictionary).size()
+		_note(after > before, "add_node_button_creates_state", "before=%d after=%d" % [before, after])
+		_note(_count_nodes_outside_board() == 0, "add_node_button_inside_board",
+			"outside=%d" % _count_nodes_outside_board())
+	else:
+		_note(false, "add_node_button_found", "no button labelled 'Add node'")
+
+	# 2. Tapping the empty canvas must never place a state off the board.
+	_tap_graph(graph, Vector2(graph.size.x * 0.5, graph.size.y * 0.4))
+	_note(_count_nodes_outside_board() == 0, "canvas_tap_inside_board",
+		"outside=%d" % _count_nodes_outside_board())
+
+	# 3. A tap that misses the canvas must be ignored, not turned into an
+	#    off-board node (this is what made nodes appear outside the board).
+	var count_before: int = (_builder.get("states") as Dictionary).size()
+	_tap_graph(graph, Vector2(-40, -40))
+	var count_after: int = (_builder.get("states") as Dictionary).size()
+	_note(count_after == count_before, "off_canvas_tap_ignored",
+		"before=%d after=%d" % [count_before, count_after])
+
+
 func _run_behaviour_checks() -> void:
 	var graph: Control = _builder.get("graph")
 	var board := Rect2(Vector2.ZERO, graph.size)

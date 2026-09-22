@@ -29,11 +29,16 @@ var pretest_questions: Array = []
 var posttest_questions: Array = []
 var current_question_index: int = 0
 var current_question: Dictionary = {}
+var current_question_answered := false
 var pretest_answers: Array = []  # Array of {question_id, skill, correct, selected}
 var posttest_answers: Array = []
 
 # Adaptive learning data
 var adaptive_learning_complete: bool = false
+
+## Lesson checkpoints already fed to the models, so replaying one (scene reload,
+## re-shown step) can never count as a second piece of evidence.
+var _recorded_lesson_observations: Dictionary = {}
 
 ## The algorithm chosen BEFORE entering the Testing Grounds (HMM=0, BKT=1, KST=2).
 var selected_algorithm: int = -1
@@ -69,8 +74,19 @@ func start_session() -> void:
 	state = SessionState.PROFILE_SETUP
 	pretest_answers.clear()
 	posttest_answers.clear()
+	posttest_questions.clear()
 	current_question_index = 0
+	current_question_answered = false
+	current_question = {}
 	adaptive_learning_complete = false
+	current_learning_skill = ""
+	learning_phase = 0
+	workshop_attempts.clear()
+	_recorded_lesson_observations.clear()
+	# A new session must re-seed the models from ITS OWN pretest, otherwise the
+	# previous learner's priors keep driving the estimates (old bug: the priors
+	# were only ever applied once per process).
+	reset_analysis_priors()
 
 ## Check if profile setup is needed
 func needs_profile_setup() -> bool:
@@ -84,6 +100,7 @@ func save_profile(name: String, gender: String, age: int, familiar: bool) -> voi
 func start_pretest() -> void:
 	state = SessionState.PRETEST
 	current_question_index = 0
+	current_question_answered = false
 	pretest_answers.clear()
 	# The official pretest is exactly the 15 multiple-choice items in fixed order.
 	pretest_questions = QuestionBank.QUESTIONS.duplicate(true)
@@ -99,10 +116,22 @@ func get_current_question_number() -> int:
 
 ## Get the total number of questions
 func get_total_questions() -> int:
-	return pretest_questions.size()
+	var questions := _active_questions()
+	if questions.is_empty():
+		questions = pretest_questions if not pretest_questions.is_empty() else posttest_questions
+	return questions.size()
 
-## Submit an answer for the current question
+## Submit an answer for the current question.
+##
+## PRETEST INTEGRITY: the selection is FINAL for the item it was made on. The
+## answer is recorded immediately and the item locks, but the index does NOT
+## advance here - the learner advances with advance_question(). That way a stray
+## second tap can never be attributed to the following question, and no answer
+## key or explanation is revealed while the item is on screen.
 func submit_answer(selected_index: int) -> Dictionary:
+	if current_question_answered or current_question.is_empty():
+		return {"accepted": false, "complete": false, "correct": false}
+	current_question_answered = true
 	var question: Dictionary = current_question
 	var correct: bool = selected_index == question["correct"]
 	var skills: Array = QuestionBank.get_question_skills(question)
@@ -123,6 +152,9 @@ func submit_answer(selected_index: int) -> Dictionary:
 ## Submit the result of a hands-on (board-built) question. `correct` comes from
 ## the automata board evaluation of the built DFA, not from choosing an option.
 func submit_hands_on(correct: bool, board_message: String) -> Dictionary:
+	if current_question_answered or current_question.is_empty():
+		return {"accepted": false, "complete": false, "correct": false}
+	current_question_answered = true
 	var question: Dictionary = current_question
 	var skills: Array = QuestionBank.get_question_skills(question)
 	var skill: String = str(skills[0]) if not skills.is_empty() else "definition"
@@ -141,36 +173,56 @@ func submit_hands_on(correct: bool, board_message: String) -> Dictionary:
 	}
 	return _record_answer(answer, correct, skills)
 
-## Shared tail for both answer paths: append the answer, feed the tracer, save,
-## advance to the next question (or flip state), and report completion.
-func _record_answer(answer: Dictionary, correct: bool, skills: Array) -> Dictionary:
-	var primary: String = str(skills[0]) if not skills.is_empty() else "definition"
-	if state == SessionState.PRETEST:
-		pretest_answers.append(answer)
-		# Record one observation per tagged skill (questions may span skills).
-		knowledge_tracer.set_state_hint("pretest")
-		for tagged_skill in skills:
-			knowledge_tracer.record_observation(tagged_skill, correct)
-		save_session_data()
-	elif state == SessionState.POST_TEST:
-		posttest_answers.append(answer)
-		knowledge_tracer.set_state_hint("posttest")
-		for tagged_skill in skills:
-			knowledge_tracer.record_observation(tagged_skill, correct)
-		save_session_data()
+## True while the current item has been answered but not yet left behind.
+func is_awaiting_advance() -> bool:
+	return current_question_answered and not current_question.is_empty()
 
-	# Advance to next question
+## Move to the next question (called when the learner presses Next). Returns
+## {"complete": true} when the whole test is finished.
+func advance_question() -> Dictionary:
+	if not current_question_answered:
+		return {"accepted": false, "complete": false, "correct": false, "skill": ""}
 	current_question_index += 1
-	if current_question_index >= pretest_questions.size():
-		# Test is complete
+	var questions: Array = _active_questions()
+	if current_question_index >= questions.size():
 		if state == SessionState.PRETEST:
 			state = SessionState.ANALYSIS
 		elif state == SessionState.POST_TEST:
 			state = SessionState.COMPLETE
-		return {"complete": true, "correct": correct, "skill": primary}
-
+		current_question = {}
+		current_question_answered = false
+		return {"accepted": true, "complete": true, "correct": false, "skill": ""}
 	_current_question()
-	return {"complete": false, "correct": correct, "skill": primary}
+	return {"accepted": true, "complete": false, "correct": false, "skill": ""}
+
+## The question list the current phase walks through.
+func _active_questions() -> Array:
+	if state == SessionState.POST_TEST:
+		return posttest_questions
+	return pretest_questions
+
+## Record the answer, feed the tracer, save. Advancing is a separate step so the
+## item stays on screen (and locked) until the learner chooses to move on.
+func _record_answer(answer: Dictionary, correct: bool, skills: Array) -> Dictionary:
+	var primary: String = str(skills[0]) if not skills.is_empty() else "definition"
+	if state == SessionState.PRETEST or state == SessionState.POST_TEST:
+		if state == SessionState.PRETEST:
+			pretest_answers.append(answer)
+			knowledge_tracer.set_state_hint("pretest")
+		else:
+			posttest_answers.append(answer)
+			knowledge_tracer.set_state_hint("posttest")
+		# Keep the tracer's per-phase counters in sync with what was recorded.
+		for tagged_skill in skills:
+			knowledge_tracer.record_observation(tagged_skill, correct)
+		save_session_data()
+	var questions: Array = _active_questions()
+	return {
+		"accepted": true,
+		"complete": current_question_index + 1 >= questions.size(),
+		"correct": correct,
+		"skill": primary,
+	}
 
 ## True when the current question is a hands-on board task (needs the automata
 ## board built and submitted), as opposed to a multiple-choice question.
@@ -214,6 +266,59 @@ func start_adaptive_learning(skill: String) -> void:
 	# Keep pretest evidence in the model, but start a fresh mastery evidence window.
 	knowledge_tracer.begin_learning(skill)
 
+# ===== Adaptive learning helpers ==========================================
+
+## Skills to visit in this learner's weakness order, SKIPPING the ones already
+## mastered. The old flow re-taught mastered skills, which wasted the learner's
+## time and diluted the evidence for the skills that actually needed work.
+func learning_plan() -> Array:
+	var order: Array = knowledge_tracer.get_skills_by_weakness()
+	var plan: Array = []
+	for skill in order:
+		if not knowledge_tracer.is_learned(str(skill)):
+			plan.append(str(skill))
+	if plan.is_empty():
+		plan = order.duplicate()
+	return plan
+
+## Skill to teach at `index` of a plan, or "" when the plan is exhausted.
+func plan_skill_at(plan: Array, index: int) -> String:
+	if index < 0 or index >= plan.size():
+		return ""
+	return str(plan[index])
+
+## Record exactly ONE adaptive observation per lesson checkpoint. `source_id`
+## makes the call idempotent: re-showing the same graded checkpoint (after a
+## remedy panel, a scene reload or a stray double event) cannot inflate the
+## evidence and push a skill to "mastered" by accident.
+func record_learning_result(skill: String, correct: bool, source_id := "") -> bool:
+	if skill == "" or not knowledge_tracer.SKILL_ORDER.has(skill):
+		return false
+	if source_id != "":
+		if _recorded_lesson_observations.has(source_id):
+			return false
+		_recorded_lesson_observations[source_id] = true
+	knowledge_tracer.record_learning_observation(skill, correct)
+	if gamification != null:
+		gamification.set_mastery(skill, knowledge_tracer.get_mastery_percentage(skill))
+	return true
+
+## True when a lesson observation with this id was already recorded.
+func has_recorded(source_id: String) -> bool:
+	return _recorded_lesson_observations.has(source_id)
+
+## Called once the adaptive phase has visited every skill in the plan.
+func finish_adaptive_learning() -> void:
+	adaptive_learning_complete = true
+	if gamification != null:
+		for skill in knowledge_tracer.SKILL_ORDER:
+			gamification.set_mastery(skill, knowledge_tracer.get_mastery_percentage(skill))
+	save_session_data()
+
+## Let the pretest priors be applied again (new session, or a retaken pretest).
+func reset_analysis_priors() -> void:
+	_priors_applied = false
+
 ## Get the current learning phase
 func get_learning_phase() -> int:
 	return learning_phase
@@ -254,6 +359,7 @@ func get_workshop_attempts() -> Dictionary:
 func start_posttest() -> void:
 	state = SessionState.POST_TEST
 	current_question_index = 0
+	current_question_answered = false
 	posttest_answers.clear()
 	# Same 15 pretest items for comparison PLUS 5 hands-on DFA builds.
 	posttest_questions = pretest_questions.duplicate() + QuestionBank.POSTTEST_QUESTIONS
@@ -303,8 +409,12 @@ func _calculate_test_results(answers: Array) -> Dictionary:
 
 ## Get the current question
 func _current_question() -> void:
-	if current_question_index < pretest_questions.size():
-		current_question = pretest_questions[current_question_index]
+	var questions: Array = pretest_questions if state == SessionState.PRETEST else posttest_questions
+	if current_question_index < questions.size():
+		current_question = questions[current_question_index]
+		current_question_answered = false
+	else:
+		current_question = {}
 
 ## Shuffle questions
 func _shuffle_questions(questions: Array) -> Array:

@@ -274,6 +274,22 @@ func get_model(skill: String):
 			return kst_model
 	return null
 
+## Stable UI/reporting contract for algorithm visualizations.
+## HMM exposes hidden beliefs and its latest right/wrong observation; BKT exposes
+## its four probabilities; KST exposes the current prerequisite knowledge space.
+func get_algorithm_snapshot(skill: String) -> Dictionary:
+	var snapshot := {"algorithm": get_algorithm_callout(), "skill": skill}
+	if hmm_models.has(skill):
+		snapshot["HMM"] = hmm_models[skill].get_state_view()
+	if bkt_models.has(skill):
+		snapshot["BKT"] = bkt_models[skill].get_summary()
+	if kst_model:
+		snapshot["KST"] = {
+			"possible_areas": kst_model.get_possible_areas(),
+			"knowledge_state": kst_model.get_all_knowledge(),
+		}
+	return snapshot
+
 ## Serialize to dictionary for saving
 func to_dict() -> Dictionary:
 	var data := {

@@ -28,10 +28,18 @@ var _pressed := false
 var _mouse_down := false
 var _press_start := Vector2(-1, -1)
 var _lasers := {}  # XRController3D -> MeshInstance3D
+var _persistent_overlay := false
+
+## Keep the board hovering while lesson panels change. Input remains available
+## in both desktop ray-cast mode and VR laser mode.
+func set_persistent_overlay(enabled: bool) -> void:
+	_persistent_overlay = enabled
+	visible = enabled or visible
+	set_process(enabled or visible)
 
 func set_active(active: bool) -> void:
-	visible = active
-	set_process(active)
+	visible = active or _persistent_overlay
+	set_process(active or _persistent_overlay)
 	if not active:
 		_pressed = false
 		_mouse_down = false

@@ -85,12 +85,14 @@ func _on_answer_selected(selected_index: int) -> void:
 	if awaiting_handson:
 		return
 	var result: Dictionary = session.submit_answer(selected_index)
-	var correct: bool = result.get("correct", false)
+	if not result.get("accepted", true):
+		return
 	if result.get("complete", false):
-		test_panel.set_feedback("Test complete! Moving on.", correct)
+		test_panel.set_feedback("Answer recorded. Continue when ready.", true)
 		test_panel.show_next_button("Finish")
 		return
-	test_panel.set_feedback("Correct!" if correct else "Not quite - keep going.", correct)
+	# The pretest is diagnostic only: record the response without revealing the key.
+	test_panel.set_feedback("Answer recorded. Continue when ready.", true)
 	test_panel.show_next_button("Next >>")
 
 func _on_workshop_evaluated(correct: bool, message: String) -> void:
@@ -98,6 +100,8 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		return
 	if correct:
 		var result: Dictionary = session.submit_hands_on(true, message)
+		if not result.get("accepted", true):
+			return
 		if result.get("complete", false):
 			test_panel.set_feedback("Hands-on task verified! Test complete!", true)
 			test_panel.show_next_button("Finish")
@@ -109,8 +113,13 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		test_panel.set_feedback(message + "\n\nAdjust the DFA on the board and press \"Check task\" again to submit.", false)
 
 func _on_next_pressed() -> void:
-	var is_complete: bool = session.state == SessionManager.SessionState.ANALYSIS or session.state == SessionManager.SessionState.COMPLETE
-	if is_complete:
+	# The answer was recorded when it was given (and the item locked); pressing
+	# Next is what moves the test on, so an answer can never leak onto the
+	# following question.
+	var advanced: Dictionary = session.advance_question()
+	if advanced.get("complete", false) \
+		or session.state == SessionManager.SessionState.ANALYSIS \
+		or session.state == SessionManager.SessionState.COMPLETE:
 		_finish_test()
 		return
 	_show_current_question()

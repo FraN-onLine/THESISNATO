@@ -22,4 +22,6 @@ material = SubResource("mat_back")
 
 [node name="Billboard" type="Sprite3D" parent="." unique_id=860178281]
 pixel_size = 0.0032
-billboard = 1
+; Wall-mounted panel: stays FLAT against the wall (billboard disabled). See
+; Testing/Lessons/panel_surface.gd for the shared rule.
+billboard = 0

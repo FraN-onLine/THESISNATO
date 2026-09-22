@@ -7,7 +7,7 @@ extends RefCounted
 # BKT parameters
 var p_L0: float = 0.3       # Initial probability of knowing the skill
 var p_T: float = 0.1        # Probability of learning the skill after one opportunity (transition)
-var p_G: float = 0.2        # Probability of guessing correctly when not knowing
+var p_G: float = 0.25       # Probability of guessing correctly when not knowing
 var p_S: float = 0.1        # Probability of slipping (answering wrong when knowing)
 
 # Current knowledge state
@@ -18,7 +18,7 @@ var observations: Array = []     # bool per answer (true = correct)
 var observation_count: int = 0
 var prediction_log: Array = []   # {predicted: float, correct: bool, phase: String}
 
-func _init(initial_p_learned: float = 0.3, transition_p: float = 0.1, guess_p: float = 0.2, slip_p: float = 0.1) -> void:
+func _init(initial_p_learned: float = 0.3, transition_p: float = 0.1, guess_p: float = 0.25, slip_p: float = 0.1) -> void:
 	p_L0 = initial_p_learned
 	p_T = transition_p
 	p_G = guess_p
