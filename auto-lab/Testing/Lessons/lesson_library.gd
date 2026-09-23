@@ -169,6 +169,59 @@ static func get_title(skill: String) -> String:
 	var module := get_module(skill)
 	return str(module.get("title", skill.capitalize()))
 
+## Legacy course shape used by Testing Grounds' panel controller. The lesson
+## data remains authored here; the controller only consumes the projected view.
+static func course_steps() -> Array:
+	var out: Array = []
+	for module in modules():
+		var skill := str(module.get("skill", ""))
+		for source_step in module.get("steps", []):
+			var kind := str(source_step.get("kind", ""))
+			if kind == "info":
+				var body := str(source_step.get("body", ""))
+				var points: Array = source_step.get("points", [])
+				if not points.is_empty():
+					body += "\n\n" + "\n".join(points)
+				if str(source_step.get("callout", "")) != "":
+					body += "\n\n" + str(source_step["callout"])
+				out.append({
+					"m": "content", "skill": skill, "field": "library",
+					"title": str(source_step.get("title", module.get("title", skill))),
+					"subtitle": str(module.get("subtitle", "")), "body": body,
+				})
+			elif kind == "board":
+				out.append({
+					"m": "demo", "skill": skill,
+					"title": str(source_step.get("title", "WHITEBOARD")),
+					"explain": str(source_step.get("explain", "")),
+					"task": source_step.get("task", {}),
+				})
+			elif kind == "freebuild":
+				out.append({
+					"m": "freebuild", "skill": skill,
+					"title": str(source_step.get("title", "FREE BUILD")),
+					"subtitle": str(source_step.get("subtitle", "")),
+				})
+		out.append({
+			"m": "practice", "skill": skill,
+			"title": "PRACTICE | %s" % str(module.get("title", skill)),
+		})
+	return out
+
+## Build tasks are authored in the library and shared by every presentation.
+static func workshop_tasks(skill: String) -> Array:
+	var out: Array = []
+	var module := get_module(skill)
+	for step in module.get("steps", []):
+		if str(step.get("kind", "")) != "checkpoint":
+			continue
+		var checkpoint: Dictionary = step.get("checkpoint", {})
+		if str(checkpoint.get("kind", "")) == "build":
+			var task: Dictionary = checkpoint.get("task", {}).duplicate(true)
+			task["title"] = str(checkpoint.get("prompt", "BUILD"))
+			out.append(task)
+	return out
+
 # ===== 1. DFA DEFINITION AND PARTS =========================================
 
 static func _module_definition() -> Dictionary:

@@ -72,7 +72,7 @@ func get_active_stats_lines() -> Array[String]:
 					continue
 				var v: Dictionary = m.get_state_view()
 				var hs: Dictionary = v.get("hidden_states", {})
-				out.append("%s: P(knows)=%.0f%%  (not-knows %.0f%%)  E[correct]=%.0f%%  last=%s" % [
+				out.append("%s | K %.0f%% | N %.0f%% | E %.0f%% | last %s" % [
 					skill, float(hs.get("knows", 0.0)) * 100.0,
 					float(hs.get("does_not_know", 0.0)) * 100.0,
 					float(v.get("expected_accuracy", 0.0)) * 100.0,
@@ -83,19 +83,19 @@ func get_active_stats_lines() -> Array[String]:
 				if b == null:
 					continue
 				var s: Dictionary = b.get_summary()
-				out.append("%s: P(L)=%.0f%%  P(L0)=%.2f P(T)=%.2f P(G)=%.2f P(S)=%.2f  obs=%d" % [
+				out.append("%s | L %.0f%% | L0 %.0f%% | T %.0f%% | G %.0f%% | S %.0f%% | n %d" % [
 					skill, float(s.get("p_learned", 0.0)) * 100.0,
-					float(s.get("p_L0", 0.0)), float(s.get("p_T", 0.0)),
-					float(s.get("p_G", 0.0)), float(s.get("p_S", 0.0)),
+					float(s.get("p_L0", 0.0)) * 100.0, float(s.get("p_T", 0.0)) * 100.0,
+					float(s.get("p_G", 0.0)) * 100.0, float(s.get("p_S", 0.0)) * 100.0,
 					int(s.get("observation_count", 0))])
 		AlgorithmType.KST:
 			if kst_model:
 				for skill in SKILL_ORDER:
 					var p := float(kst_model.get_knowledge_probability(skill)) * 100.0
 					var prereqs: Array = kst_model.PREREQUISITES.get(skill, [])
-					out.append("%s: P=%.0f%%  needs=[%s]  E[correct]=%.0f%%" % [
-						skill, p, ", ".join(prereqs),
-						float(kst_model.get_expected_accuracy(skill)) * 100.0])
+					out.append("%s | K %.0f%% | E %.0f%% | req %s" % [
+						skill, p, float(kst_model.get_expected_accuracy(skill)) * 100.0,
+						", ".join(prereqs)])
 	return out
 
 ## Aggregate the self-scored prediction accuracy of each algorithm. Returns

@@ -12,7 +12,7 @@ extends Node3D
 
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
-@onready var label: Label = $SubViewport/Root/Margin/Panel/Scroll/Label
+@onready var label: Label = $SubViewport/Root/Margin/Panel/Label
 
 func _ready() -> void:
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -32,11 +32,10 @@ func set_active_stats(data: Dictionary) -> void:
 	var lines: Array = data.get("lines", [])
 	var phase := str(data.get("phase", ""))
 	var out: Array[String] = []
-	out.append("SESSION STATS  ·  %s" % phase if phase != "" else "SESSION STATS")
-	out.append("Active algorithm: %s" % algo)
-	out.append("")
+	out.append("SESSION STATS | %s" % phase if phase != "" else "SESSION STATS")
+	out.append("ACTIVE: %s" % algo)
 	for line in lines:
 		out.append(str(line))
-	if out.size() <= 3:
-		out.append("No observations yet — answer or build to update.")
+	if lines.is_empty():
+		out.append("No observations yet")
 	set_stats_text("\n".join(out))

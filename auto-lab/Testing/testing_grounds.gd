@@ -7,6 +7,7 @@ const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd")
 const LessonEngine = preload("res://Testing/Lessons/lesson_engine.gd")
+const LessonLibrary = preload("res://Testing/Lessons/lesson_library.gd")
 
 # How each knowledge-tracing algorithm works — displayed whenever the user picks
 # one, and all three run in parallel so we can compare them for the POC.
@@ -25,67 +26,6 @@ const ALGORITHM_INFO := {
 	},
 }
 
-# Whiteboard (automata builder) challenges the learner must construct on the real
-# board before the free-choice multiple-choice questions of that topic. Each one
-# carries the instruction plus the accept/reject test strings used by Check task.
-const WORKSHOP_TASKS := {
-	"building": [
-		{"instruction": "Build a DFA over {a,b} that ACCEPTS any string ending in 'ab' and REJECTS others.", "accepted": "ab", "rejected": "aa", "accept": ["ab", "aab", "bab"], "reject": ["a", "aa", "ba"]},
-		{"instruction": "Build a DFA over {a,b} that ACCEPTS strings with an EVEN number of 'a's.", "accepted": "aab", "rejected": "a", "accept": ["", "aa", "baab"], "reject": ["a", "aba", "aaa"]},
-		{"instruction": "Build a DFA for the regex (a|b)*a (any string ending in 'a').", "accepted": "bba", "rejected": "ab", "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "aab"]},
-	],
-	"set_builder": [
-		{"instruction": "Build a DFA for {w over {0,1} : w contains '00'}.", "accepted": "1001", "rejected": "101", "accept": ["00", "100", "1001", "000"], "reject": ["0", "1", "10", "101"]},
-		{"instruction": "Build a DFA for {w over {a,b} : |w| is even}.", "accepted": "aa", "rejected": "a", "accept": ["", "aa", "abab"], "reject": ["a", "aaa", "ab"]},
-	],
-	"simulation": [
-		{"instruction": "Build a DFA over {a,b} ACCEPTING strings ending in 'a'.", "accepted": "ba", "rejected": "ab", "accept": ["a", "ba", "aba"], "reject": ["b", "ab", "ba"]},
-		{"instruction": "Build a DFA over {a,b} ACCEPTING 'ba' and REJECTING 'ab'.", "accepted": "ba", "rejected": "ab", "accept": ["ba"], "reject": ["ab"]},
-		{"instruction": "Build a DFA over {0,1} ACCEPTING strings ending in '1'.", "accepted": "101", "rejected": "111", "accept": ["1", "01", "101"], "reject": ["0", "10", "10", "00"]},
-	],
-	"list": [
-		{"instruction": "From the list {ab, aab, aaab, ...} build a DFA (a+b).", "accepted": "aab", "rejected": "ababb", "accept": ["ab", "aab", "aaab"], "reject": ["a", "b", "abab", "aba"]},
-	],
-}
-
-# The ordered DFA-centered course. The whole lesson is taught as ONE sequence of
-# topics covering all six skills in order, then adaptive review re-visits each
-# skill in the learner's weakest-first order, then the post test.
-# "demo" steps first show "explain" text (what the language means) and then pass a
-# flexible task to the whiteboard: the learner may build ANY correct automaton —
-# validation uses the accept/reject string lists, so any valid construction passes.
-const DFA_LESSON_SPEC := [
-	{"m": "content", "skill": "definition", "field": "definition", "title": "WHAT IS A DFA", "subtitle": "Definition, purpose, and the idea of finite memory."},
-	{"m": "content", "skill": "definition", "field": "guided", "title": "PARTS OF A DFA & THE 5-TUPLE", "subtitle": "States Set Q, Alphabet, Transition, Start, Final(s)."},
-	{"m": "content", "skill": "definition", "field": "example", "title": "THE 5-TUPLE NOTATION IN PRACTICE", "subtitle": "Q, Sigma, delta, q0, F written out for a real machine."},
-	{"m": "content", "skill": "identification", "field": "definition", "title": "HOW DFAs ARE REPRESENTED", "subtitle": "Tables, transition diagrams & formal 5-tuples."},
-	{"m": "demo", "skill": "building", "title": "SEE A DFA AT THE WHITEBOARD",
-	 "explain": "This is a complete DFA over {a,b}: it ACCEPTS strings ending in 'a' (like 'a', 'ba', 'aba') and REJECTS strings ending in 'b'. Notice the accepting state has a double ring. Every state has exactly one arrow per symbol.",
-	 "task": {"instruction": "This reference DFA is already built for you. Press Check task to confirm it works.", "seed": true, "accepted": "ba", "rejected": "bb", "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}},
-	{"m": "freebuild", "skill": "building", "title": "FREE BUILD - CUSTOMIZE YOUR OWN AUTOMATON",
-	 "subtitle": "No task, no right answer: add states, draw transitions, simulate ANY string you invent."},
-	{"m": "content", "skill": "building", "field": "application", "title": "DFAs IN REAL LIFE", "subtitle": "Firewalls, lexical analysers, regex engines, text search."},
-	{"m": "content", "skill": "simulation", "field": "definition", "title": "SIMULATION", "subtitle": "Tracing input strings through states to accept or reject."},
-	{"m": "demo", "skill": "simulation", "title": "SIMULATE ON THE WHITEBOARD",
-	 "explain": "We say 'string ends in a' means the LAST symbol is 'a'. So 'ba' is accepted, 'ab' is rejected. Now build any DFA that accepts exactly the strings ending in 'a' over {a,b} — there are several correct ways.",
-	 "task": {"instruction": "Build a DFA over {a,b} that ACCEPTS strings ending in 'a' and REJECTS those ending in 'b'. Then simulate some strings.", "accepted": "ba", "rejected": "ab", "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}},
-	{"m": "content", "skill": "building", "field": "guided", "title": "HOW DO WE KNOW A DFA IS CORRECT?", "subtitle": "Test accepted/rejected strings on the whiteboard."},
-	{"m": "demo", "skill": "building", "title": "BUILD: LIST / RULE / REGEX",
-	 "explain": "The list {a, aa, aaa, ...} means 'one or more a's', written a+ in regex, or {w : w is only a's and |w| >= 1} as a rule. All three describe the SAME language — build any DFA for it.",
-	 "task": {"instruction": "From the list {a, aa, aaa, ...} build a DFA for a+ (one or more a's). ACCEPT any all-a string, REJECT anything with a b or the empty string.", "accepted": "aaa", "rejected": "b", "accept": ["a", "aa", "aaa"], "reject": ["", "b", "ab", "ba"]}},
-	{"m": "content", "skill": "set_builder", "field": "definition", "title": "DFA FROM SET BUILDER", "subtitle": "{w : condition(w)} becomes a machine."},
-	{"m": "demo", "skill": "set_builder", "title": "BUILD A SET-BUILDER DFA",
-	 "explain": "{w in {0,1}* : w contains '00'} means: the string '00' appears somewhere. '1001' is accepted, '101' is rejected. Build any DFA for this language.",
-	 "task": {"instruction": "Build a DFA over {0,1} that ACCEPTS strings containing the substring '00'.", "accepted": "1001", "rejected": "101", "accept": ["00", "100", "1001", "000"], "reject": ["0", "1", "10", "101"]}},
-	{"m": "content", "skill": "list", "field": "definition", "title": "DFA FROM LIST", "subtitle": "Infer the hidden language from example strings."},
-	{"m": "demo", "skill": "list", "title": "INFER A DFA FROM A LIST",
-	 "explain": "The list {ab, aab, aaab, ...} shows the pattern: one or more a's then a final b, written a+b. Build any automaton that accepts exactly those strings.",
-	 "task": {"instruction": "From {ab, aab, aaab, ...} infer the language a+b and build a DFA for it.", "accepted": "aab", "rejected": "ababb", "accept": ["ab", "aab", "aaab"], "reject": ["a", "b", "aba", "abab"]}},
-	{"m": "practice", "skill": "simulation", "title": "PRACTICE PROBLEMS | SIMULATION"},
-	{"m": "practice", "skill": "building", "title": "PRACTICE PROBLEMS | BUILDING"},
-	{"m": "practice", "skill": "definition", "title": "QUESTIONS | DFA & ITS 5-TUPLE"},
-]
-
 # UI references
 @onready var viewport: SubViewport = $SubViewport
 @onready var sprite: Sprite3D = $Billboard
@@ -103,17 +43,6 @@ const DFA_LESSON_SPEC := [
 # Full-screen overlay references (desktop mode only)
 @onready var overlay_layer: CanvasLayer = $OverlayLayer
 @onready var overlay_rect: TextureRect = $OverlayLayer/OverlayRect
-
-# Statistics side-panel references
-@onready var stats_panel: PanelContainer = $SubViewport/Root/StatsPanel
-@onready var stats_title: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsTitle
-@onready var stats_algo: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsAlgo
-@onready var stats_phase: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsPhase
-@onready var stats_progress: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsProgress
-@onready var stats_score: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsScore
-@onready var stats_skills: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsSkills
-@onready var stats_workshop: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsWorkshop
-@onready var stats_mode: Label = $SubViewport/Root/StatsPanel/StatsVBox/StatsMode
 
 # Session manager
 var session: SessionManager
@@ -202,6 +131,12 @@ func _ready() -> void:
 	# The SessionBridge owns the single live session shared with the separate
 	# Pretest / Post-test room, so returning here keeps all answers and states.
 	session = SessionBridge.get_session()
+	if SessionBridge.test_mode == "learning_demo":
+		SessionBridge.test_mode = ""
+		_analysis_skills = ["simulation", "identification", "definition", "building", "set_builder", "list"]
+		_enter_learning_room()
+		_begin_dfa_lesson()
+		return
 
 	# The active algorithm is chosen on the pre-Grounds Algorithm Select screen
 	# (HMM / BKT / KST). If we arrived without a choice, send the learner there —
@@ -232,12 +167,12 @@ func _ready() -> void:
 ## The gamification tracker (XP, streaks, badges) lives on the session object
 ## so it survives scene changes; calling this re-reads it into the panel.
 func gamification_sync() -> void:
-	_update_stats_panel()
+	pass
 func _process(_delta: float) -> void:
 	# The lesson board may stay visible beside the lesson panel. It must not
 	# prevent the panel billboard from receiving pointer input.
 	_update_pointer()
-	_update_stats_panel()
+	_sync_stats_board()
 
 func _input(event: InputEvent) -> void:
 	# Track the real left mouse button so Desktop mode can click the panel.
@@ -739,7 +674,7 @@ func _show_analysis() -> void:
 func _begin_dfa_lesson() -> void:
 	_in_dfa_lesson = true
 	_dfa_lesson_index = 0
-	_lesson_engine = LessonEngine.new(DFA_LESSON_SPEC)
+	_lesson_engine = LessonEngine.new(LessonLibrary.course_steps())
 	_lesson_engine.start()
 	_dfa_practice_index = 0
 	_dfa_board_practice_index = 0
@@ -768,8 +703,6 @@ func _open_free_build(from_lesson: bool) -> void:
 	workshop.builder.call("reset_for_free_build")
 	workshop.builder.set("sandbox_exit_callback", func(): _close_free_build())
 	workshop.set_active(true)
-	if sprite:
-		sprite.visible = false
 	_set_player_paused(true)
 	question_label.text = "FREE BUILD SANDBOX\n\nDesign ANY automaton you like: tap Add node for a state, pick a symbol and connect states, toggle accepting, set the start - then type any string and press Simulate to watch it run. There is no right or wrong answer, just explore. Press \"Done - exit sandbox\" on the board when you are ready to continue."
 	question_label.visible = true
@@ -799,7 +732,7 @@ func _close_free_build() -> void:
 
 func _show_dfa_lesson_step() -> void:
 	if _lesson_engine == null:
-		_lesson_engine = LessonEngine.new(DFA_LESSON_SPEC)
+		_lesson_engine = LessonEngine.new(LessonLibrary.course_steps())
 	if _lesson_engine.finished():
 		_finish_dfa_lesson()
 		return
@@ -815,7 +748,7 @@ func _show_dfa_lesson_step() -> void:
 		"practice":
 			_dfa_practice_skill = step["skill"]
 			_dfa_practice_index = 0
-			var practice_tasks: Array = WORKSHOP_TASKS.get(step["skill"], [])
+			var practice_tasks: Array = LessonLibrary.workshop_tasks(step["skill"])
 			if workshop != null and workshop.builder is Control and not practice_tasks.is_empty():
 				# Board-task practice: build & verify each DFA on the board to proceed.
 				_dfa_board_practice_skill = step["skill"]
@@ -830,14 +763,9 @@ func _show_dfa_content(step: Dictionary) -> void:
 	title_label.text = "DFA LESSON — %s" % step["title"]
 	_clear_content()
 	_enter_learning_room()
-	var field: String = step.get("field", "definition")
-	var body := ""
-	match field:
-		"definition": body = AdaptiveContent.get_definition(step["skill"])
-		"guided": body = AdaptiveContent.get_guided(step["skill"])
-		"example": body = AdaptiveContent.get_example(step["skill"])
-		"application": body = AdaptiveContent.get_application(step["skill"])
-		_: body = AdaptiveContent.get_definition(step["skill"])
+	var body := str(step.get("body", ""))
+	if body.is_empty():
+		body = AdaptiveContent.get_definition(step["skill"])
 	body = "%s\n\n%s" % [step.get("subtitle", ""), body]
 	question_label.text = "Step %s\n\n%s" % [_lesson_engine.progress_text(), body]
 	question_label.visible = true
@@ -894,8 +822,6 @@ func _activate_dfa_board(step: Dictionary) -> void:
 			workshop.builder.call("seed_reference_graph")
 	_enter_learning_room()
 	workshop.set_active(true)
-	if sprite:
-		sprite.visible = false
 	title_label.text = "DFA LESSON — %s" % step["title"]
 	question_label.text = "Build it on the whiteboard.\n\nCreate states, toggle accepting, connect transitions, then press Check task to verify. The board accepts ANY correct construction — not just one specific one.\n\n%s" % step.get("task", {}).get("instruction", "")
 	question_label.visible = true
@@ -950,18 +876,16 @@ func _show_dfa_practice(step: Dictionary) -> void:
 func _pair_practice_board(skill: String, index: int) -> bool:
 	if workshop == null or workshop.builder is not Control:
 		return false
-	var tasks: Array = WORKSHOP_TASKS.get(skill, [])
+	var tasks: Array = LessonLibrary.workshop_tasks(skill)
 	if tasks.is_empty():
 		return false
 	var task: Dictionary = tasks[index % tasks.size()]
 	_reset_board_for_task(task)
 	workshop.set_active(true)
-	if sprite:
-		sprite.visible = false
 	_set_player_paused(true)
 	return true
 
-## Shared helper: push a WORKSHOP_TASKS / DFA_LESSON_SPEC task into the builder.
+## Shared helper: push a library-authored task into the builder.
 func _reset_board_for_task(task: Dictionary) -> void:
 	if workshop == null or workshop.builder is not Control:
 		return
@@ -989,7 +913,7 @@ func _close_paired_board() -> void:
 func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 	_dfa_board_practice_active = true
 	_dfa_board_practice_skill = skill
-	var skill_tasks: Array = WORKSHOP_TASKS.get(skill, [])
+	var skill_tasks: Array = LessonLibrary.workshop_tasks(skill)
 	_enter_learning_room()
 	if workshop.builder is Control:
 		if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
@@ -997,8 +921,6 @@ func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 		else:
 			workshop.builder.call("reset_for_task", task["instruction"], task["accepted"], task["rejected"])
 	workshop.set_active(true)
-	if sprite:
-		sprite.visible = false
 	_set_player_paused(true)
 	question_label.text = "Whiteboard practice %d / %d - %s\n\n%s\n\nBuild the DFA on the board, then press Check task. Any correct construction is accepted; wrong attempts stay here until the build passes." % [_dfa_board_practice_index + 1, skill_tasks.size(), QuestionBank.get_skill_name(skill), task["instruction"]]
 	question_label.visible = true
@@ -1036,7 +958,7 @@ func _handle_dfa_lesson_next() -> void:
 		_dfa_pending_skill = {}
 		_activate_dfa_board(pending)
 		return
-	var step: Dictionary = _lesson_engine.current() if _lesson_engine else DFA_LESSON_SPEC[_dfa_lesson_index]
+	var step: Dictionary = _lesson_engine.current() if _lesson_engine else LessonLibrary.course_steps()[_dfa_lesson_index]
 	match step["m"]:
 		"content":
 			_advance_lesson_step()
@@ -1124,9 +1046,10 @@ func _show_challenge() -> void:
 	title_label.text = "INTERACTIVE CHALLENGE - %s" % QuestionBank.get_skill_name(_learning_skill)
 	_clear_content()
 	# Builder phase: the learner must construct a working DFA on the whiteboard
-	# (one task per WORKSHOP_TASKS entry) BEFORE the free-response challenges.
-	if workshop and WORKSHOP_TASKS.has(_learning_skill):
-		var tasks: Array = WORKSHOP_TASKS[_learning_skill]
+	# before the free-response challenges.
+	var lesson_tasks: Array = LessonLibrary.workshop_tasks(_learning_skill)
+	if workshop and not lesson_tasks.is_empty():
+		var tasks: Array = lesson_tasks
 		if _workshop_task_index < tasks.size():
 			_open_builder_task(tasks[_workshop_task_index])
 			return
@@ -1204,8 +1127,6 @@ func _open_builder_task(task: Dictionary) -> void:
 			else:
 				workshop.builder.call("reset_for_task", task.get("instruction", "Build the DFA on the whiteboard."), task.get("accepted", "aa"), task.get("rejected", "ab"))
 		workshop.set_active(true)
-	if sprite:
-		sprite.visible = false
 	_set_player_paused(true)
 	question_label.text = "Whiteboard task: build the DFA, then press Check task. Any correct construction is accepted.\n\n%s" % task.get("instruction", "")
 	question_label.visible = true
@@ -1218,7 +1139,8 @@ func _open_builder_task(task: Dictionary) -> void:
 func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	# --- DFA lesson whiteboard phase ---
 	if _in_dfa_lesson:
-		var dfa_skill: String = DFA_LESSON_SPEC[_dfa_lesson_index].get("skill", "building") if _dfa_lesson_index < DFA_LESSON_SPEC.size() else "building"
+		var course_steps := LessonLibrary.course_steps()
+		var dfa_skill: String = course_steps[_dfa_lesson_index].get("skill", "building") if _dfa_lesson_index < course_steps.size() else "building"
 		var dfa_stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
 		session.record_workshop_attempt(dfa_skill, correct, dfa_stats)
 		if not correct:
@@ -1232,7 +1154,7 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 			# the build but keep the question on screen; answering it advances.
 			return
 		if _dfa_board_practice_active:
-			var bp_tasks: Array = WORKSHOP_TASKS.get(_dfa_board_practice_skill, [])
+			var bp_tasks: Array = LessonLibrary.workshop_tasks(_dfa_board_practice_skill)
 			_dfa_board_practice_index += 1
 			if _dfa_board_practice_index < bp_tasks.size():
 				_open_dfa_board_practice(_dfa_board_practice_skill, bp_tasks[_dfa_board_practice_index])
@@ -1274,7 +1196,7 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	session.knowledge_tracer.record_learning_observation(_learning_skill, true)
 	feedback_label.text = "Correct! " + message
 	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1))
-	var tasks: Array = WORKSHOP_TASKS.get(_learning_skill, [])
+	var tasks: Array = LessonLibrary.workshop_tasks(_learning_skill)
 	if _workshop_task_index < tasks.size():
 		_open_builder_task(tasks[_workshop_task_index])
 		return
@@ -1722,24 +1644,9 @@ func _forward_keyboard(event: InputEvent) -> void:
 		return
 	viewport.push_input(event)
 
-func _update_stats_panel() -> void:
-	if stats_panel == null or session == null:
+func _sync_stats_board() -> void:
+	if session == null:
 		return
-	stats_panel.visible = true
-	stats_title.text = "SESSION STATS"
-	stats_mode.text = "Mode: %s" % InputMode.get_mode_name()
-
-	# --- Algorithm ---
-	var algo := "HMM"
-	if session.knowledge_tracer:
-		var at: int = session.knowledge_tracer.algorithm_type
-		if at == 1:
-			algo = "BKT"
-		elif at == 2:
-			algo = "KST"
-	stats_algo.text = "Algorithm: %s" % algo
-
-	# --- Phase ---
 	var phase := "Main Menu"
 	match session.state:
 		SessionManager.SessionState.PROFILE_SETUP:
@@ -1754,67 +1661,7 @@ func _update_stats_panel() -> void:
 			phase = "Post Test"
 		SessionManager.SessionState.COMPLETE:
 			phase = "Complete"
-	stats_phase.text = "Phase: %s" % phase
-
-	# --- Progress ---
-	if session.state == SessionManager.SessionState.PRETEST or session.state == SessionManager.SessionState.POST_TEST:
-		stats_progress.text = "Progress: Q %d / %d" % [session.get_current_question_number(), session.get_total_questions()]
-	else:
-		stats_progress.text = "Progress: —"
-
-	# --- Score (accumulated correct answers) ---
-	var answered := 0
-	var correct := 0
-	for answer in session.pretest_answers:
-		answered += 1
-		if answer["correct"]:
-			correct += 1
-	for answer in session.posttest_answers:
-		answered += 1
-		if answer["correct"]:
-			correct += 1
-	var acc := 0.0
-	if answered > 0:
-		acc = float(correct) / float(answered) * 100.0
-	stats_score.text = "Score: %d/%d (%.0f%%)" % [correct, answered, acc]
-
-	# --- Per-skill accuracy ---
-	var summary: Dictionary = session.knowledge_tracer.get_full_summary() if session.knowledge_tracer else {}
-	var lines: Array[String] = []
-	for skill in summary:
-		var data: Dictionary = summary[skill]
-		lines.append("%s: %d/%d · %.0f%%" % [data["name"], data["correct"], data["total"], data["accuracy_percentage"]])
-	if lines.is_empty():
-		stats_skills.text = "Skills:\nNo data yet"
-	else:
-		stats_skills.text = "Skills (acc):\n" + "\n".join(lines)
-
-	# --- Whiteboard (automata builder) analytics ---
-	var wshop_lines: Array[String] = ["Whiteboard:"]
-	var wdata: Dictionary = session.get_workshop_attempts() if session else {}
-	for skill in wdata:
-		var records: Array = wdata[skill]
-		var total_attempts := 0
-		var wrong := 0
-		var conns := 0
-		var time_s := 0.0
-		var successes := 0
-		for r in records:
-			total_attempts += r.get("attempts", 0)
-			wrong += r.get("wrong_attempts", 0)
-			conns += r.get("connections_made", 0)
-			time_s += float(r.get("time_seconds", 0.0))
-			if r.get("correct", false):
-				successes += 1
-		if records.is_empty():
-			continue
-		var sname: String = QuestionBank.get_skill_name(skill)
-		wshop_lines.append("%s: %d/%d ok · %d attempts · %d wrong · %d conns · %.0fs" % [sname, successes, records.size(), total_attempts, wrong, conns, time_s])
-	if stats_workshop:
-		stats_workshop.text = "\n".join(wshop_lines)
-
-	# --- 3D stats blackboard report (always faces the player) ---
-	_update_stats_board(phase, answered, correct, acc)
+	_update_stats_board(phase, 0, 0, 0.0)
 
 func _update_stats_board(phase: String, _answered: int, _correct: int, _acc: float) -> void:
 	if stats_board == null or session == null:

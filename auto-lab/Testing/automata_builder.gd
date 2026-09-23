@@ -745,7 +745,7 @@ func move_state(state_name: String, state_position: Vector2) -> void:
 	_refresh()
 
 func connect_selected(target: String) -> void:
-	if target == selected_state or not states.has(target):
+	if not states.has(target):
 		return
 	if active_symbol.is_empty():
 		_refresh()
@@ -999,15 +999,16 @@ class GraphCanvas extends Control:
 	## Light-blue line palette for arrows, self-loop arcs and arrowheads.
 	const EDGE_COLOR := Color(0.35, 0.75, 1.0)
 	const EDGE_WIDTH := 4.0
-	const ARROW_LENGTH := 16.0
-	const ARROW_HALF_WIDTH := 8.0
+	const LOOP_COLOR := Color(0.45, 0.95, 1.0)
+	const ARROW_LENGTH := 18.0
+	const ARROW_HALF_WIDTH := 9.0
 	## Lateral offset that puts "forward" arrows in one lane and their matching
 	## "return" arrows in a second lane, so in/out arrows never overlap.
 	const PAIR_LANE := 15.0
 	## Extra lateral offset between parallel arrows travelling the same way.
 	const PAIR_STEP := 16.0
 	## Self-loop radius measured beyond the node edge.
-	const LOOP_EXTRA := 46.0
+	const LOOP_EXTRA := 60.0
 	## Radial gap between stacked self-loops on the same node.
 	const LOOP_STACK := 48.0
 	const LABEL_FONT_SIZE := 22
@@ -1179,8 +1180,8 @@ class GraphCanvas extends Control:
 		for step in 25:
 			points.append(_quad_bezier(p0, control, p1, float(step) / 24.0))
 		var active: bool = _is_active_transition(transition) and (builder.simulation_running or builder.sim_finished)
-		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else EDGE_COLOR
-		var edge_width := EDGE_WIDTH + 3.0 if active else EDGE_WIDTH
+		var edge_color := Color(1.0, 0.85, 0.3, 1.0) if active else LOOP_COLOR
+		var edge_width := EDGE_WIDTH + 4.0 if active else EDGE_WIDTH + 1.5
 		draw_polyline(points, edge_color, edge_width, true)
 
 		# Arrowhead on the re-entering end of the loop.
@@ -1364,7 +1365,10 @@ class GraphCanvas extends Control:
 				builder.connect_source = hit
 				builder.select_state(hit)
 			elif builder.connect_source == hit:
-				# Tapping the source again cancels the pending connection.
+				# Tapping the source again commits a self-loop. This keeps the
+				# connect gesture identical for ordinary edges and loops.
+				builder.select_state(builder.connect_source)
+				builder.connect_selected(hit)
 				builder.connect_source = ""
 				builder._refresh()
 			else:

@@ -88,6 +88,43 @@ func start_session() -> void:
 	# were only ever applied once per process).
 	reset_analysis_priors()
 
+## Start the World-scene learning demo without collecting a real pretest.
+## The seeded answers create believable, varied HMM priors for UI/testing.
+func start_learning_demo() -> void:
+	state = SessionState.ANALYSIS
+	selected_algorithm = KnowledgeTracer.AlgorithmType.HMM
+	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
+	pretest_answers.clear()
+	posttest_answers.clear()
+	pretest_questions = QuestionBank.QUESTIONS.duplicate(true)
+	posttest_questions.clear()
+	current_question_index = 0
+	current_question_answered = false
+	current_question = {}
+	adaptive_learning_complete = false
+	current_learning_skill = ""
+	learning_phase = 0
+	workshop_attempts.clear()
+	_recorded_lesson_observations.clear()
+	reset_analysis_priors()
+
+	var dummy_correct := {
+		"simulation": 4,
+		"identification": 2,
+		"definition": 3,
+		"building": 1,
+		"set_builder": 2,
+		"list": 4,
+	}
+	for skill in knowledge_tracer.SKILL_ORDER:
+		for index in range(5):
+			pretest_answers.append({
+				"skill": skill,
+				"correct": index < int(dummy_correct[skill]),
+			})
+	knowledge_tracer.apply_pretest_priors(pretest_answers)
+	_priors_applied = true
+
 ## Check if profile setup is needed
 func needs_profile_setup() -> bool:
 	return not profile_manager.has_profile()

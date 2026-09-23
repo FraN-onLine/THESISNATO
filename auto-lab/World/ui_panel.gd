@@ -298,7 +298,10 @@ func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 	return mesh_instance
 
 func _on_start_pressed() -> void:
-		get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
+	SessionBridge.reset_session()
+	SessionBridge.get_session().start_learning_demo()
+	SessionBridge.test_mode = "learning_demo"
+	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
 
 func _on_testing_pressed() -> void:
 	# Algorithm selection happens BEFORE the Testing Grounds opens: the learner
