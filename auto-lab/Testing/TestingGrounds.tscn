@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://c40tdmmw7geeu"]
 
-[ext_resource type="Script" path="res://Testing/testing_grounds.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://cnxoefix15s7t" path="res://Testing/testing_grounds.gd" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://ck16644gt46b6" path="res://Player/player.tscn" id="2_player"]
-[ext_resource type="PackedScene" path="res://Testing/LessonRoom.tscn" id="3_lesson_room"]
+[ext_resource type="PackedScene" uid="uid://bbo6egnrswt2i" path="res://Testing/LessonRoom.tscn" id="3_lesson_room"]
 [ext_resource type="PackedScene" path="res://Testing/AutomataWorkshopBillboard.tscn" id="4_workshop"]
 [ext_resource type="PackedScene" path="res://Testing/StatsBoard.tscn" id="5_stats"]
 
@@ -48,6 +48,41 @@ corner_radius_top_right = 14
 corner_radius_bottom_right = 14
 corner_radius_bottom_left = 14
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option"]
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 16.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.15, 0.3, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_pressed"]
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 16.0
+content_margin_bottom = 10.0
+bg_color = Color(0.1, 0.12, 0.25, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_hover"]
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 16.0
+content_margin_bottom = 10.0
+bg_color = Color(0.2, 0.25, 0.5, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_focus"]
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
 content_margin_left = 20.0
 content_margin_top = 12.0
@@ -81,52 +116,6 @@ corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_focus"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option"]
-content_margin_left = 16.0
-content_margin_top = 10.0
-content_margin_right = 16.0
-content_margin_bottom = 10.0
-bg_color = Color(0.12, 0.15, 0.3, 1)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_hover"]
-content_margin_left = 16.0
-content_margin_top = 10.0
-content_margin_right = 16.0
-content_margin_bottom = 10.0
-bg_color = Color(0.2, 0.25, 0.5, 1)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_pressed"]
-content_margin_left = 16.0
-content_margin_top = 10.0
-content_margin_right = 16.0
-content_margin_bottom = 10.0
-bg_color = Color(0.1, 0.12, 0.25, 1)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input"]
-content_margin_left = 12.0
-content_margin_top = 8.0
-content_margin_right = 12.0
-content_margin_bottom = 8.0
-bg_color = Color(0.1, 0.1, 0.2, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stats"]
 content_margin_left = 18.0
 content_margin_top = 16.0
@@ -138,40 +127,39 @@ corner_radius_top_right = 16
 corner_radius_bottom_right = 16
 corner_radius_bottom_left = 16
 
-[node name="TestingGrounds" type="Node3D"]
+[node name="TestingGrounds" type="Node3D" unique_id=1024305235]
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=915657071]
 environment = SubResource("Environment_room")
 
-[node name="CharacterBody3D" parent="." instance=ExtResource("2_player")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+[node name="CharacterBody3D" parent="." unique_id=2122595618 instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
-[node name="Floor" type="CSGBox3D" parent="."]
+[node name="Floor" type="CSGBox3D" parent="." unique_id=1946013686]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+visible = false
 size = Vector3(20, 1, 20)
 material = SubResource("StandardMaterial3D_floor")
 
-[node name="LessonRoom" parent="." instance=ExtResource("3_lesson_room")]
+[node name="LessonRoom" parent="." unique_id=2005000114 instance=ExtResource("3_lesson_room")]
 
-[node name="AutomataWorkshopWhiteboard" parent="." instance=ExtResource("4_workshop")]
-position = Vector3(0, 2.4, -8)
-scale = Vector3(1.1, 1.1, 1.1)
+[node name="AutomataWorkshopWhiteboard" parent="." unique_id=1314344749 instance=ExtResource("4_workshop")]
+transform = Transform3D(1.1, 0, 0, 0, 1.1, 0, 0, 0, 1.1, -2.3007097, 2.826946, -8.090203)
 
-[node name="StatsBoard" parent="." instance=ExtResource("5_stats")]
-position = Vector3(6.2, 2.6, -10)
-scale = Vector3(1.0, 1.0, 1.0)
+[node name="StatsBoard" parent="." unique_id=600884917 instance=ExtResource("5_stats")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.230721, 2.6036785, -8.052604)
 
-[node name="UI_Panel" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, -4.0)
+[node name="UI_Panel" type="Node3D" parent="." unique_id=1636566120]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -4)
 script = ExtResource("1_script")
 
-[node name="SubViewport" type="SubViewport" parent="UI_Panel"]
+[node name="SubViewport" type="SubViewport" parent="UI_Panel" unique_id=872379533]
 transparent_bg = true
 handle_input_locally = false
 size = Vector2i(2200, 1500)
 render_target_update_mode = 4
 
-[node name="Root" type="Control" parent="UI_Panel/SubViewport"]
+[node name="Root" type="Control" parent="UI_Panel/SubViewport" unique_id=1781453498]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -180,7 +168,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Center" type="CenterContainer" parent="UI_Panel/SubViewport/Root"]
+[node name="Center" type="CenterContainer" parent="UI_Panel/SubViewport/Root" unique_id=701356711]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -190,19 +178,19 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Panel" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center"]
+[node name="Panel" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center" unique_id=1559583881]
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="VBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel"]
+[node name="VBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel" unique_id=245131579]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TitleContainer" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+[node name="TitleContainer" type="PanelContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox" unique_id=1337589438]
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_title")
 
-[node name="Title" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/TitleContainer"]
+[node name="Title" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/TitleContainer" unique_id=1063871662]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
@@ -212,23 +200,22 @@ theme_override_font_sizes/font_size = 32
 text = "TESTING GROUNDS"
 horizontal_alignment = 1
 
-[node name="Content" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+[node name="Content" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox" unique_id=1482470559]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="QuestionLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+[node name="QuestionLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content" unique_id=1550270989]
+custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 20
-text = ""
 autowrap_mode = 2
-custom_minimum_size = Vector2(800, 0)
 
-[node name="OptionsBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+[node name="OptionsBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content" unique_id=1048272982]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="Option0" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox"]
+[node name="Option0" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox" unique_id=766792534]
 custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -239,9 +226,8 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_option")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_option_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_option_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
-text = ""
 
-[node name="Option1" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox"]
+[node name="Option1" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox" unique_id=277146398]
 custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -252,9 +238,8 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_option")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_option_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_option_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
-text = ""
 
-[node name="Option2" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox"]
+[node name="Option2" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox" unique_id=2004768709]
 custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -265,9 +250,8 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_option")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_option_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_option_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
-text = ""
 
-[node name="Option3" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox"]
+[node name="Option3" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content/OptionsBox" unique_id=151546504]
 custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -278,29 +262,26 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_option")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_option_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_option_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
-text = ""
 
-[node name="FeedbackLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+[node name="FeedbackLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content" unique_id=411108065]
+custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.9, 0.6, 1)
 theme_override_font_sizes/font_size = 16
-text = ""
 autowrap_mode = 2
-custom_minimum_size = Vector2(800, 0)
 
-[node name="ProgressLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content"]
+[node name="ProgressLabel" type="Label" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/Content" unique_id=499974040]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.8, 1)
 theme_override_font_sizes/font_size = 14
-text = ""
 horizontal_alignment = 1
 
-[node name="ButtonBox" type="HBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox"]
+[node name="ButtonBox" type="HBoxContainer" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox" unique_id=1226448732]
 layout_mode = 2
 theme_override_constants/separation = 10
 alignment = 1
 
-[node name="BackButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox"]
+[node name="BackButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox" unique_id=356424045]
 custom_minimum_size = Vector2(200, 50)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -313,7 +294,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Back"
 
-[node name="NextButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox"]
+[node name="NextButton" type="Button" parent="UI_Panel/SubViewport/Root/Center/Panel/VBox/ButtonBox" unique_id=1801900315]
 custom_minimum_size = Vector2(200, 50)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -326,87 +307,82 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Next"
 
-[node name="StatsPanel" type="PanelContainer" parent="UI_Panel/SubViewport/Root"]
-visible = true
+[node name="StatsPanel" type="PanelContainer" parent="UI_Panel/SubViewport/Root" unique_id=72465139]
 layout_mode = 1
-anchors_preset = 0
-anchor_top = 0.0
+anchors_preset = 9
 anchor_bottom = 1.0
 offset_left = 12.0
 offset_top = 24.0
 offset_right = 296.0
 offset_bottom = -24.0
-grow_horizontal = 1
 grow_vertical = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_stats")
 
-[node name="StatsVBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/StatsPanel"]
+[node name="StatsVBox" type="VBoxContainer" parent="UI_Panel/SubViewport/Root/StatsPanel" unique_id=231296917]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="StatsTitle" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsTitle" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=481709985]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "SESSION STATS"
 horizontal_alignment = 1
 
-[node name="StatsMode" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsMode" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=1629257159]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 14
 text = "Mode: -"
 
-[node name="StatsAlgo" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsAlgo" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=303962465]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 16
 text = "Algorithm: -"
 
-[node name="StatsPhase" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsPhase" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=236063590]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 16
 text = "Phase: -"
 
-[node name="StatsProgress" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsProgress" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=788138595]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 16
 text = "Progress: -"
 
-[node name="StatsScore" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsScore" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=315663591]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.5, 1, 0.7, 1)
 theme_override_font_sizes/font_size = 18
 text = "Score: -"
 
-[node name="StatsSkills" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsSkills" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=689621404]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.8, 0.95, 1)
 theme_override_font_sizes/font_size = 14
 text = "Skills:"
 autowrap_mode = 2
 
-[node name="StatsWorkshop" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox"]
+[node name="StatsWorkshop" type="Label" parent="UI_Panel/SubViewport/Root/StatsPanel/StatsVBox" unique_id=596116933]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.8, 0.5, 1)
 theme_override_font_sizes/font_size = 14
 text = "Whiteboard:"
 autowrap_mode = 2
 
-[node name="Billboard" type="Sprite3D" parent="UI_Panel"]
+[node name="Billboard" type="Sprite3D" parent="UI_Panel" unique_id=99960861]
 pixel_size = 0.002
 billboard = 1
 
-[node name="OverlayLayer" type="CanvasLayer" parent="UI_Panel"]
-; Full-screen overlay shown ONLY in desktop mode. It covers the whole window so
-; the Testing Grounds UI is easy to read/click without wearing a headset. In VR
-; mode this layer is hidden and the 3D Billboard above is used instead.
+[node name="OverlayLayer" type="CanvasLayer" parent="UI_Panel" unique_id=963803725]
 layer = 10
 
-[node name="OverlayBG" type="ColorRect" parent="UI_Panel/OverlayLayer"]
+[node name="OverlayBG" type="ColorRect" parent="UI_Panel/OverlayLayer" unique_id=1445883821]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -414,23 +390,23 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.02, 0.02, 0.07, 0.97)
 
-[node name="OverlayRect" type="TextureRect" parent="UI_Panel/OverlayLayer"]
+[node name="OverlayRect" type="TextureRect" parent="UI_Panel/OverlayLayer" unique_id=636091837]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 expand_mode = 1
-stretch_mode = 0
 
-[node name="AreaLight3D" type="AreaLight3D" parent="."]
+[node name="AreaLight3D" type="AreaLight3D" parent="." unique_id=1558997709]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, -4)
 light_color = Color(1, 0.9, 0.85, 1)
 light_energy = 3.0
 area_range = 20.0
 area_size = Vector2(6, 4)
 
-[node name="OmniLight3D" type="OmniLight3D" parent="."]
+[node name="OmniLight3D" type="OmniLight3D" parent="." unique_id=649360866]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, -4)
 light_energy = 4.0
 omni_range = 25.0

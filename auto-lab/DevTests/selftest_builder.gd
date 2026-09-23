@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless self-test for the Automata Workshop board.
 ## Run:
-##   Godot_v4.7-stable_win64_console.exe --path <project> --headless --script res://Testing/_selftest_builder.gd
+##   Godot_v4.7-stable_win64_console.exe --path <project> --headless --script res://DevTests/selftest_builder.gd
 ## It lays the board out at the real billboard size (1800x1100), then checks that
 ## every control is on screen / reachable and that add-node, connect and simulate
 ## behave. Prints REPORT lines and exits with code 0 (ok) or 1 (failures).

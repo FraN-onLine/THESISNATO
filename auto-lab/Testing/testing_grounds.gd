@@ -896,7 +896,6 @@ func _activate_dfa_board(step: Dictionary) -> void:
 	workshop.set_active(true)
 	if sprite:
 		sprite.visible = false
-	_set_player_paused(true)
 	title_label.text = "DFA LESSON — %s" % step["title"]
 	question_label.text = "Build it on the whiteboard.\n\nCreate states, toggle accepting, connect transitions, then press Check task to verify. The board accepts ANY correct construction — not just one specific one.\n\n%s" % step.get("task", {}).get("instruction", "")
 	question_label.visible = true
@@ -1817,59 +1816,23 @@ func _update_stats_panel() -> void:
 	# --- 3D stats blackboard report (always faces the player) ---
 	_update_stats_board(phase, answered, correct, acc)
 
-func _update_stats_board(phase: String, answered: int, correct: int, acc: float) -> void:
+func _update_stats_board(phase: String, _answered: int, _correct: int, _acc: float) -> void:
 	if stats_board == null or session == null:
 		return
-	var lines: Array[String] = []
-	lines.append("SESSION STATS  ·  " + phase)
-	lines.append("Mode: %s   |   Active algorithm drives learning:" % InputMode.get_mode_name())
-	var algo_view := "HMM"
-	if session.knowledge_tracer:
-		var at: int = session.knowledge_tracer.algorithm_type
-		if at == 1:
-			algo_view = "BKT"
-		elif at == 2:
-			algo_view = "KST"
-		# The other two models still run in the background for the POC comparison.
-		lines.append("Primary: %s   (all 3 models run in parallel for comparison)" % algo_view)
-		lines.append("")
-		lines.append("ALGORITHM COMPARISON  (prediction hit-rate)")
-		var cmp: Dictionary = session.knowledge_tracer.get_algorithm_comparison()
-		for key in ["HMM", "BKT", "KST"]:
-			var s: Dictionary = cmp[key]
-			lines.append("  %s: %d/%d hits  (%.1f%%)" % [key, s["hits"], s["total"], s["accuracy"]])
-		lines.append("")
-		lines.append("MASTERY BY SKILL   (HMM  |  BKT  |  KST)")
-		for skill in session.knowledge_tracer.SKILL_ORDER:
-			var hmm_p = session.knowledge_tracer.hmm_models.get(skill)
-			var bkt_p = session.knowledge_tracer.bkt_models.get(skill)
-			var kst_pkg = session.knowledge_tracer.kst_model
-			var hmm_v = hmm_p.get_knowledge_probability() * 100.0 if hmm_p else 0.0
-			var bkt_v = bkt_p.get_knowledge_probability() * 100.0 if bkt_p else 0.0
-			var kst_v = kst_pkg.get_knowledge_probability(skill) * 100.0 if kst_pkg else 0.0
-			lines.append("  %-16s %.0f%%  |  %.0f%%  |  %.0f%%" % [QuestionBank.get_skill_name(skill), hmm_v, bkt_v, kst_v])
-	lines.append("")
-	lines.append("SCORE: %d/%d  (%.1f%%)" % [correct, answered, acc])
-	lines.append("")
-	# Whiteboard attempt analytics
-	var wdata2: Dictionary = session.get_workshop_attempts()
-	if not wdata2.is_empty():
-		lines.append("WHITEBOARD BUILDS")
-		wdata2 = session.get_workshop_attempts()
-		for skill2 in wdata2:
-			var records2: Array = wdata2[skill2]
-			if records2.is_empty():
-				continue
-			var ok_count := 0
-			var try_count := 0
-			for r in records2:
-				try_count += r.get("attempts", 0)
-				if r.get("correct", false):
-					ok_count += 1
-			lines.append("  %s: %d build(s) passed, %d total checks" % [QuestionBank.get_skill_name(skill2), ok_count, try_count])
-	lines.append("")
-	lines.append("Live-updating — build, simulate and check tasks to watch it change.")
-	stats_board.call("set_stats_text", "\n".join(lines))
+	# ONE ACTIVE ALGORITHM only: the board shows that model's probabilities /
+	# knowledge per skill (HMM hidden beliefs, BKT 4 params, KST space).
+	var tracer = session.knowledge_tracer
+	if tracer == null:
+		return
+	var data := {
+		"algorithm": tracer.get_algorithm_callout(),
+		"phase": phase,
+		"lines": tracer.get_active_stats_lines(),
+	}
+	if stats_board.has_method("set_active_stats"):
+		stats_board.call("set_active_stats", data)
+	else:
+		stats_board.call("set_stats_text", "\n".join(data["lines"]))
 
 # ===== VR POINTER =====
 

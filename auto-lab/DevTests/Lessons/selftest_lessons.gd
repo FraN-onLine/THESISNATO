@@ -2,7 +2,7 @@ extends SceneTree
 ## Headless self-test for the adaptive lesson system (Testing/Lessons).
 ## Run:
 ##   Godot_v4.7-stable_win64_console.exe --path <project> --headless \
-##     --script res://Testing/Lessons/_selftest_lessons.gd
+##     --script res://DevTests/Lessons/selftest_lessons.gd
 ##
 ## It checks four layers and prints REPORT lines, exiting 0 when everything
 ## passes and 1 when anything fails:
@@ -307,18 +307,24 @@ func _check_director() -> void:
 	director.tracer = tracer
 	director.gamification = Gamification.new()
 	var modes: Array = []
-	var modules_seen := 0
+	var modules_seen: Array = [0]
 	director.phase_finished.connect(func(mode): modes.append(mode))
-	director.module_started.connect(func(_module, _index, _total, _intro): modules_seen += 1)
+	director.module_started.connect(func(_module, _index, _total, _intro): modules_seen[0] += 1)
 
 	_auto_play(director, "lesson")
 	_note(modes.size() == 1 and str(modes[0]) == "lesson", "director_lesson_phase_finished",
-		"modes=%s modules=%d" % [str(modes), modules_seen])
-	_note(modules_seen == 6, "director_lesson_visits_all_modules", "modules=%d" % modules_seen)
+		"modes=%s modules=%d" % [str(modes), int(modules_seen[0])])
+	_note(int(modules_seen[0]) == 6, "director_lesson_visits_all_modules", "modules=%d" % int(modules_seen[0]))
+	# Phase one is over: reset the counters so the adaptive phase is measured
+	# on its own (one module per skill in the plan handed to the director).
+	modes.clear()
+	modules_seen[0] = 0
 
 	_auto_play(director, "adaptive")
-	_note(modes.size() == 2 and str(modes[1]) == "adaptive", "director_adaptive_phase_finished",
+	_note(modes.size() == 1 and str(modes[0]) == "adaptive", "director_adaptive_phase_finished",
 		"modes=%s" % str(modes))
+	_note(int(modules_seen[0]) == 2, "director_adaptive_visits_planned_skills",
+		"modules=%d plan=2" % int(modules_seen[0]))
 
 ## Drives a director to the end of one phase by answering everything correctly.
 func _auto_play(director, phase: String) -> void:

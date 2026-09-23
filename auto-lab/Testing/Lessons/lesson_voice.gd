@@ -9,7 +9,13 @@ extends RefCounted
 ## THREE WAYS TO GET A VOICE, in order of preference:
 ##   1. RECORDED CLIPS - drop files named after the line id into
 ##      res://Audio/Voice/<line_id>.ogg and call set_clip_root("res://Audio/Voice").
-##      Nothing else has to change: the line ids are stable strings.
+##      NOTHING ELSE has to change: the line ids are stable strings.
+##      HOW TO ADD A NEW VOICE LINE (for non-programmers):
+##        1. Find the spoken text in-game (it is always shown as a caption).
+##        2. Run once with voices silent, then read voice.get_script_log()
+##           (or the console) — every line has a stable line_id.
+##        3. Record that line as <line_id>.ogg and drop it in res://Audio/Voice/.
+##        4. Done — the same line now plays audio AND still shows its caption.
 ##   2. SYSTEM TTS - set enabled = true and system_tts = true (uses
 ##      DisplayServer.tts_*). Works with the OS voices, no assets needed.
 ##   3. SILENT - default. Everything is still logged in `spoken_lines`, so the

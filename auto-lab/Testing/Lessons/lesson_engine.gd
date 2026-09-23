@@ -445,7 +445,3 @@ static func stars_for(score_value: float, mastered: bool) -> int:
 
 static func stars_text(stars: int) -> String:
 	return "*".repeat(clampi(stars, 0, 3)) + "-".repeat(clampi(3 - stars, 0, 3))
-
-
-
-

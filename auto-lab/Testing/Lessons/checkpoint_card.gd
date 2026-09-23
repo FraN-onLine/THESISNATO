@@ -59,6 +59,7 @@ func _build() -> void:
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 12)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(header)
 
 	_kind_chip = Label.new()
@@ -278,7 +279,10 @@ func _string_list(values: Array) -> Array:
 func _make_button(text: String, color: Color) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(0, MIN_TAP_PX)
+	# Tappable with mouse AND VR laser: keep the full 52px height even before
+	# layout runs (DevTests measure size right after show_checkpoint).
+	button.custom_minimum_size = Vector2(200, MIN_TAP_PX)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.add_theme_font_size_override("font_size", 21)
 	button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))

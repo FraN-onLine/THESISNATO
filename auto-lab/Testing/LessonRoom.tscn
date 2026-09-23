@@ -36,9 +36,3 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6521592, 3.1930208, -9.5969
 use_collision = true
 size = Vector3(21.543518, 17.586798, 2.0424805)
 material = SubResource("mat_floor")
-
-[node name="WorkshopWall" type="CSGBox3D" parent="." unique_id=1736174312]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -8.35)
-use_collision = true
-size = Vector3(8.5, 5, 0.3)
-material = SubResource("mat_floor")

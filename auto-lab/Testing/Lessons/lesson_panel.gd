@@ -1,9 +1,12 @@
 extends Node3D
-## The lesson panel: a FLAT board mounted on the lesson-room wall.
+## The lesson panel (contents): a ROTATING board that faces the user, per spec.
 ##
-## It is intentionally flat (no billboarding) so it behaves like a real poster on
-## a wall next to the automata whiteboard, while offering the same comfortable
-## tap targets a VR laser needs. It renders, in one place:
+## 3D nodes (SubViewport / Board sprite / Backdrop) are prebuilt in the
+## LessonPanel.tscn scene — this script builds ONLY the 2D lesson UI inside the
+## viewport (module header + HUD + info/checkpoint content). The 3D shell is a
+## node, not code.
+##
+## It renders, in one place:
 ##   * the module header, XP / streak / level HUD and a mastery bar,
 ##   * information panels (title, body, bullets, call-out),
 ##   * checkpoint cards (mc / trace / build / maze) via checkpoint_card.gd,
@@ -62,11 +65,27 @@ var _exit_button: Button
 func _ready() -> void:
 	if InputMode.is_desktop():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	_build_nodes()
+	_ensure_nodes()
 	_build_ui()
 	_surface = PanelSurface.new()
 	_surface.setup(self, sprite, viewport)
 	set_process(true)
+
+## 3D shell comes from LessonPanel.tscn when instanced; fall back to building
+## it in code only for legacy/headless use (DevTests). The 2D lesson content
+## below is always built in _build_ui().
+func _ensure_nodes() -> void:
+	if viewport == null:
+		viewport = get_node_or_null("SubViewport") as SubViewport
+	if sprite == null:
+		sprite = get_node_or_null("Board") as Sprite3D
+	if backdrop == null:
+		backdrop = get_node_or_null("Backdrop") as CSGBox3D
+	if viewport != null and sprite != null and backdrop != null:
+		# SPEC: lesson contents panel ROTATES to face the user.
+		PanelSurface.face_player(sprite)
+		return
+	_build_nodes()
 
 func set_active(active: bool) -> void:
 	visible = active
@@ -97,8 +116,8 @@ func _build_nodes() -> void:
 	sprite.pixel_size = PIXEL_SIZE
 	sprite.texture = viewport.get_texture()
 	add_child(sprite)
-	# WALL RULE: flush with the wall, never turning to stare at the player.
-	PanelSurface.make_flat(sprite)
+	# SPEC: lesson contents panel ROTATES to face the user (static boards stay flat).
+	PanelSurface.face_player(sprite)
 
 func _input(event: InputEvent) -> void:
 	if _surface != null:
@@ -499,6 +518,3 @@ func _style(color: Color, radius: int) -> StyleBoxFlat:
 	style.content_margin_top = 10.0
 	style.content_margin_bottom = 10.0
 	return style
-
-
-

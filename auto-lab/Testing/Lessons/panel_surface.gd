@@ -3,15 +3,17 @@ extends RefCounted
 ## Sprite3D (the automata whiteboard, the test panel, the lesson panel).
 ##
 ## It replaces the pointer code that used to be copy-pasted into each scene:
-##   * desktop: the OS cursor is ray-cast onto the flat surface,
-##   * VR: each controller gets a visible laser and the trigger acts as a click,
+##   * desktop: the OS cursor is ray-cast onto the surface; the tap lands
+##     EXACTLY where the cursor is (no offset) — see ray_intersect_sprite().
+##   * VR: each controller gets a visible laser and the trigger acts as a click.
 ##   * both: a release is re-delivered at the press origin when the pointer
 ##     drifted less than CLICK_SLOP pixels, so wobble never cancels a click.
 ##
-## WALL RULE: a board mounted on a wall must be FLAT. `make_flat()` disables
-## billboarding so the board keeps the orientation the level designer gave it
-## (facing +Z, flush with the wall) instead of turning to stare at the player.
-## Only floating, free-standing panels should call `face_player()`.
+## ORIENTATION RULE (per project spec):
+##   * Lesson panel (contents) + pretest/post-test panel ROTATE to face the
+##     user  -> call face_player().
+##   * Stats board + automata board stay STATIC (flat on their wall/stand) ->
+##     call make_flat().  Static boards never turn.
 
 const CLICK_SLOP := 92.0
 
@@ -19,9 +21,12 @@ var host: Node3D = null
 var sprite: Sprite3D = null
 var viewport: SubViewport = null
 var active := true
-## Optional callable(event) -> void, run before pointer translation (used to
-## forward physical keyboard typing into the panel's text fields).
+## Optional callable(event) -> void, run for physical KEY events only (used to
+## forward typing into the panel's text fields).
 var keyboard_filter: Callable = Callable()
+## Optional callable() -> void, run when the pointer leaves the surface (used by
+## the automata board to drop its drag/hover highlight).
+var pointer_lost: Callable = Callable()
 
 var _last_mouse_pos := Vector2(-1, -1)
 var _pressed := false
@@ -48,7 +53,7 @@ func handle_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_mouse_down = event.pressed
-	if not keyboard_filter.is_null() and keyboard_filter.is_valid():
+	if event is InputEventKey and not keyboard_filter.is_null() and keyboard_filter.is_valid():
 		keyboard_filter.call(event)
 
 ## Call from the host's _process().
@@ -160,13 +165,26 @@ func _send_pointer(uv: Vector2, valid: bool, down: bool) -> void:
 		leave.global_position = Vector2(-1, -1)
 		viewport.push_input(leave)
 		_last_mouse_pos = Vector2(-1, -1)
+		if not pointer_lost.is_null() and pointer_lost.is_valid():
+			pointer_lost.call()
 
-## Straight-line intersection between a ray and the flat surface.
+## Straight-line intersection between a ray and the surface.
+## EXACT-CURSOR FIX: parent nodes (TestingGrounds, rooms) often scale the board
+## (e.g. scale 1.1), and billboarded panels rotate at render time. So the math
+## uses NORMALIZED basis axes and scale-aware sizes — never raw local offsets —
+## which is what previously made desktop taps land away from the cursor.
 func ray_intersect_sprite(origin: Vector3, direction: Vector3) -> Dictionary:
 	if sprite == null or sprite.texture == null:
 		return {}
 	var board_basis := sprite.global_transform.basis
-	var normal := board_basis.z.normalized()
+	var axis_x := board_basis.x
+	var axis_y := board_basis.y
+	var axis_z := board_basis.z
+	if axis_x.length_squared() < 0.00000001 or axis_y.length_squared() < 0.00000001 or axis_z.length_squared() < 0.00000001:
+		return {}
+	var right := axis_x.normalized()
+	var up := axis_y.normalized()
+	var normal := axis_z.normalized()
 	var denominator := normal.dot(direction)
 	if absf(denominator) < 0.0001:
 		return {}
@@ -175,10 +193,13 @@ func ray_intersect_sprite(origin: Vector3, direction: Vector3) -> Dictionary:
 		return {}
 	var hit := origin + direction * distance
 	var offset := hit - sprite.global_position
-	var width := sprite.texture.get_size().x * sprite.pixel_size
-	var height := sprite.texture.get_size().y * sprite.pixel_size
-	var x := offset.dot(board_basis.x)
-	var y := offset.dot(board_basis.y)
+	var tex_size := sprite.texture.get_size()
+	var width := tex_size.x * sprite.pixel_size * axis_x.length()
+	var height := tex_size.y * sprite.pixel_size * axis_y.length()
+	if width <= 0.0 or height <= 0.0:
+		return {}
+	var x := offset.dot(right)
+	var y := offset.dot(up)
 	if absf(x) > width * 0.5 or absf(y) > height * 0.5:
 		return {}
 	return {"uv": Vector2(x / width + 0.5, 0.5 - y / height), "hit": hit}
@@ -201,4 +222,3 @@ func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 	controller.add_child(mesh_instance)
 	_lasers[controller] = mesh_instance
 	return mesh_instance
-

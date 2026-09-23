@@ -264,4 +264,3 @@ func _finish_phase() -> void:
 func _speak(text: String) -> void:
 	if voice != null and voice.has_method("speak"):
 		voice.speak(text, "narration")
-

@@ -903,4 +903,3 @@ static func _finish_identification(steps: Array) -> Dictionary:
 				"One transition per pair, and there are |Q| x |Sigma| pairs."),
 		],
 	}
-

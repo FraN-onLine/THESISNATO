@@ -59,8 +59,49 @@ func get_algorithm_callout() -> String:
 func set_state_hint(value: String) -> void:
 	state_hint = value
 
+## Per-algorithm probability views for the ACTIVE model's stats board.
+## Each returns ready-to-print lines; only the active algorithm is ever
+## updated (see record_observation), so only it has live numbers.
+func get_active_stats_lines() -> Array[String]:
+	var out: Array[String] = []
+	match algorithm_type:
+		AlgorithmType.HMM:
+			for skill in SKILL_ORDER:
+				var m = hmm_models.get(skill)
+				if m == null:
+					continue
+				var v: Dictionary = m.get_state_view()
+				var hs: Dictionary = v.get("hidden_states", {})
+				out.append("%s: P(knows)=%.0f%%  (not-knows %.0f%%)  E[correct]=%.0f%%  last=%s" % [
+					skill, float(hs.get("knows", 0.0)) * 100.0,
+					float(hs.get("does_not_know", 0.0)) * 100.0,
+					float(v.get("expected_accuracy", 0.0)) * 100.0,
+					str(v.get("visible_output", "-"))])
+		AlgorithmType.BKT:
+			for skill in SKILL_ORDER:
+				var b = bkt_models.get(skill)
+				if b == null:
+					continue
+				var s: Dictionary = b.get_summary()
+				out.append("%s: P(L)=%.0f%%  P(L0)=%.2f P(T)=%.2f P(G)=%.2f P(S)=%.2f  obs=%d" % [
+					skill, float(s.get("p_learned", 0.0)) * 100.0,
+					float(s.get("p_L0", 0.0)), float(s.get("p_T", 0.0)),
+					float(s.get("p_G", 0.0)), float(s.get("p_S", 0.0)),
+					int(s.get("observation_count", 0))])
+		AlgorithmType.KST:
+			if kst_model:
+				for skill in SKILL_ORDER:
+					var p := float(kst_model.get_knowledge_probability(skill)) * 100.0
+					var prereqs: Array = kst_model.PREREQUISITES.get(skill, [])
+					out.append("%s: P=%.0f%%  needs=[%s]  E[correct]=%.0f%%" % [
+						skill, p, ", ".join(prereqs),
+						float(kst_model.get_expected_accuracy(skill)) * 100.0])
+	return out
+
 ## Aggregate the self-scored prediction accuracy of each algorithm. Returns
 ## per-model {hits, total, accuracy} by asking each model for its own stats.
+## NOTE: with ONE ACTIVE algorithm, only the active entry accumulates hits —
+## the others stay at 0 until that algorithm is selected in another run.
 func get_algorithm_comparison() -> Dictionary:
 	var hmm_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
 	var bkt_stats := {"hits": 0, "total": 0, "accuracy": 0.0}
@@ -126,16 +167,20 @@ func record_observation(skill: String, correct: bool) -> void:
 	if correct:
 		skill_stats[skill]["correct"] += 1
 	
-	# Delegate to each SELF-CONTAINED model. Each model records its own
-	# pre-answer prediction + the outcome into its own prediction_log, then
-	# updates its internal state. (All three run in parallel for the POC; the
-	# active algorithm type only drives mastery decisions, not the updates.)
-	if hmm_models.has(skill):
-		hmm_models[skill].update(correct, state_hint)
-	if bkt_models.has(skill):
-		bkt_models[skill].update(correct, state_hint)
-	if kst_model:
-		kst_model.update(skill, correct, state_hint)
+## Delegate to the ACTIVE model only. ONE ALGORITHM is active at a time
+	## (chosen on AlgorithmSelect) so runs can be compared fairly for the
+	## full project. Each model still records its own pre-answer prediction
+	## + the outcome into its own prediction_log when it IS the active one.
+	match algorithm_type:
+		AlgorithmType.HMM:
+			if hmm_models.has(skill):
+				hmm_models[skill].update(correct, state_hint)
+		AlgorithmType.BKT:
+			if bkt_models.has(skill):
+				bkt_models[skill].update(correct, state_hint)
+		AlgorithmType.KST:
+			if kst_model:
+				kst_model.update(skill, correct, state_hint)
 
 ## Mark the start of adaptive evidence for a skill without discarding its pretest model.
 func begin_learning(skill: String) -> void:

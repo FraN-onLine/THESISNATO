@@ -26,17 +26,15 @@ func _ready() -> void:
 	if sprite:
 		sprite.visible = true
 	
-	# Connect button signals
+	# Connect button signals (test every button actually leads somewhere).
 	var start_button: Button = viewport.get_node("Root/Center/Panel/VBox/StartButton")
 	var testing_button: Button = viewport.get_node("Root/Center/Panel/VBox/TestingButton")
-	var workshop_button: Button = viewport.get_node("Root/Center/Panel/VBox/WorkshopButton")
 	var settings_button: Button = viewport.get_node("Root/Center/Panel/VBox/SettingsButton")
 	var mode_button: Button = viewport.get_node("Root/Center/Panel/VBox/ModeButton")
 	var exit_button: Button = viewport.get_node("Root/Center/Panel/VBox/ExitButton")
 	
 	start_button.pressed.connect(_on_start_pressed)
 	testing_button.pressed.connect(_on_testing_pressed)
-	workshop_button.pressed.connect(_on_workshop_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	if mode_button:
 		mode_button.pressed.connect(_on_mode_toggle_pressed)
@@ -300,16 +298,13 @@ func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 	return mesh_instance
 
 func _on_start_pressed() -> void:
-	get_tree().change_scene_to_file("res://Game/Game1.tscn")
+		get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
 
 func _on_testing_pressed() -> void:
 	# Algorithm selection happens BEFORE the Testing Grounds opens: the learner
 	# picks which knowledge-tracing algorithm will drive the session (and reads
 	# how it learns) before any pretest data is collected.
 	get_tree().change_scene_to_file("res://Testing/AlgorithmSelect.tscn")
-
-func _on_workshop_pressed() -> void:
-	get_tree().change_scene_to_file("res://Testing/AutomataWorkshopRoom.tscn")
 
 func _on_settings_pressed() -> void:
 	# TODO: Implement settings menu

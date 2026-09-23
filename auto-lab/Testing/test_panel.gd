@@ -67,10 +67,8 @@ func _ready() -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	sprite.texture = viewport.get_texture()
-	# WALL RULE: this panel hangs on a wall, so it stays FLAT (no billboarding)
-	# and keeps the orientation the room gives it. Only free-standing panels
-	# should face the player.
-	PanelSurface.make_flat(sprite)
+	# SPEC: pretest / post-test panel ROTATES to face the user.
+	PanelSurface.face_player(sprite)
 	if face_player:
 		PanelSurface.face_player(sprite)
 	_build_ui()
@@ -411,9 +409,9 @@ func _ensure_laser(controller: XRController3D) -> MeshInstance3D:
 	_lasers[controller] = mesh_instance
 	return mesh_instance
 
-## Ray/plane intersection for a billboarded Sprite3D that always faces the
-## camera. The plane normal is computed from the camera rather than the sprite's
-## static transform because the sprite is re-oriented at render time.
+## Ray/plane intersection for the ROTATING test panel.
+## EXACT-CURSOR FIX: uses NORMALIZED camera axes + scale-aware board size so
+## the tap lands exactly where the desktop cursor is (see panel_surface.gd).
 func _ray_intersect_sprite(ray_origin: Vector3, ray_dir: Vector3) -> Dictionary:
 	if sprite.texture == null:
 		return {}
@@ -431,10 +429,16 @@ func _ray_intersect_sprite(ray_origin: Vector3, ray_dir: Vector3) -> Dictionary:
 	var hit := ray_origin + ray_dir * distance
 	var offset := hit - sprite_pos
 	var camera_basis := camera.global_transform.basis
-	var width := sprite.texture.get_size().x * sprite.pixel_size
-	var height := sprite.texture.get_size().y * sprite.pixel_size
-	var x := offset.dot(camera_basis.x)
-	var y := offset.dot(camera_basis.y)
+	var right := camera_basis.x.normalized() if camera_basis.x.length_squared() > 0.00000001 else Vector3.RIGHT
+	var up := camera_basis.y.normalized() if camera_basis.y.length_squared() > 0.00000001 else Vector3.UP
+	var board_scale := sprite.global_transform.basis.x.length()
+	if board_scale <= 0.0:
+		board_scale = 1.0
+	var tex_size := sprite.texture.get_size()
+	var width := tex_size.x * sprite.pixel_size * board_scale
+	var height := tex_size.y * sprite.pixel_size * board_scale
+	var x := offset.dot(right)
+	var y := offset.dot(up)
 	if absf(x) > width * 0.5 or absf(y) > height * 0.5:
 		return {}
 	return {"uv": Vector2(x / width + 0.5, 0.5 - y / height), "hit": hit}

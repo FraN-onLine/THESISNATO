@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://b5gj205tvwy60"]
 
-[ext_resource type="Script" path="res://World/ui_panel.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://csexviikn7eya" path="res://World/ui_panel.gd" id="1_script"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 content_margin_left = 50.0
@@ -108,21 +108,23 @@ theme_override_font_sizes/font_size = 60
 text = "AUTOLAB"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+[node name="Subtitle" type="Label" parent="SubViewport/Root/Center/Panel/VBox" unique_id=637792569]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.82, 0.95, 1)
 theme_override_font_sizes/font_size = 24
 text = "DFA learning, simulation, and adaptive practice"
 horizontal_alignment = 1
 
-[node name="Topics" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+[node name="Topics" type="Label" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1617737587]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.86, 0.9, 1, 1)
 theme_override_font_sizes/font_size = 24
-text = "7 DFA TOPICS\nSimulation  |  Diagram Identification  |  Definition and Parts\nBuilding  |  From Regex  |  From Set Builder  |  From Lists"
+text = "7 DFA TOPICS
+Simulation  |  Diagram Identification  |  Definition and Parts
+Building  |  From Regex  |  From Set Builder  |  From Lists"
 horizontal_alignment = 1
 
-[node name="MenuHint" type="Label" parent="SubViewport/Root/Center/Panel/VBox"]
+[node name="MenuHint" type="Label" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1535118163]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
 theme_override_font_sizes/font_size = 20
@@ -156,19 +158,6 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Testing Grounds"
 
-[node name="WorkshopButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox"]
-custom_minimum_size = Vector2(920, 92)
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_colors/font_pressed_color = Color(0.8, 0.85, 1, 1)
-theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 34
-theme_override_styles/normal = SubResource("StyleBoxFlat_button")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
-theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
-text = "Automata Workshop"
-
 [node name="SettingsButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1130738323]
 custom_minimum_size = Vector2(920, 92)
 layout_mode = 2
@@ -182,7 +171,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_focus")
 text = "Settings"
 
-[node name="ModeButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox"]
+[node name="ModeButton" type="Button" parent="SubViewport/Root/Center/Panel/VBox" unique_id=1431701184]
 custom_minimum_size = Vector2(920, 72)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -212,10 +201,11 @@ text = "Exit"
 pixel_size = 0.004
 billboard = 1
 
-[node name="OverlayLayer" type="CanvasLayer" parent="."]
+[node name="OverlayLayer" type="CanvasLayer" parent="." unique_id=1691940266]
 layer = 10
 
-[node name="OverlayBG" type="ColorRect" parent="./OverlayLayer"]
+[node name="OverlayBG" type="ColorRect" parent="OverlayLayer" unique_id=67687028]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -223,11 +213,11 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.02, 0.02, 0.07, 0.97)
 
-[node name="OverlayRect" type="TextureRect" parent="./OverlayLayer"]
+[node name="OverlayRect" type="TextureRect" parent="OverlayLayer" unique_id=559015075]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 expand_mode = 1
-stretch_mode = 0
