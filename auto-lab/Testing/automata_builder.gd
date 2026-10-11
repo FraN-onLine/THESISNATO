@@ -2,6 +2,10 @@ extends Control
 ## Reusable DFA builder challenge for the interactive lesson room.
 
 signal evaluated(correct: bool, message: String)
+## Emitted when the learner presses the board's "Skip task" option. The board
+## does NOT decide the knowledge penalty itself - the host does, because only the
+## host knows the knowledge-tracing model (see SessionManager.record_workshop_skip).
+signal skipped(message: String)
 
 enum EditMode { SELECT, CONNECT, MOVE }
 
@@ -43,6 +47,11 @@ var mode_buttons: Dictionary = {}
 var connection_status: Label
 var simulate_button: Button
 var simulation_keyboard_active := false
+## The "Skip task" option on the simulate row. Skipping never answers the task -
+## it tells the host "I cannot build this", which costs knowledge in proportion to
+## how much of the skill is still unknown. The pretest/post-test rooms hide it.
+var allow_skip := true
+var skip_button: Button
 ## Shown on the whiteboard only in FREE BUILD mode; the host sets the callback
 ## so the learner can leave their custom sandbox and keep learning.
 var sandbox_exit_button: Button
@@ -68,6 +77,7 @@ var last_transition_to := ""
 var attempt_count := 0
 var wrong_attempt_count := 0
 var connection_edits := 0
+var skip_count := 0
 var task_done := false
 var free_build_mode := false
 var task_started_msec := 0
@@ -79,6 +89,7 @@ var last_attempt_stats: Dictionary = {
 	"connections_made": 0,
 	"time_seconds": 0.0,
 	"correct": false,
+	"skipped": false,
 	"message": "",
 }
 
@@ -155,6 +166,7 @@ func _wipe_graph() -> void:
 	attempt_count = 0
 	wrong_attempt_count = 0
 	connection_edits = 0
+	skip_count = 0
 	undo_stack.clear()
 	last_transition_from = ""
 	last_transition_to = ""
@@ -165,10 +177,14 @@ func _wipe_graph() -> void:
 		"connections_made": 0,
 		"time_seconds": 0.0,
 		"correct": false,
+		"skipped": false,
 		"message": "",
 	}
 	if sandbox_exit_button:
 		sandbox_exit_button.visible = false
+	# Every fresh task offers the Skip option again (unless the host forbade it).
+	if skip_button:
+		skip_button.visible = allow_skip
 
 ## Free-build sandbox used during interactive learning: wipe the board, disable
 ## task validation and let the learner design their OWN automaton and test any
@@ -185,6 +201,9 @@ func reset_for_free_build() -> void:
 	_timer_stop()
 	if sandbox_exit_button:
 		sandbox_exit_button.visible = true
+	# Free build has no task, so there is nothing to skip.
+	if skip_button:
+		skip_button.visible = false
 	_apply_instruction_text()
 	if input_line:
 		input_line.text = ""
@@ -200,7 +219,10 @@ func _apply_instruction_text() -> void:
 	# Push the (possibly new) instruction into the on-screen heading label.
 	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
 	if heading:
-		heading.text = task_instruction + "\nTAP A NODE to select it, then drag it to move. To draw an arrow: tap a symbol below, tap Connect, then tap the source node and the target node. \"Set as Start\" picks the single start state; double-tap an empty spot to add a node there."
+		var hint := "\nTAP A NODE to select it, then drag it to move. To draw an arrow: tap a symbol below, tap Connect, then tap the source node and the target node. \"Set as Start\" picks the single start state; double-tap an empty spot to add a node there."
+		if allow_skip and not free_build_mode:
+			hint += " Stuck? \"Skip task\" records a skip instead of a build (and it costs knowledge)."
+		heading.text = task_instruction + hint
 
 ## Snapshot of the attempt analytics for the host lesson / algorithms.
 func get_attempt_stats() -> Dictionary:
@@ -216,6 +238,7 @@ func _record_attempt(correct: bool, message: String) -> void:
 		"connections_made": connection_edits,
 		"time_seconds": active_seconds,
 		"correct": correct,
+		"skipped": false,
 		"message": message,
 	}
 
@@ -399,6 +422,19 @@ func _add_simulate_row(root: VBoxContainer) -> void:
 	check_button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.12, 0.5, 0.42, 1)))
 	check_button.pressed.connect(_check_task)
 	simulate.add_child(check_button)
+	# SKIP TASK - the escape hatch from a board task the learner cannot build.
+	# It never answers anything: the host applies the knowledge penalty and the
+	# lesson moves on (see _skip_task below).
+	skip_button = Button.new()
+	skip_button.name = "SkipButton"
+	skip_button.text = "Skip task"
+	skip_button.custom_minimum_size = Vector2(160, 48)
+	skip_button.add_theme_font_size_override("font_size", 17)
+	skip_button.add_theme_stylebox_override("normal", _create_button_style(Color(0.34, 0.23, 0.08, 1)))
+	skip_button.add_theme_stylebox_override("hover", _create_button_style(Color(0.58, 0.4, 0.12, 1)))
+	skip_button.add_theme_stylebox_override("pressed", _create_button_style(Color(0.22, 0.15, 0.05, 1)))
+	skip_button.pressed.connect(_skip_task)
+	simulate.add_child(skip_button)
 
 ## ONE compact strip of large symbols used by BOTH jobs on this board: choosing
 ## the transition symbol to draw, and typing the string to simulate. This single
@@ -994,6 +1030,36 @@ func _check_task() -> void:
 		_timer_stop()
 	_record_attempt(correct, message)
 	evaluated.emit(correct, message)
+
+## Turn the board's Skip option on/off. The pretest / post-test rooms call this
+## with `false`: a proof of learning must not offer a way past the build.
+func set_skip_enabled(enabled: bool) -> void:
+	allow_skip = enabled
+	if skip_button:
+		skip_button.visible = enabled and not free_build_mode
+
+## SKIP TASK. The learner stops working on this build. Nothing is answered and no
+## machine is graded: the board just reports the skip, and the HOST applies the
+## knowledge penalty (heavier the less the learner already knew) and advances.
+func _skip_task() -> void:
+	_cancel_simulation()
+	if not allow_skip:
+		status_label.text = "Skipping is not allowed in this test. Build the machine and press Check task."
+		return
+	if free_build_mode:
+		status_label.text = "Free build has no task to skip. Use Simulate to test your own machine, then leave the sandbox."
+		return
+	if task_done:
+		status_label.text = "This task is already finished."
+		return
+	skip_count += 1
+	_timer_stop()
+	task_done = true
+	var message := "Task skipped. The knowledge tracer records the skip: the less you already knew, the bigger the drop."
+	status_label.text = message
+	_record_attempt(false, message)
+	last_attempt_stats["skipped"] = true
+	skipped.emit(message)
 
 class GraphCanvas extends Control:
 	## Light-blue line palette for arrows, self-loop arcs and arrowheads.

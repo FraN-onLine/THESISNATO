@@ -150,7 +150,32 @@ static func modules() -> Array:
 			_module_set_builder(),
 			_module_list(),
 		]
+		for module_index in _cache.size():
+			var module: Dictionary = _cache[module_index]
+			var first_step: Dictionary = {}
+			var steps: Array = module.get("steps", [])
+			if module_index == 0 and not steps.is_empty():
+				first_step = steps[0].duplicate(true)
+			module = _normalize_text_tree(module)
+			if not first_step.is_empty():
+				module["steps"][0] = first_step
+			_cache[module_index] = module
 	return _cache
+
+static func _normalize_text_tree(value):
+	if value is String:
+		return format_text(value)
+	if value is Dictionary:
+		var normalized: Dictionary = {}
+		for key in value:
+			normalized[key] = _normalize_text_tree(value[key])
+		return normalized
+	if value is Array:
+		var normalized_array: Array = []
+		for item in value:
+			normalized_array.append(_normalize_text_tree(item))
+		return normalized_array
+	return value
 
 static func skills() -> Array[String]:
 	var out: Array[String] = []
@@ -169,44 +194,205 @@ static func get_title(skill: String) -> String:
 	var module := get_module(skill)
 	return str(module.get("title", skill.capitalize()))
 
+## Lesson text uses the words Sigma and delta only in the first introduction.
+## All later presentation surfaces use the standard Greek notation.
+static func format_text(text: String, first_introduction := false) -> String:
+	if first_introduction:
+		return text
+	return text.replace("Sigma", "Σ").replace("sigma", "σ").replace("delta", "δ")
+
+static func _info_steps(skill: String) -> Array:
+	var result: Array = []
+	for step in get_module(skill).get("steps", []):
+		if str(step.get("kind", "")) == "info":
+			result.append(step)
+	return result
+
+static func adaptive_text(skill: String, field: String) -> String:
+	var module := get_module(skill)
+	var info_steps: Array = _info_steps(skill)
+	if field == "objective":
+		return format_text(str(module.get("intro", {}).get("body", "")), true)
+	if info_steps.is_empty():
+		return ""
+	var index := 0
+	match field:
+		"definition":
+			index = 0
+		"example":
+			index = mini(1, info_steps.size() - 1)
+		"application":
+			for i in info_steps.size():
+				if "REAL LIFE" in str(info_steps[i].get("title", "")):
+					index = i
+					break
+		"guided":
+			index = mini(2, info_steps.size() - 1)
+	var step: Dictionary = info_steps[index]
+	var body := str(step.get("body", ""))
+	var points: Array = step.get("points", [])
+	if not points.is_empty():
+		body += "\n\n" + "\n".join(points)
+	if str(step.get("callout", "")) != "":
+		body += "\n\n" + str(step["callout"])
+	return format_text(body)
+
+static func adaptive_questions(skill: String) -> Array:
+	var result: Array = []
+	for step in get_module(skill).get("practice", []):
+		var checkpoint: Dictionary = step.get("checkpoint", {})
+		if str(checkpoint.get("kind", "")) != "mc":
+			continue
+		result.append({
+			"question": format_text(str(checkpoint.get("prompt", ""))),
+			"options": checkpoint.get("options", []).duplicate(),
+			"correct": int(checkpoint.get("correct", 0)),
+			"explanation": format_text(str(checkpoint.get("explain", ""))),
+		})
+	return result
+
 ## Legacy course shape used by Testing Grounds' panel controller. The lesson
 ## data remains authored here; the controller only consumes the projected view.
+##
+## EASY TO FOLLOW BY CONSTRUCTION: a "content" step is projected as SEPARATE
+## parts (lead paragraph / key points / callout) plus the step number and a
+## one-line preview of what comes next, so the panel can lay it out in labelled
+## sections instead of one wall of text. `body` is still filled in (same parts,
+## joined) for any consumer that wants the flat string.
 static func course_steps() -> Array:
 	var out: Array = []
 	for module in modules():
 		var skill := str(module.get("skill", ""))
+		var topic := str(module.get("title", skill))
 		for source_step in module.get("steps", []):
 			var kind := str(source_step.get("kind", ""))
 			if kind == "info":
-				var body := str(source_step.get("body", ""))
-				var points: Array = source_step.get("points", [])
-				if not points.is_empty():
-					body += "\n\n" + "\n".join(points)
-				if str(source_step.get("callout", "")) != "":
-					body += "\n\n" + str(source_step["callout"])
+				# Sigma/delta stay spelled out only in the very first panel; every
+				# later surface uses the standard Greek notation.
+				var first_introduction := skill == "definition" and out.is_empty()
+				var lead := format_text(str(source_step.get("body", "")), first_introduction)
+				var points: Array = []
+				for point in source_step.get("points", []):
+					points.append("•  " + format_text(str(point), first_introduction))
+				var callout := format_text(str(source_step.get("callout", "")), first_introduction)
 				out.append({
 					"m": "content", "skill": skill, "field": "library",
-					"title": str(source_step.get("title", module.get("title", skill))),
-					"subtitle": str(module.get("subtitle", "")), "body": body,
+					"topic": topic,
+					"title": str(source_step.get("title", topic)),
+					"subtitle": str(module.get("subtitle", "")),
+					"lead": lead,
+					"points": points,
+					"callout": callout,
+					"body": _join_content(lead, points, callout),
 				})
 			elif kind == "board":
 				out.append({
-					"m": "demo", "skill": skill,
+					"m": "demo", "skill": skill, "topic": topic,
 					"title": str(source_step.get("title", "WHITEBOARD")),
 					"explain": str(source_step.get("explain", "")),
 					"task": source_step.get("task", {}),
 				})
 			elif kind == "freebuild":
 				out.append({
-					"m": "freebuild", "skill": skill,
+					"m": "freebuild", "skill": skill, "topic": topic,
 					"title": str(source_step.get("title", "FREE BUILD")),
 					"subtitle": str(source_step.get("subtitle", "")),
 				})
 		out.append({
-			"m": "practice", "skill": skill,
+			"m": "practice", "skill": skill, "topic": topic,
 			"title": "PRACTICE | %s" % str(module.get("title", skill)),
 		})
+	# Second pass: number every step and pre-announce the next one, so the panel
+	# can always answer "where am I?" and "what is coming?".
+	for index in out.size():
+		var entry: Dictionary = out[index]
+		entry["step_no"] = index + 1
+		entry["step_total"] = out.size()
+		var next_title := ""
+		if index + 1 < out.size():
+			next_title = str((out[index + 1] as Dictionary).get("title", ""))
+		entry["next_title"] = next_title
+		out[index] = entry
 	return out
+
+## Flat text of a content step: the lead paragraph, then the key points, then
+## the callout. Used both for the projected `body` and by the adaptive screens.
+static func _join_content(lead: String, points: Array, callout: String) -> String:
+	var parts: Array[String] = []
+	if lead != "":
+		parts.append(lead)
+	if not points.is_empty():
+		parts.append("\n".join(points))
+	if callout != "":
+		parts.append(callout)
+	return "\n\n".join(parts)
+
+## A short, plain recap of one skill, used by the adaptive remediation screen.
+## Pulls the module's own intro + remedy bullets so the re-explanation always
+## matches the authored lesson instead of a hard-coded string.
+static func recap(skill: String) -> String:
+	var module := get_module(skill)
+	if module.is_empty():
+		return ""
+	var lines: Array[String] = []
+	var intro: Dictionary = module.get("intro", {})
+	var intro_body := str(intro.get("body", ""))
+	if intro_body != "":
+		lines.append(intro_body)
+	for remedy_step in module.get("remedy", []):
+		for point in (remedy_step as Dictionary).get("points", []):
+			lines.append("•  " + str(point))
+	return "\n\n".join(lines)
+
+## Every MULTIPLE-CHOICE checkpoint a module offers, as plain questions.
+##
+## `adaptive_questions` reads only the practice pool, which for some skills is a
+## single item. The adaptive remediation needs a wider set of "areas" to re-ask,
+## so this also collects the choice checkpoints authored inside the lesson steps
+## (traps, rejection rules, notation reading...). Practice-pool items come first
+## so the normal round is unchanged, and ids are de-duplicated.
+static func review_questions(skill: String) -> Array:
+	var out: Array = []
+	var seen: Array = []
+	var module := get_module(skill)
+	if module.is_empty():
+		return out
+	for pool_key in ["practice", "steps"]:
+		for step in module.get(pool_key, []):
+			var checkpoint: Dictionary = step.get("checkpoint", {})
+			if str(checkpoint.get("kind", "")) != "mc":
+				continue
+			var id := str(checkpoint.get("id", ""))
+			if id != "" and seen.has(id):
+				continue
+			seen.append(id)
+			out.append({
+				"id": id,
+				"question": format_text(str(checkpoint.get("prompt", ""))),
+				"options": (checkpoint.get("options", []) as Array).duplicate(),
+				"correct": int(checkpoint.get("correct", 0)),
+				"explanation": format_text(str(checkpoint.get("explain", ""))),
+			})
+	return out
+
+## The order a skill's questions should be asked in one round.
+##
+## Missed items always come first - that is the whole point of the adaptive
+## re-ask. `targeted_only` keeps ONLY the missed items, so a re-ask round spends
+## its time on the areas the learner actually failed. With nothing missed yet,
+## the full set comes back in its natural order.
+static func review_order(wrong: Array, total: int, targeted_only := false) -> Array:
+	var order: Array = []
+	for entry in wrong:
+		var index := int(entry)
+		if index >= 0 and index < total and not order.has(index):
+			order.append(index)
+	if targeted_only and not order.is_empty():
+		return order
+	for index in total:
+		if not order.has(index):
+			order.append(index)
+	return order
 
 ## Build tasks are authored in the library and shared by every presentation.
 static func workshop_tasks(skill: String) -> Array:
@@ -231,8 +417,8 @@ static func _module_definition() -> Dictionary:
 		"A DFA is described completely by five pieces, called the 5-tuple (Q, Sigma, delta, q0, F). Nothing else is needed - if you know these five, you know the machine.",
 		[
 			"Q - the finite set of states.",
-			"Sigma - the input alphabet (the symbols the machine may read).",
-			"delta - the transition function: delta(state, symbol) -> state.",
+			"Sigma(Σ) - the input alphabet (the symbols the machine may read).",
+			"delta(δ) - the transition function: delta(state, symbol) -> state.",
 			"q0 - the start state, where the run begins.",
 			"F - the set of accepting (final) states, drawn as double circles.",
 		],
@@ -243,7 +429,7 @@ static func _module_definition() -> Dictionary:
 		"Here is a real machine written out formally. It accepts strings over {a,b} that end with 'a'.",
 		[
 			"Q = {q0, q1}",
-			"Sigma = {a, b}",
+			"Sigma(Σ) = {a, b}",
 			"q0 = q0",
 			"F = {q1}",
 			"delta(q0,a)=q1   delta(q0,b)=q0   delta(q1,a)=q1   delta(q1,b)=q0",
@@ -261,7 +447,7 @@ static func _module_definition() -> Dictionary:
 		"Exam questions usually give one representation and ask for another."
 	))
 	steps.append(_mc("def_parts_1", "Which of the following represents the five components of a finite automaton?",
-		["(Q, Sigma, delta, q0, F)", "(Q, delta, F, Sigma, q)", "(Sigma, q0, F, S, delta)", "(Q, Sigma, S, delta, q1)"],
+		["(Q, Σ, δ, q0, F)", "(Q, delta, F, Sigma, q)", "(Sigma, q0, F, S, delta)", "(Q, Sigma, S, delta, q1)"],
 		0,
 		"A finite automaton is the 5-tuple (Q, Sigma, delta, q0, F): states, alphabet, transition function, start state, accepting states.",
 		"Alphabet comes second, delta third, start state fourth, final states last."))
@@ -468,7 +654,7 @@ static func _module_simulation() -> Dictionary:
 	steps.append(_board(
 		"SIMULATE ON THE WHITEBOARD",
 		"Now it is your turn. Build a machine for the language 'strings over {0,1} that end in 01', then use the simulate box on the board to test strings. Watch the board highlight each step as it consumes one symbol at a time.",
-		{"instruction": "Build a DFA over {0,1} that ACCEPTS strings ending in '01' and REJECTS all others, then simulate '1101' and '00110'.", "accept": ["01", "1101", "00110", "101"], "reject": ["1", "0", "10", "110"]}
+		{"instruction": "Build a DFA over {0,1} that ACCEPTS strings ending in '01' and REJECTS all others, then simulate '1101' and '00110'.", "accept": ["01", "1101", "101"], "reject": ["1", "0", "10", "110", "00110"]}
 	))
 	return _finish_simulation(steps)
 

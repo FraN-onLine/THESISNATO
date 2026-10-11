@@ -26,10 +26,16 @@ const ALGORITHMS := {
 		"how_works": "Each DFA skill is its own small Hidden Markov Model with two HIDDEN states: 'knows' and 'doesn't know'. The learner's answers (right / wrong) are the only VISIBLE states. Every answer runs one step of the forward algorithm:\n  1. TRANSITION — a small learning probability P(T) can flip 'doesn't know -> knows' and a forgetting probability P(F) can flip 'knows -> doesn't know'.\n  2. LIKELIHOOD — the answer is explained by P(slip) when the learner knows and P(guess) when they do not.\n  3. BAYES UPDATE — the posterior P(knows | answer) is computed with Bayes' rule, so a correct answer raises the estimate and a wrong one lowers it.\nThe hidden state is never observed directly - the model can only infer it from answers, which is exactly what a real 'is the user learning?' tracker must do.",
 		"formula": "P(knows_t) = P(knows_{t-1})*(1 - P_forget) + (1 - P(knows_{t-1})) * P_learn\nP(answer=correct) = P(knows_t)*(1 - P_slip) + (1 - P(knows_t))*P_guess\nP(knows_t | answer) = ( P(answer | knows_t) * P(knows_t) ) / P(answer)",
 		"params": [
-			{"symbol": "P(learn)", "name": "Learning rate", "meaning": "Chance a 'doesn't know' hidden state becomes 'knows' after one practice."},
-			{"symbol": "P(forget)", "name": "Forgetting rate", "meaning": "Chance a 'knows' hidden state slips back to 'doesn't know'."},
-			{"symbol": "P(guess)", "name": "Guessing", "value": 0.25, "meaning": "Default chance of a correct answer despite not knowing; configurable per model."},
-			{"symbol": "P(slip)", "name": "Slipping", "meaning": "Chance of a wrong answer despite knowing."},
+			{"symbol": "P(learn)", "name": "Learning rate", "short": "chance a non-knower becomes a knower after one practice",
+			 "meaning": "Chance a 'doesn't know' hidden state becomes 'knows' after one practice."},
+			{"symbol": "P(forget)", "name": "Forgetting rate", "short": "chance a knower slips back to not knowing",
+			 "meaning": "Chance a 'knows' hidden state slips back to 'doesn't know'."},
+			{"symbol": "P(guess)", "name": "Guessing", "value": 0.25, "short": "chance of a correct answer without knowing",
+			 "meaning": "Default chance of a correct answer despite not knowing; configurable per model."},
+			{"symbol": "P(slip)", "name": "Slipping", "short": "chance of a wrong answer while knowing",
+			 "meaning": "Chance of a wrong answer despite knowing."},
+			{"symbol": "Skip", "name": "Skip penalty", "short": "cost of skipping a board task = part of what is still unknown",
+			 "meaning": "Using 'Skip task' removes P(strength) x (1 - mastery) of the skill, so skipping while weak hurts far more than skipping while strong."},
 		],
 		"best_for": "Explainable, per-skill probability estimates that behave smoothly even with very little data (an ideal fit for a 6-skill DFA pretest).",
 		"limit": "Assumes each skill is independent: it cannot learn that building skill also improves the set_builder skill unless observations for both are seen.",
@@ -58,10 +64,16 @@ const ALGORITHMS := {
 		"how_works": "BKT is the classic knowledge-tracing model from intelligent tutoring systems (Corbett & Anderson, 1995). Each skill keeps four parameters:\n  P(L0) — the learner's chance of already knowing the skill before the first practice.\n  P(T)  — the chance the learner LEARNS the skill after one more practice opportunity.\n  P(G)  — the chance of GUESSING a correct answer while still not knowing.\n  P(S)  — the chance of SLIPPING (a careless wrong answer) while actually knowing.\nEvery answer re-weights P(Learned) using Bayes: first apply P(T) (learning opportunity), then scale by the likelihood of the observed answer. Mastery requires repeated evidence — several consecutive updates pushed past the threshold — so it is intentionally conservative and easy to explain in a thesis.",
 		"formula": "P(L_t) = P(L_{t-1})*(1 - P(S)) + (1 - P(L_{t-1})) * P(T)\nP(correct) = P(L_t)*(1 - P(S)) + (1 - P(L_t)) * P(G)\nanswer correct : P(L_t|correct) = P(L_t)*(1 - P(S)) / P(correct)\nanswer wrong   : P(L_t|wrong)   = P(L_t)*P(S) / (1 - P(correct))",
 		"params": [
-			{"symbol": "P(L0)", "name": "Prior knowledge", "meaning": "Initial chance the learner already knows the skill before practice."},
-			{"symbol": "P(T)", "name": "Transition / learning", "meaning": "Chance of acquiring the skill after one practice opportunity."},
-			{"symbol": "P(G)", "name": "Guess", "meaning": "Chance of a correct answer without knowledge."},
-			{"symbol": "P(S)", "name": "Slip", "meaning": "Chance of a wrong answer with knowledge."},
+			{"symbol": "P(L0)", "name": "Prior knowledge", "short": "chance the skill is already known at the start",
+			 "meaning": "Initial chance the learner already knows the skill before practice."},
+			{"symbol": "P(T)", "name": "Transition / learning", "short": "chance of learning it after one practice",
+			 "meaning": "Chance of acquiring the skill after one practice opportunity."},
+			{"symbol": "P(G)", "name": "Guess", "short": "right answer without knowing it",
+			 "meaning": "Chance of a correct answer without knowledge."},
+			{"symbol": "P(S)", "name": "Slip", "short": "wrong answer while knowing it",
+			 "meaning": "Chance of a wrong answer with knowledge."},
+			{"symbol": "Skip", "name": "Skip penalty", "short": "cost of skipping a board task = part of what is still unknown",
+			 "meaning": "Using 'Skip task' removes P(strength) x (1 - mastery) of the skill, so skipping while weak hurts far more than skipping while strong."},
 		],
 		"best_for": "A small, explainable model with only 4 parameters per skill; its parameters are already the language of education research.",
 		"limit": "Parameters are fixed up front (no per-learner fit in this prototype) and it treats guesses/slips as constant per skill.",
@@ -90,9 +102,14 @@ const ALGORITHMS := {
 		"how_works": "KST models the learner knowledge as a SPACE of skill states connected by PREREQUISITE edges: definition -> identification/simulation -> building -> set_builder/list. Every skill carries a mastery probability SEEDED from the pretest, and every answer updates the observed skill with Bayes rule. The KST twist is propagation: mastering a higher skill lifts its prerequisites (downward closure of the knowledge state), and a skill whose prerequisites are all mastered gets a readiness bonus on its learning transition. One knowledge space covers all six DFA skills at once, so the model explains both what the learner knows and what has just come within reach.",
 		"formula": "P(master | answer) via Bayes, with P(answer | master) = 1 - P(slip) and P(answer | not master) = P(guess\nreadiness: if all prerequisites >= 70%, the learning transition gains +0.25\nclosure: P(prerequisite) >= 0.95 * P(mastered child)",
 		"params": [
-			{"symbol": "P(learn)", "name": "Learning rate", "meaning": "How strongly one answer moves a skill toward mastery."},
-			{"symbol": "Readiness", "name": "Fringe bonus", "meaning": "Extra learning strength when every prerequisite is already mastered."},
-			{"symbol": "Closure", "name": "Implication strength", "meaning": "Mastering a skill implies its prerequisites are mastered too."},
+			{"symbol": "P(learn)", "name": "Learning rate", "short": "how hard one answer pushes a skill toward mastery",
+			 "meaning": "How strongly one answer moves a skill toward mastery."},
+			{"symbol": "Readiness", "name": "Fringe bonus", "short": "extra learning when all prerequisites are mastered",
+			 "meaning": "Extra learning strength when every prerequisite is already mastered."},
+			{"symbol": "Closure", "name": "Implication strength", "short": "mastering a skill lifts its prerequisites",
+			 "meaning": "Mastering a skill implies its prerequisites are mastered too."},
+			{"symbol": "Skip", "name": "Skip penalty", "short": "cost of skipping a board task = part of what is still unknown",
+			 "meaning": "Using 'Skip task' removes P(strength) x (1 - mastery) of the skill, so skipping while weak hurts far more than skipping while strong."},
 		],
 		"best_for": "Modelling the DFA curriculum as a STRUCTURE: one correct board build lifts an entire neighbourhood of skills at once, mirroring how automata topics build on each other.",
 		"limit": "Quality depends on the prerequisite lattice being right; if two DFA skills are truly independent, KST propagates evidence that is not really there.",
@@ -136,6 +153,20 @@ static func catalog_limit(algo_type: int) -> String:
 
 static func catalog_params(algo_type: int) -> Array:
 	return catalog_info(algo_type).get("params", [])
+
+## VERY short "SYMBOL = what it means" lines, one per parameter. Used by the
+## parameter block on the Algorithm Select screen; the in-room Stats Board prints
+## its own letter legend (see KnowledgeTracer.PARAM_LEGEND) next to the live
+## numbers. Falls back to the longer `meaning` when a `short` text is missing.
+static func catalog_param_lines(algo_type: int) -> Array[String]:
+	var lines: Array[String] = []
+	for param in catalog_params(algo_type):
+		var symbol := str(param.get("symbol", ""))
+		var text := str(param.get("short", param.get("meaning", "")))
+		if symbol == "" or text == "":
+			continue
+		lines.append("%s = %s" % [symbol, text])
+	return lines
 
 static func catalog_needs_summary(algo_type: int) -> String:
 	return str(catalog_info(algo_type).get("needs_summary", ""))

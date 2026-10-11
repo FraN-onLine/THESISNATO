@@ -45,6 +45,10 @@ func _ready() -> void:
 		_show_intro()
 	if workshop:
 		workshop.evaluated.connect(_on_workshop_evaluated)
+		# A test is a PROOF of learning, so the board must not offer a way past the
+		# build: the Skip option is switched off for the whole test room.
+		if workshop.builder is Control:
+			workshop.builder.call("set_skip_enabled", false)
 		workshop.set_active(false)
 
 func _show_intro() -> void:

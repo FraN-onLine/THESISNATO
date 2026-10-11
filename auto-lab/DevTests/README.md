@@ -25,9 +25,13 @@ $game  = "C:\Autolab\auto-lab"
 
 # 3. adaptive lesson system: library, engine, director, card + maze UI
 & $godot --path $game --headless --script res://DevTests/Lessons/selftest_lessons.gd
+
+# 4. testing grounds room flow: player is never frozen, adaptive re-teach,
+#    post-test mastery gate (instantiates Testing/TestingGrounds.tscn)
+& $godot --path $game --headless --script res://DevTests/selftest_grounds_flow.gd
 ```
 
-All three print `REPORT` / `FAILED` lines and exit with code `1` when anything
+All four print `REPORT` / `FAILED` lines and exit with code `1` when anything
 failed, `0` when the layer is clean.
 
 ## What each file covers
@@ -36,7 +40,8 @@ failed, `0` when the layer is clean.
 |-------------------------------|--------------------------------------------------------------|
 | `validate_scripts.gd`         | Whole project: script compilation + `res://` reference integrity. Missing *media* is reported as `OPTIONAL` because the game degrades gracefully without images/voice clips. |
 | `selftest_builder.gd`         | `Testing/AutomataWorkshop.tscn` laid out at the real billboard size (1800x1100): every control on screen, every tap target >= 44 px, add-node / connect / simulate behaviour. |
-| `Lessons/selftest_lessons.gd` | The adaptive lesson stack in `Testing/Lessons/`: module library completeness, engine scoring + remedy + practice cap + mastery gate, director phase sequencing, checkpoint card and maze panel layout/tap targets, and the voice hook. |
+| `Lessons/selftest_lessons.gd` | The adaptive lesson stack in `Testing/Lessons/`: module library completeness, course projection (numbered steps, separated key points), the review-question pool and re-ask ordering, engine scoring + remedy + practice cap + mastery gate, director phase sequencing, checkpoint card and maze panel layout/tap targets, and the voice hook. |
+| `selftest_grounds_flow.gd` | The `Testing/TestingGrounds.tscn` room controller: no screen may leave the player frozen, the adaptive re-teach loop re-asks exactly the missed questions and stops at its cap, and the post test stays locked until the tracer considers the learner knowledgeable enough. |
 
 ## Adding a new check
 

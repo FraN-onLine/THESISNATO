@@ -98,6 +98,18 @@ func reset() -> void:
 	observation_count = 0
 	prediction_log.clear()
 
+## A skipped task (the learner used the board's Skip option) is NOT an answer, so
+## it never enters the observation history. It is a "give up" signal, and it costs
+## in proportion to how much of the skill is still UNKNOWN:
+##   p_new = p - strength * (1 - p)
+## so skipping a skill the learner has not learnt is heavily punished, while
+## skipping a skill already close to mastered costs almost nothing.
+## Returns the probability that was removed.
+func penalize_skip(strength: float = 0.5) -> float:
+	var before: float = p_learned
+	p_learned = clampf(p_learned - strength * (1.0 - p_learned), 0.001, 0.999)
+	return before - p_learned
+
 ## Get a summary of the model state
 func get_summary() -> Dictionary:
 	return {
@@ -131,7 +143,7 @@ func from_dict(data: Dictionary) -> void:
 	p_learned = data.get("p_learned", 0.3)
 	p_L0 = data.get("p_L0", 0.3)
 	p_T = data.get("p_T", 0.1)
-	p_G = data.get("p_G", 0.2)
+	p_G = data.get("p_G", 0.25)
 	p_S = data.get("p_S", 0.1)
 	observations = data.get("observations", []).duplicate()
 	observation_count = data.get("observation_count", observations.size())

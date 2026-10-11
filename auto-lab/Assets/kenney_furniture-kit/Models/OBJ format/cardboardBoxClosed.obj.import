@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://dkkju60n781ps"
+path="res://.godot/imported/cardboardBoxClosed.obj-2d6ae1aeefed2070cb05da58295aa703.mesh"
+
+[deps]
+
+files=["res://.godot/imported/cardboardBoxClosed.obj-2d6ae1aeefed2070cb05da58295aa703.mesh"]
+
+source_file="res://Assets/kenney_furniture-kit/Models/OBJ format/cardboardBoxClosed.obj"
+dest_files=["res://.godot/imported/cardboardBoxClosed.obj-2d6ae1aeefed2070cb05da58295aa703.mesh", "res://.godot/imported/cardboardBoxClosed.obj-2d6ae1aeefed2070cb05da58295aa703.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -87,6 +87,8 @@ func _process(_delta: float) -> bool:
 		return false
 
 	_check_library()
+	_check_course_projection()
+	_check_review_pool_and_order()
 	_check_engine_perfect_run()
 	_check_remedy_and_practice()
 	_check_mastery_gate()
@@ -242,8 +244,93 @@ func _check_library() -> void:
 	_note(bad.is_empty(), "library_checkpoints_gradable",
 		"checked=%d traces=%d problems=%s" % [_all_checkpoints().size(), traced, str(bad)])
 
-# ===== 2. Engine ===========================================================
+## The projected course must be EASY TO FOLLOW: every step is numbered, every
+## content step carries its parts separately, and every step previews the next.
+func _check_course_projection() -> void:
+	var steps := Library.course_steps()
+	_note(not steps.is_empty(), "course_projection_not_empty", "steps=%d" % steps.size())
 
+	var problems: Array[String] = []
+	var content_count := 0
+	for index in steps.size():
+		var step: Dictionary = steps[index]
+		if int(step.get("step_no", 0)) != index + 1:
+			problems.append("step %d numbered %d" % [index, int(step.get("step_no", 0))])
+		if int(step.get("step_total", 0)) != steps.size():
+			problems.append("step %d total %d" % [index, int(step.get("step_total", 0))])
+		if str(step.get("topic", "")) == "":
+			problems.append("step %d has no topic" % index)
+		# The last step has nothing to preview; every other one must.
+		var expected_next := index + 1 < steps.size()
+		if expected_next != (str(step.get("next_title", "")) != ""):
+			problems.append("step %d next_title" % index)
+		if str(step.get("m", "")) == "content":
+			content_count += 1
+			if str(step.get("lead", "")) == "":
+				problems.append("step %d has no lead" % index)
+			if str(step.get("body", "")) == "":
+				problems.append("step %d has no body" % index)
+			# Key points must be a separate, bulleted list - that is what lets
+			# the panel label them instead of burying them in a paragraph.
+			for point in step.get("points", []):
+				if not str(point).begins_with("•"):
+					problems.append("step %d point is not bulleted" % index)
+	_note(problems.is_empty(), "course_projection_is_stepwise",
+		"steps=%d content=%d problems=%s" % [steps.size(), content_count, str(problems)])
+
+## The adaptive remediation needs a wide pool of "areas" plus a deterministic
+## ask-order: missed items first, and ONLY missed items on a re-ask round.
+func _check_review_pool_and_order() -> void:
+	var pool_problems: Array[String] = []
+	var recap_problems: Array[String] = []
+	var total_review := 0
+	for skill in Library.skills():
+		var review := Library.review_questions(str(skill))
+		total_review += review.size()
+		if review.size() < Library.adaptive_questions(str(skill)).size():
+			pool_problems.append("%s: review pool is narrower than the practice pool" % skill)
+		if review.size() < 3:
+			pool_problems.append("%s: only %d review questions" % [skill, review.size()])
+		if Library.recap(str(skill)) == "":
+			recap_problems.append(str(skill))
+		var seen: Array = []
+		for item in review:
+			var id := str(item.get("id", ""))
+			if id == "" or seen.has(id):
+				pool_problems.append("%s: bad or duplicate id '%s'" % [skill, id])
+			seen.append(id)
+			var options: Array = item.get("options", [])
+			if options.size() < 2:
+				pool_problems.append("%s/%s: too few options" % [skill, id])
+			elif int(item.get("correct", -1)) < 0 or int(item.get("correct", -1)) >= options.size():
+				pool_problems.append("%s/%s: correct index out of range" % [skill, id])
+			if str(item.get("explanation", "")) == "":
+				pool_problems.append("%s/%s: no explanation to re-teach from" % [skill, id])
+	_note(pool_problems.is_empty(), "review_pool_wider_than_practice",
+		"review_questions=%d problems=%s" % [total_review, str(pool_problems)])
+	_note(recap_problems.is_empty(), "recap_available_for_every_skill",
+		"empty_recaps=%s" % str(recap_problems))
+
+	# Ask-order: nothing missed -> natural order; something missed -> that first.
+	var natural := Library.review_order([], 5, false)
+	_note(natural == [0, 1, 2, 3, 4], "review_order_natural_when_nothing_missed", "order=%s" % str(natural))
+
+	var full := Library.review_order([3, 0], 5, false)
+	_note(full == [3, 0, 1, 2, 4], "review_order_puts_missed_first", "order=%s" % str(full))
+
+	var targeted := Library.review_order([3, 0], 5, true)
+	_note(targeted == [3, 0], "review_order_reasks_only_missed", "order=%s" % str(targeted))
+
+	# A re-ask round with nothing recorded must fall back to the full set,
+	# otherwise the learner would be asked nothing at all.
+	var fallback := Library.review_order([], 5, true)
+	_note(fallback == [0, 1, 2, 3, 4], "review_order_reask_falls_back_to_full_set", "order=%s" % str(fallback))
+
+	# Out-of-range / duplicate entries must not corrupt the order.
+	var cleaned := Library.review_order([2, 2, 99, -1], 3, true)
+	_note(cleaned == [2], "review_order_ignores_bad_indices", "order=%s" % str(cleaned))
+
+# ===== 2. Engine ===========================================================
 func _check_engine_perfect_run() -> void:
 	var tracer := FakeTracer.new()
 	tracer.mastered = true

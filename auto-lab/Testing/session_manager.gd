@@ -381,12 +381,38 @@ func record_workshop_attempt(skill: String, correct: bool, stats: Dictionary) ->
 		workshop_attempts[skill] = []
 	workshop_attempts[skill].append({
 		"correct": correct,
+		"skipped": bool(stats.get("skipped", false)),
 		"attempts": stats.get("attempts", 0),
 		"wrong_attempts": stats.get("wrong_attempts", 0),
 		"connections_made": stats.get("connections_made", 0),
 		"time_seconds": stats.get("time_seconds", 0.0),
 	})
 	save_session_data()
+
+## Record a SKIPPED whiteboard task. Skipping is a deliberate "I cannot build this
+## machine" signal: it is NOT an answer (so it never counts as a question), and the
+## active knowledge-tracing model is penalised in proportion to how much of the
+## skill is still UNKNOWN - a heavy drop at low mastery, almost nothing once the
+## skill is nearly mastered (see KnowledgeTracer.apply_skip_penalty).
+## Returns the penalty that was applied: {skill, before, after, drop}.
+func record_workshop_skip(skill: String, stats: Dictionary) -> Dictionary:
+	if skill == "" or not knowledge_tracer.SKILL_ORDER.has(skill):
+		return {}
+	if not workshop_attempts.has(skill):
+		workshop_attempts[skill] = []
+	workshop_attempts[skill].append({
+		"correct": false,
+		"skipped": true,
+		"attempts": stats.get("attempts", 0),
+		"wrong_attempts": stats.get("wrong_attempts", 0),
+		"connections_made": stats.get("connections_made", 0),
+		"time_seconds": stats.get("time_seconds", 0.0),
+	})
+	var penalty: Dictionary = knowledge_tracer.apply_skip_penalty(skill)
+	if gamification != null:
+		gamification.set_mastery(skill, knowledge_tracer.get_mastery_percentage(skill))
+	save_session_data()
+	return penalty
 
 ## Get the recorded whiteboard analytics per skill.
 func get_workshop_attempts() -> Dictionary:

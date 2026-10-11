@@ -13,6 +13,9 @@ var p_slip: float = 0.1       # P(wrong    | knows)            (slipping)
 
 # --- Hidden state ---
 var p_knows: float = 0.3      # P(learner knows the skill)
+## The initial belief, remembered so reset() restores THIS model instead of the
+## hard-coded default (a model seeded by the pretest priors must reset to them).
+var p_knows0: float = 0.3
 
 # --- History ---
 var observations: Array = []     # bool per answer (true = correct)
@@ -22,6 +25,7 @@ var last_visible_output := ""
 
 func _init(initial_p_knows: float = 0.3, learn_rate: float = 0.1, forget_rate: float = 0.05, guess_rate: float = 0.2, slip_rate: float = 0.1) -> void:
 	p_knows = initial_p_knows
+	p_knows0 = initial_p_knows
 	p_learn = learn_rate
 	p_forget = forget_rate
 	p_guess = guess_rate
@@ -102,10 +106,23 @@ func get_state_view() -> Dictionary:
 
 ## Reset the model to initial state
 func reset() -> void:
-	p_knows = 0.3
+	p_knows = p_knows0
 	observations.clear()
 	observation_count = 0
 	prediction_log.clear()
+	last_visible_output = ""
+
+## A skipped task (the learner used the board's Skip option) is NOT an answer, so
+## it never enters the observation history. It is a "give up" signal, and it costs
+## in proportion to how much of the skill is still UNKNOWN:
+##   p_new = p - strength * (1 - p)
+## so skipping a skill the learner has not learnt is heavily punished, while
+## skipping a skill already close to mastered costs almost nothing.
+## Returns the probability that was removed.
+func penalize_skip(strength: float = 0.5) -> float:
+	var before: float = p_knows
+	p_knows = clampf(p_knows - strength * (1.0 - p_knows), 0.001, 0.999)
+	return before - p_knows
 
 ## Get a summary of the model state
 func get_summary() -> Dictionary:
@@ -127,6 +144,7 @@ func get_summary() -> Dictionary:
 func to_dict() -> Dictionary:
 	return {
 		"p_knows": p_knows,
+		"p_knows0": p_knows0,
 		"p_learn": p_learn,
 		"p_forget": p_forget,
 		"p_guess": p_guess,
@@ -140,6 +158,7 @@ func to_dict() -> Dictionary:
 ## Load from dictionary
 func from_dict(data: Dictionary) -> void:
 	p_knows = data.get("p_knows", 0.3)
+	p_knows0 = float(data.get("p_knows0", p_knows))
 	p_learn = data.get("p_learn", 0.1)
 	p_forget = data.get("p_forget", 0.05)
 	p_guess = data.get("p_guess", 0.2)

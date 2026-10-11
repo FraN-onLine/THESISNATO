@@ -5,6 +5,10 @@
 [ext_resource type="PackedScene" uid="uid://bbo6egnrswt2i" path="res://Testing/LessonRoom.tscn" id="3_lesson_room"]
 [ext_resource type="PackedScene" path="res://Testing/AutomataWorkshopBillboard.tscn" id="4_workshop"]
 [ext_resource type="PackedScene" path="res://Testing/StatsBoard.tscn" id="5_stats"]
+[ext_resource type="ArrayMesh" uid="uid://c1r0xh8mlvsap" path="res://Assets/kenney_furniture-kit/Models/OBJ format/desk.obj" id="6_m4xcn"]
+[ext_resource type="ArrayMesh" uid="uid://difpv585fryyn" path="res://Assets/kenney_furniture-kit/Models/OBJ format/plantSmall3.obj" id="7_k3vmt"]
+[ext_resource type="ArrayMesh" uid="uid://btgdu8taayh45" path="res://Assets/kenney_furniture-kit/Models/OBJ format/sideTable.obj" id="8_v1el3"]
+[ext_resource type="ArrayMesh" uid="uid://cn2rfxifl773v" path="res://Assets/kenney_furniture-kit/Models/OBJ format/radio.obj" id="9_oipgj"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_room"]
 sky_top_color = Color(0.05, 0.05, 0.1, 1)
@@ -115,17 +119,6 @@ corner_radius_top_left = 12
 corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stats"]
-content_margin_left = 18.0
-content_margin_top = 16.0
-content_margin_right = 18.0
-content_margin_bottom = 16.0
-bg_color = Color(0.04, 0.05, 0.1, 0.92)
-corner_radius_top_left = 16
-corner_radius_top_right = 16
-corner_radius_bottom_right = 16
-corner_radius_bottom_left = 16
 
 [node name="TestingGrounds" type="Node3D" unique_id=1024305235]
 
@@ -343,3 +336,19 @@ area_size = Vector2(6, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, -4)
 light_energy = 4.0
 omni_range = 25.0
+
+[node name="Desk" type="MeshInstance3D" parent="." unique_id=775497510]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, -4.0873594, 0.012192845, 1.4321568)
+mesh = ExtResource("6_m4xcn")
+
+[node name="PlantSmall3" type="MeshInstance3D" parent="." unique_id=650452]
+transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 7.4645476, -0.27135998, -7.7875814)
+mesh = ExtResource("7_k3vmt")
+
+[node name="SideTable" type="MeshInstance3D" parent="." unique_id=1420461074]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, -6.0092072, 3.5762787e-07, -8.39304)
+mesh = ExtResource("8_v1el3")
+
+[node name="Radio" type="MeshInstance3D" parent="." unique_id=519069735]
+transform = Transform3D(-5.9895463, 0, -0.3540284, 0, 6, 0, 0.3540284, 0, -5.9895463, -7.932526, 1.9302995, -7.7128496)
+mesh = ExtResource("9_oipgj")

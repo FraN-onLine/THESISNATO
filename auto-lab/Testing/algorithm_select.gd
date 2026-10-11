@@ -69,22 +69,18 @@ func _input(event: InputEvent) -> void:
 func _show_selection() -> void:
 	title_label.text = "ALGORITHM SELECT"
 	_clear_options()
-	question_label.text = """Welcome to the DFA Learning Lab!
+	question_label.text = """Choose the algorithm that will watch YOU learn.
 
-Before the Testing Grounds opens, choose the algorithm that will watch YOU learn. Every algorithm follows the same three-phase pipeline:
-
-[1] PRETEST — your pretest answers are the ONLY input / starting elements.
-[2] INTERACTIVE LEARNING — your practice answers are analysed one by one; a topic STOPS as soon as the algorithm decides you have learnt it.
-[3] POST TEST — a fresh, no-feedback test proves (or disproves) the theory.
-
-Pick an algorithm to see exactly how it learns:"""
+The full explanation of each one is in the Algorithm Library - what matters here is only which model drives your session. The letters used by the ACTIVE model are explained on the in-room Stats Board."""
 	question_label.visible = true
 
 	for algo_type in AlgorithmCatalog.catalog_all_types():
 		var info: Dictionary = AlgorithmCatalog.catalog_info(algo_type)
 		var btn := Button.new()
-		btn.text = "%s\n%s\n%s" % [info["name"], info["tagline"], info["needs_summary"]]
-		btn.custom_minimum_size = Vector2(1100, 104)
+		# ONE short line per algorithm. The long description is not needed to make
+		# the choice, and the parameter meanings live on the Stats Board instead.
+		btn.text = "%s\n%s" % [info["name"], info["tagline"]]
+		btn.custom_minimum_size = Vector2(1100, 84)
 		btn.add_theme_font_size_override("font_size", 17)
 		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
@@ -130,10 +126,19 @@ func _show_detail(browsing := false) -> void:
 	_clear_options()
 
 	var text := "SELECTED FOR THIS SESSION: %s\n\n" % selected_name
-	text += "■ HOW IT WORKS\n%s\n\n" % info["how_works"]
-	text += "■ THE MATH\n%s\n\n" % info["formula"]
-	text += "■ ITS LEARNING PIPELINE\n%s\n\n" % AlgorithmCatalog.catalog_pipeline_summary(_viewing)
-	text += "■ WHY USE IT\n%s\n\n■ LIMITATION\n%s" % [info["best_for"], info["limit"]]
+	if browsing:
+		# LIBRARY = the full reference page (how it works + the math + pipeline).
+		text += "■ HOW IT WORKS\n%s\n\n" % info["how_works"]
+		text += "■ THE MATH\n%s\n\n" % info["formula"]
+		text += "■ ITS LEARNING PIPELINE\n%s\n\n" % AlgorithmCatalog.catalog_pipeline_summary(_viewing)
+		text += "■ WHY USE IT\n%s\n\n■ LIMITATION\n%s" % [info["best_for"], info["limit"]]
+	else:
+		# PICKING = only what the choice needs. The long description is not needed
+		# here; the parameter meanings are on the Stats Board in the room.
+		text += "%s\n\n" % info["tagline"]
+		text += "■ PARAMETERS (also printed on the Stats Board)\n%s\n\n" % "\n".join(AlgorithmCatalog.catalog_param_lines(_viewing))
+		text += "■ PIPELINE\nPretest (only input)  →  Learning (stop when mastered)  →  Post test (proof)\n\n"
+		text += "Full how-it-works page: press \"Algorithm Library\" in the list."
 	question_label.text = text
 	question_label.visible = true
 

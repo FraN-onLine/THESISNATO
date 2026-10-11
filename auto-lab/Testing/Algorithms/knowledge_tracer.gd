@@ -13,6 +13,34 @@ const SKILL_ORDER := ["simulation", "identification", "definition", "building", 
 # Algorithm type selection (the one that DRIVES the lesson's mastery decisions)
 enum AlgorithmType { HMM, BKT, KST }
 
+## How much of the still-UNKNOWN probability mass a skipped whiteboard task
+## removes: p_new = p - SKIP_PENALTY * (1 - p). Restated for the stats board:
+## skipping when you already know the skill costs almost nothing, skipping a
+## skill you have not learnt costs a lot.
+const SKIP_PENALTY := 0.5
+
+## Short, learner-facing description of every parameter the ACTIVE algorithm
+## shows on the stats board. Kept next to the models so the board legend and the
+## Algorithm Catalog can never drift apart.
+const PARAM_LEGEND := {
+	AlgorithmType.HMM: [
+		"K = P(knows)   N = P(doesn't know)",
+		"E = P(next answer correct)",
+		"last = the last answer seen",
+	],
+	AlgorithmType.BKT: [
+		"L = P(learnt)   L0 = P(learnt at start)",
+		"T = P(learn per practice)",
+		"G = P(guess right)   S = P(slip while knowing)",
+		"n = answers seen",
+	],
+	AlgorithmType.KST: [
+		"K = P(mastered)",
+		"E = P(next answer correct)",
+		"req = prerequisite skills",
+	],
+}
+
 var algorithm_type: int = AlgorithmType.HMM
 
 # Per-skill models
@@ -23,6 +51,9 @@ var kst_model = null              # single KST model (self-contained)
 # Per-skill question statistics
 var skill_stats: Dictionary = {}  # skill -> {correct: int, total: int}
 var learning_stats: Dictionary = {}  # skill -> {correct: int, total: int}
+## Per-skill count of SKIPPED whiteboard tasks (the board's Skip option). A skip
+## is not an answer, so it is tracked separately from skill_stats.
+var skip_stats: Dictionary = {}  # skill -> int
 
 ## Phase hint ("pretest" / "learning" / "posttest") passed to every model on
 ## update; each model stores it in its own prediction_log.
@@ -137,6 +168,7 @@ func _initialize_models() -> void:
 	bkt_models.clear()
 	skill_stats.clear()
 	learning_stats.clear()
+	skip_stats.clear()
 	phase_counts = {"pretest": 0, "learning": 0, "posttest": 0}
 	
 	for skill in SKILL_ORDER:
@@ -195,6 +227,49 @@ func record_learning_observation(skill: String, correct: bool) -> void:
 	learning_stats[skill]["total"] += 1
 	if correct:
 		learning_stats[skill]["correct"] += 1
+
+## Record a SKIPPED whiteboard task on one skill. Used by the automata board's
+## Skip option: the learner chose not to build the machine, which is a real
+## "I don't know how" signal but NOT an answer, so it never touches the answer
+## statistics or the models' prediction accuracy.
+##
+## The knowledge penalty is deliberately asymmetric: it removes only part of the
+## still-UNKNOWN mass, so a learner who already knows the skill barely loses
+## anything, while skipping a skill they have not learnt is heavily punished.
+## Dispatched to whichever algorithm is ACTIVE, exactly like a normal answer.
+## Returns {"skill", "before", "after", "drop"} (all probabilities in 0..1).
+func apply_skip_penalty(skill: String, strength: float = SKIP_PENALTY) -> Dictionary:
+	var before: float = get_knowledge_probability(skill)
+	match algorithm_type:
+		AlgorithmType.HMM:
+			if hmm_models.has(skill):
+				hmm_models[skill].penalize_skip(strength)
+		AlgorithmType.BKT:
+			if bkt_models.has(skill):
+				bkt_models[skill].penalize_skip(strength)
+		AlgorithmType.KST:
+			if kst_model:
+				kst_model.penalize_skip(skill, strength)
+	skip_stats[skill] = int(skip_stats.get(skill, 0)) + 1
+	var after: float = get_knowledge_probability(skill)
+	return {"skill": skill, "before": before, "after": after, "drop": after - before, "skipped": true}
+
+## How many whiteboard tasks were skipped for one skill.
+func get_skip_count(skill: String) -> int:
+	return int(skip_stats.get(skill, 0))
+
+## Every skipped-task count, keyed by skill (skips happen at most rarely, so an
+## empty dictionary simply means "no skips this session").
+func get_skip_stats() -> Dictionary:
+	return skip_stats.duplicate()
+
+## The short parameter legend the stats board prints under the live numbers, so a
+## reader can tell what K / L / G / S / E / n actually mean for the ACTIVE model.
+func get_param_lines() -> Array[String]:
+	var out: Array[String] = []
+	for line in PARAM_LEGEND.get(algorithm_type, []):
+		out.append(str(line))
+	return out
 
 ## Get the knowledge probability for a skill using the active algorithm
 func get_knowledge_probability(skill: String) -> float:
@@ -342,6 +417,7 @@ func to_dict() -> Dictionary:
 		"skill_stats": skill_stats,
 		"phase_counts": phase_counts,
 			"learning_stats": learning_stats,
+		"skip_stats": skip_stats,
 		"hmm_models": {},
 		"bkt_models": {},
 		"kst_model": null
@@ -364,6 +440,7 @@ func from_dict(data: Dictionary) -> void:
 	skill_stats = data.get("skill_stats", {})
 	phase_counts = data.get("phase_counts", {"pretest": 0, "learning": 0, "posttest": 0})
 	learning_stats = data.get("learning_stats", {})
+	skip_stats = data.get("skip_stats", {})
 	
 	# Ensure all skills have stats
 	for skill in SKILL_ORDER:
@@ -375,13 +452,13 @@ func from_dict(data: Dictionary) -> void:
 	# Load HMM models
 	var hmm_data: Dictionary = data.get("hmm_models", {})
 	for skill in SKILL_ORDER:
-		if hmm_data.has(skill):
+		if hmm_data.has(skill) and hmm_models.has(skill):
 			hmm_models[skill].from_dict(hmm_data[skill])
 	
 	# Load BKT models
 	var bkt_data: Dictionary = data.get("bkt_models", {})
 	for skill in SKILL_ORDER:
-		if bkt_data.has(skill):
+		if bkt_data.has(skill) and bkt_models.has(skill):
 			bkt_models[skill].from_dict(bkt_data[skill])
 	
 	# Load KST model

@@ -158,6 +158,23 @@ func reset() -> void:
 	observation_count = 0
 	prediction_log.clear()
 
+## A skipped task (the learner used the board's Skip option) on ONE skill. A skip
+## is not an answer, so it never enters the observation history; it lowers the
+## skill's mastery by the part of it that is still UNKNOWN:
+##   p_new = p - strength * (1 - p)
+## so skipping a skill the learner has not learnt is heavily punished, while
+## skipping a skill already close to mastered costs almost nothing.
+## The prerequisite closure is NOT re-applied afterwards: it only ever LIFTS
+## prerequisites, which would immediately undo the penalty when a dependant skill
+## (e.g. set_builder) is already high.
+## Returns the probability that was removed.
+func penalize_skip(skill: String, strength: float = 0.5) -> float:
+	if not knowledge_state.has(skill):
+		return 0.0
+	var before: float = knowledge_state[skill]
+	knowledge_state[skill] = clampf(before - strength * (1.0 - before), 0.001, 0.999)
+	return before - knowledge_state[skill]
+
 ## Summary of the model state.
 func get_summary() -> Dictionary:
 	return {

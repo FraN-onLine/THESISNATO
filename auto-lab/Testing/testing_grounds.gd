@@ -4,25 +4,25 @@ extends Node3D
 
 const SessionManager = preload("res://Testing/session_manager.gd")
 const QuestionBank = preload("res://Testing/Data/question_bank.gd")
-const AdaptiveContent = preload("res://Testing/Data/adaptive_content.gd")
 const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd")
 const LessonEngine = preload("res://Testing/Lessons/lesson_engine.gd")
 const LessonLibrary = preload("res://Testing/Lessons/lesson_library.gd")
 
-# How each knowledge-tracing algorithm works — displayed whenever the user picks
-# one, and all three run in parallel so we can compare them for the POC.
+# One SHORT paragraph per algorithm: just enough to know what drives the session.
+# The full formulas, pipelines and parameter tables live in the Algorithm Library
+# (algorithm_catalog.gd) and the parameter meanings are printed on the Stats Board.
 const ALGORITHM_INFO := {
 	0: {
 		"name": "HMM (Hidden Markov Model)",
-		"how": "Each skill is its own HMM with two HIDDEN states: 'knows' and 'doesn't know'. The visible states are the learner's answers (right/wrong). Every answer updates P(knows) with Bayes' rule — a correct answer raises it, a wrong one lowers it, and a small learning/forgetting transition nudges the estimate each step. The driver reads this P(knows) to decide if the skill is mastered."
+		"how": "Each skill is its own HMM with two hidden states: 'knows' and 'doesn't know'. Every answer (right/wrong) updates P(knows) with Bayes' rule, and a small learning/forgetting transition nudges it each step."
 	},
 	1: {
 		"name": "BKT (Bayesian Knowledge Tracing)",
-		"how": "The classic four-parameter model per skill: P(L0) initial chance of knowing, P(T) chance of learning after one practice, P(S) the 'slip' chance of answering wrong despite knowing, P(G) the 'guess' chance of answering right without knowing. Each answer reweights P(learned) with Bayes — mastery requires repeated evidence — and it is intentionally simple and explainable."
+		"how": "Four parameters per skill: P(L0) how much it is known at the start, P(T) the chance of learning from one practice, P(S) 'slip' answering wrong while knowing, P(G) 'guess' answering right without knowing. Each answer reweights P(learned) with Bayes' rule."
 	},
 	2: {
 		"name": "KST (Knowledge Space Tracing)",
-		"how": "KST models knowledge as a SPACE of skill states linked by PREREQUISITE edges (definition -> identification/simulation -> building -> set_builder/list). Per-skill pretest accuracy seeds the starting knowledge state; every answer updates the observed skill with Bayes, then a closure pass lifts prerequisites. Mastering a higher skill lights up the skills it sits on, and a skill whose prerequisites are all mastered learns faster (readiness bonus). One space covers all six DFA skills at once."
+		"how": "Knowledge is a SPACE of skill states linked by prerequisites (definition -> simulation/identification -> building -> set_builder/list). An answer updates the practised skill, then a closure pass lifts its prerequisites, so mastering a skill also credits what it rests on."
 	},
 }
 
@@ -70,7 +70,6 @@ var _challenge_correct: int = 0
 var _challenge_total: int = 0
 var _challenge_answered: bool = false
 var _current_challenge: Dictionary = {}
-var _handholding: bool = false
 
 # Analysis state
 var _analysis_skill_index: int = 0
@@ -108,6 +107,34 @@ var _mastered_skills: Array = []
 # --- Algorithm library browsing ---
 var _library_view: int = -1
 
+# ===== ADAPTIVE REMEDIATION ================================================
+# When the authored content and the practice set run out and the knowledge
+# tracer still does NOT consider the skill learned, the room re-explains the
+# exact areas the learner missed and re-asks ONLY those questions. This repeats
+# until the algorithm says LEARNED (or the caps below are reached, so a learner
+# is never trapped in an endless loop and always reaches the post test).
+
+## Extra explain/re-ask rounds already spent, per skill.
+var _remedy_rounds: Dictionary = {}
+## Indices into LessonLibrary.adaptive_questions(skill) answered WRONG.
+var _wrong_challenges: Dictionary = {}
+## The order this skill's questions will be asked in the current round. It is
+## rebuilt from performance every round, so the missed items come first.
+var _challenge_queue: Array = []
+## Cursor inside _challenge_queue.
+var _challenge_queue_pos := 0
+## How many times the whole weak-skill set has been revisited end to end.
+var _weak_sweeps := 0
+
+## Re-explain/re-ask rounds allowed per skill before the room moves on.
+const MAX_REMEDY_ROUNDS := 3
+## How many of the six skills the tracer must call LEARNED before the post test
+## unlocks. Below this the room keeps teaching the weak topics.
+const MASTERY_GATE_SKILLS := 5
+## How many extra end-to-end sweeps over the weak skills are allowed before the
+## post test unlocks regardless, so the session always terminates.
+const MAX_WEAK_SKILL_SWEEPS := 2
+
 func _ready() -> void:
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
@@ -126,6 +153,7 @@ func _ready() -> void:
 		next_button.pressed.connect(_on_next_pressed)
 	if workshop:
 		workshop.evaluated.connect(_on_workshop_evaluated)
+		workshop.skipped.connect(_on_workshop_skipped)
 		workshop.set_active(false)
 
 	# The SessionBridge owns the single live session shared with the separate
@@ -232,7 +260,7 @@ func _show_algorithm_explanation(algo_type: int) -> void:
 	title_label.text = "ALGORITHM EXPLANATION"
 	_clear_content()
 	var info: Dictionary = ALGORITHM_INFO.get(algo_type, {})
-	question_label.text = "You selected: %s\n\nHow it works:\n%s\n\nNote: all three models (HMM, BKT, KST) run in parallel during this session so we can compare their prediction accuracy on the stats board — the best one will be chosen for the POC. The one you picked just drives the lesson/masternese decisions." % [info.get("name", ""), info.get("how", "")]
+	question_label.text = "You selected: %s\n\nHow it works:\n%s\n\nOnly this algorithm runs during the session, so runs can be compared fairly. Its parameters and live numbers are shown on the in-room Stats Board - the Algorithm Library has the full explanation." % [info.get("name", ""), info.get("how", "")]
 	question_label.visible = true
 	_clear_options()
 
@@ -639,18 +667,23 @@ func _show_analysis() -> void:
 	_clear_content()
 
 	var summary: Dictionary = session.get_analysis_summary()
-	# get_skills_by_weakness() returns ALL 6 skills sorted weakest-first. We keep
-	# that order so adaptive learning COVERS every topic but starts by prioritising
-	# the topics the user was weakest on in the pretest.
-	_analysis_skills = ["simulation", "identification", "definition", "building", "set_builder", "list"]
+	# get_skills_by_weakness() returns ALL 6 skills sorted weakest-first, so the
+	# adaptive phase COVERS every topic but starts with the ones the learner was
+	# actually weakest on in the pretest. Fresh remediation state for this run.
+	_analysis_skills = session.get_skills_by_weakness()
 	_analysis_skill_index = 0
 	_adaptive_review_pass = false
+	_remedy_rounds.clear()
+	_wrong_challenges.clear()
+	_challenge_queue.clear()
+	_challenge_queue_pos = 0
+	_weak_sweeps = 0
 
 	question_label.text = "Based on your pretest results (used to drive knowledge-tracing), here is your analysis:\n\n"
 	question_label.visible = true
 	_clear_options()
 
-	# Build skill summary text
+	# Build skill summary text, already in the order the topics will be taught.
 	var summary_text := ""
 	for skill in _analysis_skills:
 		var data: Dictionary = summary[skill]
@@ -662,7 +695,10 @@ func _show_analysis() -> void:
 			data["mastery_percentage"]
 		]
 
-	question_label.text += summary_text + "\n\nA guided DFA lesson will now teach the whole topic (5-tuple, representations, whiteboard building, simulation, correctness) as ONE course, then adaptively review every topic in the order of your weaknesses.\n\nClick Next to begin the DFA Lesson."
+	var weakest: String = str(_analysis_skills[0]) if not _analysis_skills.is_empty() else "definition"
+	question_label.text += summary_text
+	question_label.text += "\nWe will start with your weakest topic: %s.\n" % QuestionBank.get_skill_name(weakest)
+	question_label.text += "\nA guided DFA lesson will now teach the whole topic (5-tuple, representations, whiteboard building, simulation, correctness) as ONE course, then adaptively review every topic in the order of your weaknesses. If the model decides you have not learned a topic yet, it will re-explain it and ask you the questions you got wrong again.\n\nClick Next to begin the DFA Lesson."
 
 	back_button.visible = true
 	back_button.text = "Back"
@@ -731,6 +767,9 @@ func _close_free_build() -> void:
 		_show_dfa_lesson_step()
 
 func _show_dfa_lesson_step() -> void:
+	# Safety net: NO lesson step may ever leave the player frozen. Every board
+	# step lives in the walkable room, so movement is always restored here.
+	_unfreeze_player()
 	if _lesson_engine == null:
 		_lesson_engine = LessonEngine.new(LessonLibrary.course_steps())
 	if _lesson_engine.finished():
@@ -759,19 +798,53 @@ func _show_dfa_lesson_step() -> void:
 				# Question practice: answer each multiple-choice question to proceed.
 				_show_dfa_practice(step)
 
+## Render one explanatory panel as labelled sections instead of a wall of text:
+## WHERE YOU ARE (topic + step x of y) / WHAT THIS IS (lead) / KEY POINTS /
+## REMEMBER THIS (callout) / UP NEXT. The learner can always answer "where am
+## I, what does this mean, and what comes next?" from a single screen.
 func _show_dfa_content(step: Dictionary) -> void:
 	title_label.text = "DFA LESSON — %s" % step["title"]
 	_clear_content()
 	_enter_learning_room()
-	var body := str(step.get("body", ""))
-	if body.is_empty():
-		body = AdaptiveContent.get_definition(step["skill"])
-	body = "%s\n\n%s" % [step.get("subtitle", ""), body]
-	question_label.text = "Step %s\n\n%s" % [_lesson_engine.progress_text(), body]
+	_unfreeze_player()
+
+	var lead := str(step.get("lead", ""))
+	if lead.is_empty():
+		lead = LessonLibrary.adaptive_text(step["skill"], "definition")
+	var points: Array = step.get("points", [])
+	var callout := str(step.get("callout", ""))
+
+	# Fall back to the engine's own cursor when a step was not projected with
+	# numbers. The fallback is computed up front because Dictionary.get()
+	# evaluates its default argument eagerly, so inlining `_lesson_engine`
+	# there would crash on a null engine.
+	var fallback_no := 1
+	var fallback_total := 1
+	if _lesson_engine != null:
+		fallback_no = _lesson_engine.position + 1
+		fallback_total = _lesson_engine.step_count()
+	var step_no := int(step.get("step_no", fallback_no))
+	var step_total := int(step.get("step_total", fallback_total))
+	var header := "TOPIC %s  ·  STEP %d OF %d" % [
+		str(step.get("topic", QuestionBank.get_skill_name(step["skill"]))), step_no, maxi(step_total, step_no)]
+	var subtitle := str(step.get("subtitle", ""))
+	if subtitle != "":
+		header += "\n" + subtitle
+
+	var text := "%s\n\n%s\n\n%s" % [header, str(step.get("title", "")), lead]
+	if not points.is_empty():
+		text += "\n\nKEY POINTS\n" + "\n".join(points)
+	if callout != "":
+		text += "\n\nREMEMBER THIS\n" + callout
+	var next_title := str(step.get("next_title", ""))
+	if next_title != "":
+		text += "\n\nUP NEXT\n" + next_title
+
+	question_label.text = text
 	question_label.visible = true
 	_clear_options()
 	feedback_label.text = ""
-	progress_label.text = "DFA Lesson  ·  %s" % QuestionBank.get_skill_name(step["skill"])
+	progress_label.text = "DFA Lesson  ·  %s  ·  press Next to continue" % QuestionBank.get_skill_name(step["skill"])
 	back_button.visible = false
 	next_button.visible = true
 	next_button.text = "Next >>"
@@ -836,7 +909,7 @@ func _show_dfa_practice(step: Dictionary) -> void:
 	_dfa_practice_answered = false
 	_clear_content()
 	_enter_learning_room()
-	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+	var challenges: Array = LessonLibrary.adaptive_questions(_dfa_practice_skill)
 	if _dfa_practice_index >= challenges.size():
 		# All questions for this skill are done → close the paired board, continue.
 		_close_paired_board()
@@ -933,7 +1006,7 @@ func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 func _on_dfa_practice_answer(selected_index: int) -> void:
 	if _dfa_practice_answered:
 		return
-	var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+	var challenges: Array = LessonLibrary.adaptive_questions(_dfa_practice_skill)
 	if _dfa_practice_index >= challenges.size():
 		return
 	var current: Dictionary = challenges[_dfa_practice_index]
@@ -964,7 +1037,7 @@ func _handle_dfa_lesson_next() -> void:
 			_advance_lesson_step()
 			_show_dfa_lesson_step()
 		"practice":
-			var challenges: Array = AdaptiveContent.get_challenge_questions(_dfa_practice_skill)
+			var challenges: Array = LessonLibrary.adaptive_questions(_dfa_practice_skill)
 			if _dfa_practice_index >= challenges.size():
 				# All questions answered → next topic.
 				_close_paired_board()
@@ -990,16 +1063,131 @@ func _finish_dfa_lesson() -> void:
 func _start_adaptive_learning() -> void:
 	_enter_learning_room()
 	_analysis_skill_index = 0
-	_learning_skill = _analysis_skills[_analysis_skill_index]
+	_begin_learning_skill(_analysis_skills[_analysis_skill_index])
+
+## Start (or restart) the adaptive sequence for one skill. Every per-skill
+## counter is reset here EXCEPT the remediation bookkeeping, which survives on
+## purpose: `_remedy_rounds` and `_wrong_challenges` are what let the room come
+## back to this skill later and re-ask exactly the items that were missed.
+func _begin_learning_skill(skill: String) -> void:
+	_learning_skill = skill
 	_challenge_index = 0
 	_challenge_correct = 0
 	_challenge_total = 0
 	_challenge_answered = false
-	_handholding = false
 	_workshop_task_index = 0
 	_workshop_phase = false
+	_challenge_queue.clear()
+	_challenge_queue_pos = 0
 	session.start_adaptive_learning(_learning_skill)
 	_show_learning_phase(0)
+
+# ===== ADAPTIVE REMEDIATION ================================================
+
+## The question set for the current skill: every choice checkpoint the module
+## offers (practice pool first, then the lesson's own questions), so a re-ask
+## round has enough "areas" to actually target what the learner got wrong.
+func _challenge_list() -> Array:
+	return LessonLibrary.review_questions(_learning_skill)
+
+## Rebuild the order the questions are asked in, from performance data.
+## `targeted_only` keeps just the items this learner got WRONG, which is what a
+## re-ask round uses; otherwise the whole set is asked, missed items first.
+func _build_challenge_queue(targeted_only := false) -> void:
+	_challenge_queue = LessonLibrary.review_order(_wrong_indices(), _challenge_list().size(), targeted_only)
+	_challenge_queue_pos = 0
+
+## Indices of the current skill's questions answered wrong so far.
+func _wrong_indices() -> Array:
+	var wrong: Array = _wrong_challenges.get(_learning_skill, [])
+	return wrong.duplicate()
+
+## Remember a missed question so the re-ask round can target it.
+func _note_wrong_challenge(index: int) -> void:
+	var wrong: Array = _wrong_challenges.get(_learning_skill, [])
+	if not wrong.has(index):
+		wrong.append(index)
+	_wrong_challenges[_learning_skill] = wrong
+
+## Index into _challenge_list() of the question currently on screen, or -1.
+func _current_challenge_index() -> int:
+	if _challenge_queue_pos < 0 or _challenge_queue_pos >= _challenge_queue.size():
+		return -1
+	return int(_challenge_queue[_challenge_queue_pos])
+
+## True when the tracer considers the current skill learned.
+func _skill_is_learned() -> bool:
+	return session.knowledge_tracer.is_learned(_learning_skill)
+
+## How many of the six skills the tracer calls LEARNED.
+func _mastered_skill_count() -> int:
+	var mastered := 0
+	for skill in session.knowledge_tracer.SKILL_ORDER:
+		if session.knowledge_tracer.is_learned(str(skill)):
+			mastered += 1
+	return mastered
+
+## The post test only unlocks once the algorithm considers the learner
+## knowledgeable enough: at least MASTERY_GATE_SKILLS of the six skills learned.
+func _ready_for_posttest() -> bool:
+	return _mastered_skill_count() >= MASTERY_GATE_SKILLS
+
+## Skills still not learned, weakest first (falls back to the full order).
+func _weak_skills() -> Array:
+	var out: Array = []
+	for skill in session.get_skills_by_weakness():
+		if not session.knowledge_tracer.is_learned(str(skill)):
+			out.append(str(skill))
+	if out.is_empty():
+		out = session.get_skills_by_weakness()
+	return out
+
+## ADAPTIVE RE-EXPLANATION. The content and the practice set for this skill are
+## exhausted, but the algorithm still does not call the skill learned. This
+## panel explains WHY, recaps the idea, and then re-asks only the questions the
+## learner actually got wrong. Rounds repeat until `is_learned` flips or
+## MAX_REMEDY_ROUNDS is reached, so the session always terminates.
+func _show_remedy_round() -> void:
+	var skill := _learning_skill
+	var rounds := int(_remedy_rounds.get(skill, 0)) + 1
+	_remedy_rounds[skill] = rounds
+	var challenges := _challenge_list()
+	var wrong := _wrong_indices()
+	_clear_content()
+	_enter_learning_room()
+	_unfreeze_player()
+
+	var mastery := session.knowledge_tracer.get_mastery_percentage(skill)
+	var text := "STILL LEARNING — %s" % QuestionBank.get_skill_name(skill)
+	text += "\nRound %d of %d  ·  your score this round: %d/%d" % [
+		rounds, MAX_REMEDY_ROUNDS, _challenge_correct, _challenge_total]
+	text += "\n\n%s says this topic is not learned yet (mastery %.0f%%). " % [session.get_algorithm_label(), mastery]
+	if wrong.is_empty():
+		text += "You answered the practice set correctly, so the model simply needs more evidence — here is another pass over the same ground."
+	else:
+		text += "Let us re-explain the parts you missed and ask those again."
+
+	var recap := LessonLibrary.recap(skill)
+	if recap != "":
+		text += "\n\nREMEMBER (the short version)\n" + recap
+
+	if not wrong.is_empty():
+		text += "\n\nWHAT YOU GOT WRONG (%d of %d)" % [wrong.size(), challenges.size()]
+		for index in wrong:
+			if index < 0 or index >= challenges.size():
+				continue
+			var item: Dictionary = challenges[index]
+			text += "\n\nQ%d. %s\n→ %s" % [index + 1, str(item.get("question", "")), str(item.get("explanation", ""))]
+		text += "\n\nUP NEXT\nThe same questions again, starting with the ones you missed."
+
+	question_label.text = text
+	question_label.visible = true
+	_clear_options()
+	feedback_label.text = ""
+	progress_label.text = "Adaptive re-teach  ·  %s  ·  %s" % [QuestionBank.get_skill_name(skill), session.get_algorithm_label()]
+	back_button.visible = false
+	next_button.visible = true
+	next_button.text = "Re-ask the ones I missed >>"
 
 func _show_learning_phase(phase: int) -> void:
 	var skill_name: String = QuestionBank.get_skill_name(_learning_skill)
@@ -1007,19 +1195,19 @@ func _show_learning_phase(phase: int) -> void:
 	match phase:
 		0: # Learning Objective
 			title_label.text = "LEARNING OBJECTIVE - %s" % skill_name
-			_show_learning_content(AdaptiveContent.get_objective(_learning_skill), "Next: Definition")
+			_show_learning_content(LessonLibrary.adaptive_text(_learning_skill, "objective"), "Next: Definition")
 		1: # Definition
 			title_label.text = "DEFINITION - %s" % skill_name
-			_show_learning_content(AdaptiveContent.get_definition(_learning_skill), "Next: Example")
+			_show_learning_content(LessonLibrary.adaptive_text(_learning_skill, "definition"), "Next: Example")
 		2: # Example
 			title_label.text = "EXAMPLE - %s" % skill_name
-			_show_learning_content(AdaptiveContent.get_example(_learning_skill), "Next: Application Example")
+			_show_learning_content(LessonLibrary.adaptive_text(_learning_skill, "example"), "Next: Application Example")
 		3: # Application Example
 			title_label.text = "APPLICATION - %s" % skill_name
-			_show_learning_content(AdaptiveContent.get_application(_learning_skill), "Next: Guided Demonstration")
+			_show_learning_content(LessonLibrary.adaptive_text(_learning_skill, "application"), "Next: Guided Demonstration")
 		4: # Guided Demonstration
 			title_label.text = "GUIDED DEMONSTRATION - %s" % skill_name
-			_show_learning_content(AdaptiveContent.get_guided(_learning_skill), "Next: Interactive Challenge")
+			_show_learning_content(LessonLibrary.adaptive_text(_learning_skill, "guided"), "Next: Interactive Challenge")
 		5: # Interactive Challenge
 			_show_challenge()
 		6: # Feedback
@@ -1053,13 +1241,22 @@ func _show_challenge() -> void:
 		if _workshop_task_index < tasks.size():
 			_open_builder_task(tasks[_workshop_task_index])
 			return
-	var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
-	if _challenge_index >= challenges.size():
+	var challenges := _challenge_list()
+	# The queue is rebuilt from performance each round, so a re-ask round can
+	# start from the items this learner previously got wrong.
+	if _challenge_queue.is_empty():
+		_build_challenge_queue()
+	if _challenge_queue_pos >= _challenge_queue.size():
 		# All challenges done
 		_show_challenge_feedback()
 		return
 
-	_current_challenge = challenges[_challenge_index]
+	var question_index := _current_challenge_index()
+	if question_index < 0 or question_index >= challenges.size():
+		_show_challenge_feedback()
+		return
+	_challenge_index = question_index
+	_current_challenge = challenges[question_index]
 	_challenge_answered = false
 
 	# Pair the whiteboard with this challenge so the learner can build/test while
@@ -1067,7 +1264,7 @@ func _show_challenge() -> void:
 	var paired := _pair_practice_board(_learning_skill, _challenge_index)
 	_adaptive_board_paired = paired
 	var hint := "\n\nUse the whiteboard to build and test the automaton before choosing your answer." if paired else ""
-	question_label.text = "Challenge %d/%d\n\n%s%s" % [_challenge_index + 1, challenges.size(), _current_challenge["question"], hint]
+	question_label.text = "Question %d/%d\n\n%s%s" % [_challenge_queue_pos + 1, _challenge_queue.size(), _current_challenge["question"], hint]
 	question_label.visible = true
 	_clear_options()
 
@@ -1088,7 +1285,7 @@ func _show_challenge() -> void:
 		options_box.add_child(btn)
 
 	feedback_label.text = ""
-	progress_label.text = "Skill: %s | Challenge %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_index + 1, challenges.size(), "  ·  whiteboard active — build/check, then answer" if _adaptive_board_paired else ""]
+	progress_label.text = "Skill: %s | Question %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_queue_pos + 1, _challenge_queue.size(), "  ·  whiteboard active — build/check, then answer" if _adaptive_board_paired else ""]
 	back_button.visible = false
 	next_button.visible = false
 
@@ -1102,6 +1299,10 @@ func _on_challenge_answer(selected_index: int) -> void:
 	var correct: bool = selected_index == _current_challenge["correct"]
 	if correct:
 		_challenge_correct += 1
+	else:
+		# Remember WHICH item was missed so the re-ask round can target it
+		# instead of repeating the whole practice set.
+		_note_wrong_challenge(_current_challenge_index())
 
 	# Record adaptive evidence separately from the pretest baseline.
 	session.knowledge_tracer.record_learning_observation(_learning_skill, correct)
@@ -1111,9 +1312,11 @@ func _on_challenge_answer(selected_index: int) -> void:
 	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 	feedback_label.text += "\n\n" + _current_challenge["explanation"]
 
-	# Show next button
+	# Show next button. The label says whether another question is queued or
+	# whether this was the last one, so the learner always knows what pressing
+	# it does.
 	next_button.visible = true
-	next_button.text = "Next Challenge"
+	next_button.text = "Next Question >>" if _challenge_queue_pos + 1 < _challenge_queue.size() else "See My Result >>"
 	back_button.visible = false
 
 func _open_builder_task(task: Dictionary) -> void:
@@ -1143,6 +1346,10 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		var dfa_skill: String = course_steps[_dfa_lesson_index].get("skill", "building") if _dfa_lesson_index < course_steps.size() else "building"
 		var dfa_stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
 		session.record_workshop_attempt(dfa_skill, correct, dfa_stats)
+		# A board build IS evidence: a verified machine counts as a correct
+		# observation and a failed check as an incorrect one, so the whiteboard
+		# feeds DFA knowledge on SUCCESSFUL AND FAILED attempts alike.
+		session.knowledge_tracer.record_learning_observation(dfa_skill, correct)
 		if not correct:
 			feedback_label.text = message + "\nAdjust the states / transitions and press Check task again until it passes."
 			feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
@@ -1187,8 +1394,11 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 		return
 	if not correct:
+		# Keep the failed build as evidence too: the whiteboard changes DFA
+		# "building" knowledge on failed attempts, not only on successful ones.
+		session.knowledge_tracer.record_learning_observation(_learning_skill, false)
 		# Pause: stay on the board; only a successful build advances the lesson.
-		feedback_label.text = message + "\nTry again — adjust states or transitions on the whiteboard."
+		feedback_label.text = message + "\nTry again — adjust states or transitions on the whiteboard, or press \"Skip task\" to move on."
 		feedback_label.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		return
 	# Correct build → next workshop task or on to the multiple-choice challenges.
@@ -1203,10 +1413,89 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 	_workshop_phase = false
 	_challenge_answered = false
 	_challenge_index = 0
+	# The builder phase runs before any question, so the ask-order is rebuilt
+	# from this learner's performance on the next _show_challenge().
+	_challenge_queue.clear()
+	_challenge_queue_pos = 0
 	_clear_content()
 	workshop.set_active(false)
 	_set_player_paused(false)
 	_show_challenge()
+
+## The learner pressed "Skip task" on the whiteboard.
+##
+## A skip costs KNOWLEDGE, not just time: the ACTIVE model is penalised by the
+## part of the skill that is still unknown, so a skip at low mastery is a heavy
+## drop while a skip at high mastery barely moves the needle. The flow then
+## continues exactly as if the task had been verified, so a learner can never be
+## trapped on a build they cannot finish.
+##
+## The branches below MIRROR the success path of _on_workshop_evaluated(): the
+## only differences are (a) the skip penalty instead of an observation and
+## (b) the board stays open for a paired multiple-choice challenge.
+func _on_workshop_skipped(_message: String) -> void:
+	if workshop == null:
+		return
+	var stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
+	# --- DFA lesson whiteboard phase ---
+	if _in_dfa_lesson:
+		var course_steps := LessonLibrary.course_steps()
+		var dfa_skill: String = course_steps[_dfa_lesson_index].get("skill", "building") if _dfa_lesson_index < course_steps.size() else "building"
+		_show_skip_feedback(dfa_skill, session.record_workshop_skip(dfa_skill, stats))
+		if _dfa_practice_board_active:
+			# Board paired with a practice question: the answer still advances.
+			return
+		if _dfa_board_practice_active:
+			var bp_tasks: Array = LessonLibrary.workshop_tasks(_dfa_board_practice_skill)
+			_dfa_board_practice_index += 1
+			if _dfa_board_practice_index < bp_tasks.size():
+				_open_dfa_board_practice(_dfa_board_practice_skill, bp_tasks[_dfa_board_practice_index])
+				return
+			_dfa_board_practice_active = false
+			_clear_content()
+			workshop.set_active(false)
+			_set_player_paused(false)
+			_advance_lesson_step()
+			_show_dfa_lesson_step()
+			return
+		_advance_lesson_step()
+		_clear_content()
+		workshop.set_active(false)
+		_set_player_paused(false)
+		_show_dfa_lesson_step()
+		return
+	# --- Adaptive skill builder phase ---
+	if _challenge_answered:
+		return
+	_show_skip_feedback(_learning_skill, session.record_workshop_skip(_learning_skill, stats))
+	if _adaptive_board_paired:
+		# Board paired with an adaptive challenge: that answer drives progress.
+		return
+	_workshop_task_index += 1
+	var tasks: Array = LessonLibrary.workshop_tasks(_learning_skill)
+	if _workshop_task_index < tasks.size():
+		_open_builder_task(tasks[_workshop_task_index])
+		return
+	_workshop_phase = false
+	_challenge_answered = false
+	_challenge_index = 0
+	_challenge_queue.clear()
+	_challenge_queue_pos = 0
+	_clear_content()
+	workshop.set_active(false)
+	_set_player_paused(false)
+	_show_challenge()
+
+## Report a skip in plain numbers so the learner sees what giving up cost.
+func _show_skip_feedback(skill: String, penalty: Dictionary) -> void:
+	if penalty.is_empty():
+		return
+	var before := float(penalty.get("before", 0.0)) * 100.0
+	var after := float(penalty.get("after", 0.0)) * 100.0
+	feedback_label.text = "Skipped.\n%s knowledge: %.0f%% -> %.0f%%  (a skip costs more the less you already knew)" % [
+		QuestionBank.get_skill_name(skill), before, after]
+	feedback_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42, 1))
+
 
 func _show_challenge_feedback() -> void:
 	title_label.text = "CHALLENGE FEEDBACK - %s" % QuestionBank.get_skill_name(_learning_skill)
@@ -1241,13 +1530,15 @@ func _show_learning_end() -> void:
 	_clear_content()
 
 	var knowledge: float = session.knowledge_tracer.get_mastery_percentage(_learning_skill)
-	var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
+	var learned: bool = _skill_is_learned()
 
 	question_label.text = "You have completed the learning activity for %s.\n\nCurrent knowledge level: %.1f%%\n\n%s" % [
 		QuestionBank.get_skill_name(_learning_skill),
 		knowledge,
-		"Excellent! You have mastered this skill." if learned else "You have improved, but may need more practice."
+		"Excellent! You have mastered this skill." if learned else "You have improved, but the model does not consider this topic learned yet."
 	]
+	if not learned:
+		question_label.text += "\nIt will be queued again in the extra review pass below."
 	question_label.visible = true
 	_clear_options()
 
@@ -1266,15 +1557,42 @@ func _show_learning_end() -> void:
 		_analysis_skill_index = 0
 		question_label.text += "\n\nThe ordered DFA lesson is complete. Now adaptive review will revisit topics in pretest weakness order."
 		next_button.text = "Start Adaptive Review"
+	elif not _ready_for_posttest() and _weak_sweeps < MAX_WEAK_SKILL_SWEEPS:
+		# The post test stays LOCKED until the algorithm considers the learner
+		# knowledgeable enough. Below the gate, go back to the skills that are
+		# still unlearned (weakest first) for another full pass - including their
+		# accumulated re-ask history, so the missed items come back around.
+		_weak_sweeps += 1
+		var weak := _weak_skills()
+		_analysis_skills = weak
+		_analysis_skill_index = 0
+		question_label.text += "\n\n%s still needs work on %d of 6 topics (mastered %d, need %d). Extra review pass %d of %d: weakest first." % [
+			session.get_algorithm_label(), weak.size(), _mastered_skill_count(), MASTERY_GATE_SKILLS,
+			_weak_sweeps, MAX_WEAK_SKILL_SWEEPS]
+		question_label.text += "\nWeaker topics: %s" % ", ".join(_skill_names(weak))
+		next_button.text = "Review My Weak Topics >>"
 	else:
-		question_label.text += "\n\nAll six topics and the adaptive review have now been covered."
+		# Gate passed (or the sweeps are spent): the learner knows enough, so the
+		# post test unlocks. The report below says honestly what the model thinks.
+		var gate_note := "%s considers you knowledgeable enough: %d of 6 topics learned." % [
+			session.get_algorithm_label(), _mastered_skill_count()]
+		if not _ready_for_posttest():
+			gate_note = "Review passes are complete. Going to the post test even though only %d of 6 topics are at the mastery threshold." % _mastered_skill_count()
+		question_label.text += "\n\nAll six topics and the adaptive review have now been covered.\n" + gate_note
 		next_button.text = "Proceed to Post Test"
 
 	feedback_label.text = ""
-	progress_label.text = "Adaptive Learning Progress"
+	progress_label.text = "Adaptive Learning Progress  ·  %d / %d topics learned" % [_mastered_skill_count(), MASTERY_GATE_SKILLS]
 	back_button.visible = true
 	back_button.text = "Back"
 	next_button.visible = true
+
+## Display names for a list of skill ids (used by the weak-topic report).
+func _skill_names(skills: Array) -> Array[String]:
+	var out: Array[String] = []
+	for skill in skills:
+		out.append(QuestionBank.get_skill_name(str(skill)))
+	return out
 
 func _on_learning_next() -> void:
 	var phase: int = session.get_learning_phase()
@@ -1283,31 +1601,39 @@ func _on_learning_next() -> void:
 		0, 1, 2, 3, 4:
 			session.advance_learning_phase()
 			_show_learning_phase(phase + 1)
-		5: # Challenge phase - next challenge or feedback
-			var challenges: Array = AdaptiveContent.get_challenge_questions(_learning_skill)
-			_challenge_index += 1
-			if _challenge_index < challenges.size():
+		5: # Challenge phase - next question in this round's order, then feedback
+			_challenge_queue_pos += 1
+			if _challenge_queue_pos < _challenge_queue.size():
 				_show_challenge()
 			else:
 				session.advance_learning_phase()
 				_show_learning_phase(6)
-		6: # Feedback - check if learned, if not, handhold
-			var learned: bool = session.knowledge_tracer.is_learned(_learning_skill)
-			if not learned:
-				# Handhold: go back to definition and example
-				_handholding = true
-				_challenge_index = 0
-				_challenge_correct = 0
-				_challenge_total = 0
-				_challenge_answered = false
-				session.learning_phase = 1
-				_show_learning_phase(1)
-			else:
+		6: # Round over - the algorithm decides: learned, or re-explain + re-ask
+			if _skill_is_learned():
 				session.advance_learning_phase()
 				_show_learning_phase(7)
-		7: # End - move to next skill or post test
-			# This is handled by _on_next_pressed
+			elif int(_remedy_rounds.get(_learning_skill, 0)) < MAX_REMEDY_ROUNDS:
+				# Not learned yet: re-explain the missed areas, then re-ask only those
+				# questions. This is the adaptive loop the learner keeps getting
+				# better at until the tracer says LEARNED.
+				session.learning_phase = 8
+				_show_remedy_round()
+			else:
+				# Rounds spent: report honestly and move on. The end-of-session
+				# mastery gate still pulls this skill back into the weak-topic pass.
+				session.advance_learning_phase()
+				_show_learning_phase(7)
+		7: # End - the Next button text routes to the next skill / post test
 			pass
+		8: # Remediation -> re-ask ONLY the questions that were answered wrong
+			_build_challenge_queue(true)
+			_challenge_correct = 0
+			_challenge_total = 0
+			session.learning_phase = 5
+			_show_challenge()
+		_:
+			session.advance_learning_phase()
+			_show_learning_phase(mini(session.get_learning_phase() + 1, 7))
 
 # ===== POST TEST =====
 
@@ -1409,13 +1735,16 @@ func _show_results() -> void:
 			var wrong_tries := 0
 			var conns := 0
 			var time_s := 0.0
+			var skipped := 0
 			for r in records3:
 				wrong_tries += r.get("wrong_attempts", 0)
 				conns += r.get("connections_made", 0)
 				time_s += float(r.get("time_seconds", 0.0))
-				if r.get("correct", false):
+				if r.get("skipped", false):
+					skipped += 1
+				elif r.get("correct", false):
 					ok_count += 1
-			text += "  %s: %d builds passed, %d wrong checks, %d connection edits, %.0fs on task\n" % [QuestionBank.get_skill_name(skill3), ok_count, wrong_tries, conns, time_s]
+			text += "  %s: %d builds passed, %d skipped, %d wrong checks, %d connection edits, %.0fs on task\n" % [QuestionBank.get_skill_name(skill3), ok_count, skipped, wrong_tries, conns, time_s]
 
 	question_label.text = text
 	question_label.visible = true
@@ -1450,19 +1779,13 @@ func _on_next_pressed() -> void:
 		SessionManager.SessionState.ADAPTIVE_LEARNING:
 			if next_button.text == "Proceed to Post Test":
 				_start_posttest()
-			elif next_button.text == "Learn Next Skill" or next_button.text == "Next Topic":
-				# Start learning the next weak skill
-				_learning_skill = _analysis_skills[_analysis_skill_index]
-				_challenge_index = 0
-				_challenge_correct = 0
-				_challenge_total = 0
-				_challenge_answered = false
-				_handholding = false
-				_workshop_task_index = 0
-				_workshop_phase = false
-				session.start_adaptive_learning(_learning_skill)
-				_enter_learning_room()
-				_show_learning_phase(0)
+			elif next_button.text == "Learn Next Skill" or next_button.text == "Next Topic" \
+					or next_button.text == "Start Adaptive Review" or next_button.text == "Review My Weak Topics >>":
+				# Begin the next skill in the (weakness-ordered) plan. The
+				# remediation bookkeeping is deliberately NOT reset, so a skill
+				# revisited in a later weak-topic pass still remembers which
+				# questions this learner got wrong.
+				_begin_learning_skill(_analysis_skills[_analysis_skill_index])
 			else:
 				_on_learning_next()
 		SessionManager.SessionState.COMPLETE:
@@ -1511,11 +1834,26 @@ func _enter_test_panel() -> void:
 		player.set_physics_process(false)
 		player.set_process(false)
 
-func _set_player_paused(paused: bool) -> void:
+## Learning happens in a WALKABLE room: the lesson billboard and the automata
+## whiteboard are both 3D boards standing in the room, so the player must stay
+## able to move, look around and walk up to whichever board they are using.
+##
+## BUG THIS REPLACES: board-only steps used to call `_set_player_paused(true)`
+## and hide both Next and Back. That stranded the learner on a frozen avatar
+## with no way forward - most visibly on the "THE TRAP (DEAD) STATE" panel of
+## the DFA-building topic, whose practice step is a whiteboard build: the room
+## literally parked the player in a dead state. The learning room now always
+## keeps the player unfrozen; the argument is kept so the call sites still read
+## correctly and so `_enter_test_panel` can keep its own full freeze.
+func _set_player_paused(_paused: bool) -> void:
+	_unfreeze_player()
+
+## Restore movement + look input on the player body (desktop WASD and VR alike).
+func _unfreeze_player() -> void:
 	var player := get_node_or_null("../CharacterBody3D")
 	if player:
-		player.set_physics_process(not paused)
-		player.set_process(not paused)
+		player.set_physics_process(true)
+		player.set_process(true)
 
 func _create_button_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -1667,7 +2005,9 @@ func _update_stats_board(phase: String, _answered: int, _correct: int, _acc: flo
 	if stats_board == null or session == null:
 		return
 	# ONE ACTIVE ALGORITHM only: the board shows that model's probabilities /
-	# knowledge per skill (HMM hidden beliefs, BKT 4 params, KST space).
+	# knowledge per skill (HMM hidden beliefs, BKT 4 params, KST space), plus a
+	# one-line-each description of every parameter on show, because the letters
+	# (K / L / L0 / T / G / S / E / n) mean nothing on their own.
 	var tracer = session.knowledge_tracer
 	if tracer == null:
 		return
@@ -1675,6 +2015,8 @@ func _update_stats_board(phase: String, _answered: int, _correct: int, _acc: flo
 		"algorithm": tracer.get_algorithm_callout(),
 		"phase": phase,
 		"lines": tracer.get_active_stats_lines(),
+		"params": tracer.get_param_lines(),
+		"skips": tracer.get_skip_stats(),
 	}
 	if stats_board.has_method("set_active_stats"):
 		stats_board.call("set_active_stats", data)

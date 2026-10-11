@@ -107,14 +107,14 @@ const QUESTIONS := [
 	 "options": ["String X of {0,1} such that the length of X is less than 3", "String X of {0,1} such that the length of X is exactly 2", "String X of {0,1} such that X consists of only 0 and 1", "String X of {0,1} such that X starts or ends with 0"],
 	 "correct": 2,
 	 "explanation": "L1 lists every string over {0,1}; the rule 'X consists of only 0 and 1' describes exactly that set."},
-	{"id": 14, "skills": ["list", "building"],
+	{"id": 14, "skills": ["list", "building"], "type": "image", "image": "res://Images/dfa/q14.png",
 	 "question": "What should the transition x be for this language L1 to be true? L1 = {1, 01, 001, 0001, 00001, ...}",
 	 "options": ["1", "0", "epsilon", "01"], "correct": 0,
 	 "explanation": "Every string in the list ends with a single 1 preceded by zero or more 0s, so the accepting transition consumes 1."},
 	{"id": 15, "skills": ["building", "simulation"], "type": "image", "image": "res://Images/dfa/q15.png",
 	 "question": "In this DFA, what are the transition symbols for x, y, z to describe the language that ends with 001?",
-	 "options": ["0, 1, 1", "0, 0, 1", "1, 1, 1", "1, 0, 1"], "correct": 0,
-	 "explanation": "Reading the arrows on the path that ends in the accepting state gives x=0, y=1, z=1."},
+	 "options": ["0, 1, 1", "0, 0, 1", "1, 1, 1", "1, 0, 1"], "correct": 2,
+	 "explanation": "Reading the arrows on the path that ends in the accepting state gives x=1, y=1, z=1."},
 ]
 ## POST TEST = the same 15 pretest items PLUS these 5 hands-on board builds,
 ## appended by start_posttest().

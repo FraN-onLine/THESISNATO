@@ -15,6 +15,9 @@ extends Node3D
 ## place to fix pointer behaviour for every board in the project.
 
 signal evaluated(correct: bool, message: String)
+## Forwarded from the builder: the learner pressed "Skip task" on the board. The
+## room applies the knowledge penalty and moves the lesson on.
+signal skipped(message: String)
 
 const PanelSurface = preload("res://Testing/Lessons/panel_surface.gd")
 
@@ -45,6 +48,7 @@ func _ready() -> void:
 	# STATIC board: it is fixed on its stand and never turns to face the player.
 	PanelSurface.make_flat(sprite)
 	builder.evaluated.connect(_on_builder_evaluated)
+	builder.skipped.connect(_on_builder_skipped)
 	_surface.setup(self, sprite, viewport)
 	_surface.keyboard_filter = _forward_keyboard
 	_surface.pointer_lost = _on_pointer_lost
@@ -53,6 +57,10 @@ func _ready() -> void:
 func _on_builder_evaluated(correct: bool, message: String) -> void:
 	evaluated.emit(correct, message)
 	builder.set_meta("last_evaluation", {"correct": correct, "message": message})
+
+func _on_builder_skipped(message: String) -> void:
+	skipped.emit(message)
+	builder.set_meta("last_skip", message)
 
 func _input(event: InputEvent) -> void:
 	_surface.handle_input(event)

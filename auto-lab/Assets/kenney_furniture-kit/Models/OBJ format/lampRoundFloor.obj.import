@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://buf24htxljmn7"
+path="res://.godot/imported/lampRoundFloor.obj-72c789294b8c98cd5534eeda1f14e62a.mesh"
+
+[deps]
+
+files=["res://.godot/imported/lampRoundFloor.obj-72c789294b8c98cd5534eeda1f14e62a.mesh"]
+
+source_file="res://Assets/kenney_furniture-kit/Models/OBJ format/lampRoundFloor.obj"
+dest_files=["res://.godot/imported/lampRoundFloor.obj-72c789294b8c98cd5534eeda1f14e62a.mesh", "res://.godot/imported/lampRoundFloor.obj-72c789294b8c98cd5534eeda1f14e62a.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

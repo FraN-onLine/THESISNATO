@@ -14,8 +14,27 @@ var session = null
 ## Which test the TestRoom should run: "pretest" or "posttest".
 var test_mode := ""
 
+## Dev / privacy toggle (set from the Options popup on the main menu).
+## When true, the Testing Grounds skips the Profile Setup screen entirely
+## (no name / age / gender collection, nothing written to user://profiles)
+## so the flow becomes: Algorithm Select -> Pretest.
+## Default is TRUE for development so you don't have to type a profile on
+## every run; flip it back on in Options when you need real data collection.
+var skip_profile_collection := true
+
 ## Reserved for future return-routing (kept for symmetric API).
 var pending_return := ""
+
+## Dev / Options menu flags (toggled from the main-menu Settings popup).
+## When `skip_profile_collection` is true the Testing Grounds bypasses the
+## PROFILE SETUP screen entirely (no name / age / gender keypads, nothing
+## written to user://profiles) and flows straight from algorithm select to
+## the pretest intro. Temporary dev switch so playtests don't need PII.
+var skip_profile_collection := false
+
+## Verbose per-skill detail on the in-room Stats Board (K/E/n numbers).
+## Turn off in Options for a minimal %-only board.
+var verbose_board := true
 
 func get_session():
 	if session == null:
