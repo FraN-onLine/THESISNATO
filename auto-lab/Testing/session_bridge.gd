@@ -30,7 +30,6 @@ var pending_return := ""
 ## PROFILE SETUP screen entirely (no name / age / gender keypads, nothing
 ## written to user://profiles) and flows straight from algorithm select to
 ## the pretest intro. Temporary dev switch so playtests don't need PII.
-var skip_profile_collection := false
 
 ## Verbose per-skill detail on the in-room Stats Board (K/E/n numbers).
 ## Turn off in Options for a minimal %-only board.

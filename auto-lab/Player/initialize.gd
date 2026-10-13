@@ -10,20 +10,20 @@ extends Node
 var xr_interface: XRInterface
 
 func _ready() -> void:
-	# Find the OpenXR interface (may be null if the module is unavailable).
+	if not InputMode.mode_changed.is_connected(_apply_xr_viewport):
+		InputMode.mode_changed.connect(_apply_xr_viewport)
+	_apply_xr_viewport(InputMode.is_vr())
+
+func _apply_xr_viewport(_is_vr: bool = InputMode.is_vr()) -> void:
 	xr_interface = XRServer.find_interface("OpenXR")
 	if xr_interface == null:
-		# No OpenXR module loaded → definitely desktop mode.
+		get_viewport().use_xr = false
 		return
-
-	# Raise the interface now if InputMode wants VR but it isn't initialized yet
-	# (InputMode only marks VR mode when a headset was detected).
-	if InputMode.is_vr() and not xr_interface.is_initialized():
-		xr_interface.initialize()
-
-	# Only hand the viewport to XR when VR mode is active AND the interface is
-	# actually running. Otherwise the normal Camera3D drives the view.
-	if InputMode.is_vr() and xr_interface.is_initialized():
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-		get_viewport().use_xr = true
-		
+	if InputMode.is_vr():
+		if not xr_interface.is_initialized():
+			xr_interface.initialize()
+		if xr_interface.is_initialized():
+			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+			get_viewport().use_xr = true
+			return
+	get_viewport().use_xr = false

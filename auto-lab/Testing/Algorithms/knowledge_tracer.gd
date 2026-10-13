@@ -24,7 +24,8 @@ const SKIP_PENALTY := 0.5
 ## Algorithm Catalog can never drift apart.
 const PARAM_LEGEND := {
 	AlgorithmType.HMM: [
-		"K = P(knows)   N = P(doesn't know)",
+		"B = P(Beginner)   D = P(Developing)   M = P(Mastered)",
+		"[STATE] = inferred mastery state (Beginner / Developing / Mastered)",
 		"E = P(next answer correct)",
 		"last = the last answer seen",
 	],
@@ -103,9 +104,14 @@ func get_active_stats_lines() -> Array[String]:
 					continue
 				var v: Dictionary = m.get_state_view()
 				var hs: Dictionary = v.get("hidden_states", {})
-				out.append("%s | K %.0f%% | N %.0f%% | E %.0f%% | last %s" % [
-					skill, float(hs.get("knows", 0.0)) * 100.0,
-					float(hs.get("does_not_know", 0.0)) * 100.0,
+				var st: Dictionary = v.get("state", {})
+				# head carries the mastery % (the board draws its bar from it) and
+				# the inferred STATE; tail carries the raw 3-state beliefs + accuracy.
+				out.append("%s [%s] %.0f%% | B %.0f%% D %.0f%% M %.0f%% | E %.0f%% | last %s" % [
+					skill, str(st.get("label", "-")), float(m.get_mastery_percentage()),
+					float(hs.get("beginner", 0.0)) * 100.0,
+					float(hs.get("developing", 0.0)) * 100.0,
+					float(hs.get("mastered", 0.0)) * 100.0,
 					float(v.get("expected_accuracy", 0.0)) * 100.0,
 					str(v.get("visible_output", "-"))])
 		AlgorithmType.BKT:

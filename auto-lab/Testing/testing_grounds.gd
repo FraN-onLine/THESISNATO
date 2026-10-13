@@ -8,23 +8,10 @@ const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd"
 const LessonEngine = preload("res://Testing/Lessons/lesson_engine.gd")
 const LessonLibrary = preload("res://Testing/Lessons/lesson_library.gd")
 
-# One SHORT paragraph per algorithm: just enough to know what drives the session.
-# The full formulas, pipelines and parameter tables live in the Algorithm Library
-# (algorithm_catalog.gd) and the parameter meanings are printed on the Stats Board.
-const ALGORITHM_INFO := {
-	0: {
-		"name": "HMM (Hidden Markov Model)",
-		"how": "Each skill is its own HMM with two hidden states: 'knows' and 'doesn't know'. Every answer (right/wrong) updates P(knows) with Bayes' rule, and a small learning/forgetting transition nudges it each step."
-	},
-	1: {
-		"name": "BKT (Bayesian Knowledge Tracing)",
-		"how": "Four parameters per skill: P(L0) how much it is known at the start, P(T) the chance of learning from one practice, P(S) 'slip' answering wrong while knowing, P(G) 'guess' answering right without knowing. Each answer reweights P(learned) with Bayes' rule."
-	},
-	2: {
-		"name": "KST (Knowledge Space Tracing)",
-		"how": "Knowledge is a SPACE of skill states linked by prerequisites (definition -> simulation/identification -> building -> set_builder/list). An answer updates the practised skill, then a closure pass lifts its prerequisites, so mastering a skill also credits what it rests on."
-	},
-}
+# Every algorithm description now lives in ONE place: AlgorithmCatalog
+# (Testing/Algorithms/algorithm_catalog.gd). The briefing, the selection buttons
+# and the confirm panel all read catalog_briefing()/catalog_tagline(), so the
+# three can never drift apart.
 
 # UI references
 @onready var viewport: SubViewport = $SubViewport
@@ -136,6 +123,12 @@ const MASTERY_GATE_SKILLS := 5
 const MAX_WEAK_SKILL_SWEEPS := 2
 
 func _ready() -> void:
+	# Persistent screen-overlay phase progress HUD (Pretest -> Learning ->
+	# Adaptive -> Post Test). Added first so it survives the early returns below.
+	add_child(load("res://Testing/phase_hud.gd").new())
+	# Adaptive-learning stopwatch overlay: counts from the first skill taught
+	# until the algorithm declares mastery (Adaptive Learning Completion Time).
+	add_child(load("res://Testing/Lessons/counting_timer_overlay.gd").new())
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
@@ -166,16 +159,12 @@ func _ready() -> void:
 		_begin_dfa_lesson()
 		return
 
-	# The active algorithm is chosen on the pre-Grounds Algorithm Select screen
-	# (HMM / BKT / KST). If we arrived without a choice, send the learner there —
-	# the Grounds are locked until an algorithm is picked.
-	if session.selected_algorithm < 0:
-		# Scene swaps are not allowed while the parent is still busy adding its
-		# children during _ready() (Godot raises "busy adding/removing children").
-		# Deferring the change lets the current frame finish first.
-		get_tree().change_scene_to_file.call_deferred("res://Testing/AlgorithmSelect.tscn")
-		return
-	session.set_algorithm_type(session.selected_algorithm)
+	# The algorithm is chosen INSIDE the Grounds now: the learner is briefed on
+	# how each algorithm learns FIRST, then picks one. A fresh arrival
+	# (selected_algorithm < 0) simply starts at the briefing - it no longer
+	# bounces out to a separate Algorithm Select scene.
+	if session.selected_algorithm >= 0:
+		session.set_algorithm_type(session.selected_algorithm)
 	gamification_sync()
 
 	# If we just came back from the Pretest room (Analysis) or the Post-test room
@@ -189,7 +178,7 @@ func _ready() -> void:
 			return
 
 	_enter_test_panel()
-	_show_main_menu()
+	_show_algorithm_briefing()
 
 ## Refresh the in-scene gamification/stats readout from the shared session.
 ## The gamification tracker (XP, streaks, badges) lives on the session object
@@ -213,33 +202,19 @@ func _input(event: InputEvent) -> void:
 
 # ===== UI NAVIGATION =====
 
-func _show_main_menu() -> void:
-	title_label.text = "TESTING GROUNDS"
-	_clear_content()
+var _menu_stage := "briefing"  # "briefing" | "detail" | "select" | "explain"
 
-	question_label.text = "Welcome to the DFA Testing Grounds!\n\nThis adaptive system walks you through:\n1. Pretest (covers all 6 DFA skill areas)\n2. Knowledge Analysis\n3. DFA Lesson (taught as ONE course, whiteboard + practice)\n4. Adaptive Review (weakest topics first)\n5. Post Test\n\nSelect an algorithm to begin:"
+func _show_algorithm_briefing() -> void:
+	_menu_stage = "briefing"
+	title_label.text = "HOW EACH ALGORITHM LEARNS"
+	_clear_content()
+	question_label.text = "Welcome to the DFA Testing Grounds.\n\nThis adaptive system walks you through:\n1. Pretest (covers all 6 DFA skill areas)\n2. Knowledge Analysis\n3. DFA Lesson (one course, whiteboard + practice)\n4. Adaptive Review (weakest topics first)\n5. Post Test\n\nBefore you begin, read HOW each knowledge-tracing algorithm learns. Only ONE runs during your session, so runs can be compared fairly. When you are ready, choose the one that will drive it."
 	question_label.visible = true
 
-	# Create algorithm selection buttons
-	_create_algorithm_buttons()
-	feedback_label.text = ""
-	progress_label.text = ""
-	back_button.visible = true
-	back_button.text = "Back to Lab"
-	next_button.visible = false
-
-func _create_algorithm_buttons() -> void:
-	_clear_options()
-
-	var algorithms := [
-		{"name": "HMM (Hidden Markov Model)", "type": 0, "desc": "Tracks knowledge per skill using hidden states"},
-		{"name": "BKT (Bayesian Knowledge Tracing)", "type": 1, "desc": "Classic BKT with 4 parameters per skill"},
-		{"name": "KST (Knowledge Space Tracing)", "type": 2, "desc": "Knowledge-space tracing with prerequisite structure"}
-	]
-
-	for algo in algorithms:
+	# One briefing button per algorithm, in the shared new format (catalog).
+	for algo_type in AlgorithmCatalog.catalog_all_types():
 		var btn := Button.new()
-		btn.text = algo["name"] + "\n" + algo["desc"]
+		btn.text = "%s\n%s" % [AlgorithmCatalog.catalog_name(algo_type), AlgorithmCatalog.catalog_tagline(algo_type)]
 		btn.custom_minimum_size = Vector2(800, 60)
 		btn.add_theme_font_size_override("font_size", 18)
 		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
@@ -249,37 +224,128 @@ func _create_algorithm_buttons() -> void:
 		btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
 		btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
 		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		btn.pressed.connect(_on_algorithm_selected.bind(algo["type"]))
+		btn.pressed.connect(_show_algorithm_detail.bind(algo_type))
 		options_box.add_child(btn)
+
+	# Advance straight to the selection phase (after the briefing).
+	var choose_btn := Button.new()
+	choose_btn.text = "Choose my algorithm >>"
+	choose_btn.custom_minimum_size = Vector2(800, 50)
+	choose_btn.add_theme_font_size_override("font_size", 20)
+	choose_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	choose_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.1, 0.55, 0.35, 1)))
+	choose_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.15, 0.7, 0.45, 1)))
+	choose_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.07, 0.4, 0.25, 1)))
+	choose_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	choose_btn.pressed.connect(_show_algorithm_select)
+	options_box.add_child(choose_btn)
+
+	feedback_label.text = ""
+	progress_label.text = ""
+	back_button.visible = true
+	back_button.text = "Back to Lab"
+	next_button.visible = false
+
+func _show_algorithm_detail(algo_type: int) -> void:
+	_menu_stage = "detail"
+	title_label.text = "HOW IT LEARNS"
+	_clear_content()
+	question_label.text = AlgorithmCatalog.catalog_briefing(algo_type)
+	question_label.visible = true
+
+	var back_btn := Button.new()
+	back_btn.text = "<< Back to briefing"
+	back_btn.custom_minimum_size = Vector2(800, 50)
+	back_btn.add_theme_font_size_override("font_size", 20)
+	back_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	back_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
+	back_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+	back_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+	back_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	back_btn.pressed.connect(_show_algorithm_briefing)
+	options_box.add_child(back_btn)
+
+	var pick_btn := Button.new()
+	pick_btn.text = "Pick %s" % AlgorithmCatalog.catalog_callout(algo_type)
+	pick_btn.custom_minimum_size = Vector2(800, 50)
+	pick_btn.add_theme_font_size_override("font_size", 20)
+	pick_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	pick_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.1, 0.55, 0.35, 1)))
+	pick_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.15, 0.7, 0.45, 1)))
+	pick_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.07, 0.4, 0.25, 1)))
+	pick_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	pick_btn.pressed.connect(_on_algorithm_selected.bind(algo_type))
+	options_box.add_child(pick_btn)
+
+	feedback_label.text = ""
+	progress_label.text = ""
+	back_button.visible = false
+	next_button.visible = false
+
+func _show_algorithm_select() -> void:
+	_menu_stage = "select"
+	title_label.text = "CHOOSE YOUR ALGORITHM"
+	_clear_content()
+	question_label.text = "Pick the ONE algorithm that will drive your whole session. Its live parameters and mastery states appear on the in-room Stats Board."
+	question_label.visible = true
+
+	for algo_type in AlgorithmCatalog.catalog_all_types():
+		var btn := Button.new()
+		btn.text = "%s\n%s" % [AlgorithmCatalog.catalog_name(algo_type), AlgorithmCatalog.catalog_tagline(algo_type)]
+		btn.custom_minimum_size = Vector2(800, 60)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+		btn.add_theme_color_override("font_pressed_color", Color(0.8, 0.85, 1, 1))
+		btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
+		btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
+		btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		btn.pressed.connect(_on_algorithm_selected.bind(algo_type))
+		options_box.add_child(btn)
+
+	feedback_label.text = ""
+	progress_label.text = ""
+	back_button.visible = true
+	back_button.text = "Back"
+	next_button.visible = false
 
 func _on_algorithm_selected(algo_type: int) -> void:
 	session.set_algorithm_type(algo_type)
 	_show_algorithm_explanation(algo_type)
 
 func _show_algorithm_explanation(algo_type: int) -> void:
-	title_label.text = "ALGORITHM EXPLANATION"
+	_menu_stage = "explain"
+	title_label.text = "ALGORITHM CONFIRM"
 	_clear_content()
-	var info: Dictionary = ALGORITHM_INFO.get(algo_type, {})
-	question_label.text = "You selected: %s\n\nHow it works:\n%s\n\nOnly this algorithm runs during the session, so runs can be compared fairly. Its parameters and live numbers are shown on the in-room Stats Board - the Algorithm Library has the full explanation." % [info.get("name", ""), info.get("how", "")]
+	question_label.text = "You picked: %s\n\n%s\n\nOnly this algorithm runs during the session, so runs can be compared fairly. Its parameters and live mastery states are shown on the in-room Stats Board." % [AlgorithmCatalog.catalog_name(algo_type), AlgorithmCatalog.catalog_briefing(algo_type)]
 	question_label.visible = true
 	_clear_options()
 
 	var continue_btn := Button.new()
-	continue_btn.text = "Continue to Profile Setup"
+	continue_btn.text = "Continue" if SessionBridge.skip_profile_collection else "Continue to Profile Setup"
 	continue_btn.custom_minimum_size = Vector2(800, 50)
 	continue_btn.add_theme_font_size_override("font_size", 20)
 	continue_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	continue_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.16, 0.28, 0.62, 1)))
-	continue_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.3, 0.48, 0.95, 1)))
-	continue_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.1, 0.19, 0.45, 1)))
+	continue_btn.add_theme_stylebox_override("normal", _create_button_style(Color(0.1, 0.55, 0.35, 1)))
+	continue_btn.add_theme_stylebox_override("hover", _create_button_style(Color(0.15, 0.7, 0.45, 1)))
+	continue_btn.add_theme_stylebox_override("pressed", _create_button_style(Color(0.07, 0.4, 0.25, 1)))
 	continue_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	continue_btn.pressed.connect(_show_profile_setup)
+	continue_btn.pressed.connect(_on_algorithm_confirmed)
 	options_box.add_child(continue_btn)
 	feedback_label.text = ""
 	progress_label.text = ""
 	back_button.visible = true
 	back_button.text = "Back"
 	next_button.visible = false
+
+func _on_algorithm_confirmed() -> void:
+	# Dev/privacy toggle: when profile collection is skipped, flow Algorithm
+	# Select -> Pretest. Otherwise collect the profile first.
+	if SessionBridge.skip_profile_collection:
+		_show_pretest_intro()
+	else:
+		_show_profile_setup()
 
 # ===== PROFILE SETUP =====
 
@@ -1689,6 +1755,10 @@ func _show_results() -> void:
 	_results = session.get_posttest_results()
 	session.save_session_data()
 	var report_path := session.generate_profile_pdf()
+	# Append this run to the student's own comparative-study file
+	# (user://results/<name>.json) and show the six study metrics.
+	var study_metrics: Dictionary = session.get_study_metrics()
+	var student_results_path: String = session.save_student_results()
 
 	var pretest: Dictionary = _results["pretest"]
 	var posttest: Dictionary = _results["posttest"]
@@ -1698,6 +1768,18 @@ func _show_results() -> void:
 
 	text += "Post Test Results:\n"
 	text += "Score: %d/%d (%.1f%%)\n\n" % [posttest["correct"], posttest["total"], posttest["percentage"]]
+
+	# --- Comparative-study metrics (the six numbers of the study) ---
+	text += "COMPARATIVE STUDY METRICS\n"
+	text += "  Average Pretest Score: %.1f%%\n" % study_metrics["average_pretest_score"]
+	text += "  Average Posttest Score: %.1f%%\n" % study_metrics["average_posttest_score"]
+	text += "  Performance Improvement Rate: %+.1f%%\n" % study_metrics["performance_improvement_rate"]
+	text += "  Predictive Accuracy (%s): %.1f%%\n" % [study_metrics["predictive_accuracy_algorithm"], study_metrics["predictive_accuracy"]]
+	var adaptive_secs: float = study_metrics["adaptive_learning_seconds"]
+	text += "  Adaptive Learning Completion Time: %02d:%02d (%.1f min)\n" % [int(adaptive_secs) / 60, int(adaptive_secs) % 60, adaptive_secs / 60.0]
+	var ksa: Dictionary = study_metrics["knowledge_state_detail"]
+	text += "  Knowledge State Accuracy: %.1f%% (%d/%d skills verified)\n" % [study_metrics["knowledge_state_accuracy"], int(ksa["matches"]), int(ksa["compared"])]
+	text += "  Student data saved to: %s\n\n" % student_results_path
 
 	var improvement: float = posttest["percentage"] - pretest["percentage"]
 	text += "Improvement: %+.1f%%\n\n" % improvement
@@ -1763,8 +1845,12 @@ func _on_back_pressed() -> void:
 		get_tree().change_scene_to_file("res://World/World.tscn")
 		return
 
-	# Go back to main menu
-	_show_main_menu()
+	# Menu back-routing follows the briefing-first flow: confirm -> select ->
+	# briefing -> (Back to Lab) World.
+	if _menu_stage == "explain":
+		_show_algorithm_select()
+		return
+	_show_algorithm_briefing()
 
 func _on_next_pressed() -> void:
 	if _in_dfa_lesson:

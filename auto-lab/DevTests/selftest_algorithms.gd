@@ -242,7 +242,7 @@ func _check_kst() -> void:
 
 func _check_tracer_dispatch() -> void:
 	var tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
-	var models_ready := tracer.hmm_models.size() == 6 and tracer.bkt_models.size() == 6 \
+	var models_ready: bool = tracer.hmm_models.size() == 6 and tracer.bkt_models.size() == 6 \
 		and tracer.kst_model != null
 	_note(models_ready, "tracer_builds_all_six_skill_models",
 		"hmm=%d bkt=%d kst=%s" % [tracer.hmm_models.size(), tracer.bkt_models.size(), str(tracer.kst_model != null)])

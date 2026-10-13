@@ -52,6 +52,26 @@ var learning_phase: int = 0  # 0=objective, 1=definition, 2=example, 3=guided, 4
 # skill -> Array of {correct, attempts, wrong_attempts, connections_made, time_seconds}
 var workshop_attempts: Dictionary = {}
 
+# ===== Comparative-study timing & metrics =================================
+## Wall-clock timing for the adaptive-learning phase: set when the first skill
+## starts being taught and frozen the moment the algorithm deems the learner
+## knowledgeable enough for the post test. (Adaptive Learning Completion Time)
+var adaptive_start_msec: int = 0
+var adaptive_end_msec: int = 0
+## Post-test stopwatch, mirrored by CountingTimerOverlay. These two fields are
+## the single source of truth; the overlay only renders them.
+var timer_started: float = 0.0
+var timer_raw_seconds: float = 0.0
+## True once this completed session has been appended to the student's
+## results file, so repeated save_session_data() calls cannot duplicate it.
+var _student_results_saved: bool = false
+## Path of the student results file written this session (for display).
+var _student_results_path: String = ""
+## The model's learned / not-learned verdict per skill, snapshotted the instant
+## adaptive learning ends (BEFORE any post-test answer can move the beliefs).
+## Compared against the real post-test results for Knowledge State Accuracy.
+var predicted_knowledge_state: Dictionary = {}
+
 func _init() -> void:
 	profile_manager = ProfileManager.new()
 	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
@@ -83,6 +103,7 @@ func start_session() -> void:
 	learning_phase = 0
 	workshop_attempts.clear()
 	_recorded_lesson_observations.clear()
+	_reset_study_timing()
 	# A new session must re-seed the models from ITS OWN pretest, otherwise the
 	# previous learner's priors keep driving the estimates (old bug: the priors
 	# were only ever applied once per process).
@@ -226,6 +247,7 @@ func advance_question() -> Dictionary:
 			state = SessionState.ANALYSIS
 		elif state == SessionState.POST_TEST:
 			state = SessionState.COMPLETE
+			stop_posttest_timer()
 		current_question = {}
 		current_question_answered = false
 		return {"accepted": true, "complete": true, "correct": false, "skill": ""}
@@ -300,6 +322,9 @@ func start_adaptive_learning(skill: String) -> void:
 	state = SessionState.ADAPTIVE_LEARNING
 	current_learning_skill = skill
 	learning_phase = 0
+	# First skill of the run starts the Adaptive-Learning-Completion-Time clock.
+	if adaptive_start_msec == 0:
+		adaptive_start_msec = Time.get_ticks_msec()
 	# Keep pretest evidence in the model, but start a fresh mastery evidence window.
 	knowledge_tracer.begin_learning(skill)
 
@@ -347,6 +372,7 @@ func has_recorded(source_id: String) -> bool:
 ## Called once the adaptive phase has visited every skill in the plan.
 func finish_adaptive_learning() -> void:
 	adaptive_learning_complete = true
+	_close_adaptive_window()
 	if gamification != null:
 		for skill in knowledge_tracer.SKILL_ORDER:
 			gamification.set_mastery(skill, knowledge_tracer.get_mastery_percentage(skill))
@@ -421,6 +447,13 @@ func get_workshop_attempts() -> Dictionary:
 ## Start the post test
 func start_posttest() -> void:
 	state = SessionState.POST_TEST
+	# The post test is the algorithm's verdict that the learner IS knowledgeable:
+	# freeze the adaptive clock (if still running), snapshot the model's
+	# knowledge state, and start the post-test stopwatch.
+	_close_adaptive_window()
+	if timer_started <= 0.0:
+		timer_started = Time.get_unix_time_from_system()
+		timer_raw_seconds = 0.0
 	current_question_index = 0
 	current_question_answered = false
 	posttest_answers.clear()
@@ -470,6 +503,183 @@ func _calculate_test_results(answers: Array) -> Dictionary:
 		"skill_results": skill_results
 	}
 
+# ===== Comparative-study metrics & per-student storage ====================
+
+## A skill counts as "actually known" on the post test at or above this
+## percentage - the same 0.7 bar the tracer uses for its own is_learned().
+const KNOWLEDGE_CONFIRM_THRESHOLD := 70.0
+
+## Reset every study clock / snapshot for a brand-new learner.
+func _reset_study_timing() -> void:
+	adaptive_start_msec = 0
+	adaptive_end_msec = 0
+	timer_started = 0.0
+	timer_raw_seconds = 0.0
+	predicted_knowledge_state = {}
+	_student_results_saved = false
+	_student_results_path = ""
+
+## Stop the post-test stopwatch and freeze its value.
+func stop_posttest_timer() -> void:
+	if timer_started > 0.0:
+		timer_raw_seconds = Time.get_unix_time_from_system() - timer_started
+		timer_started = 0.0
+
+## Re-enter a paused post test: keep the seconds already spent and keep
+## counting from there (no time is lost or double-counted).
+func resume_posttest_timer() -> void:
+	if timer_started <= 0.0:
+		timer_started = Time.get_unix_time_from_system() - timer_raw_seconds
+
+## Seconds the post-test stopwatch is currently showing (live while running).
+func get_posttest_seconds() -> float:
+	if timer_started > 0.0:
+		return Time.get_unix_time_from_system() - timer_started
+	return timer_raw_seconds
+
+## Freeze the adaptive-learning clock and snapshot the model's learned /
+## not-learned verdict per skill exactly as it stood at the END of learning.
+## Idempotent: the first close wins, so post-test answers can never rewrite
+## the prediction that Knowledge State Accuracy is measured against.
+func _close_adaptive_window() -> void:
+	if adaptive_end_msec == 0:
+		adaptive_end_msec = Time.get_ticks_msec()
+	if predicted_knowledge_state.is_empty():
+		for skill in knowledge_tracer.SKILL_ORDER:
+			predicted_knowledge_state[str(skill)] = knowledge_tracer.is_learned(str(skill))
+
+## Seconds from the first skill taught until the algorithm declared mastery
+## (0.0 when no adaptive learning happened this session).
+func get_adaptive_completion_seconds() -> float:
+	if adaptive_start_msec <= 0:
+		return 0.0
+	var end_msec := adaptive_end_msec if adaptive_end_msec > 0 else Time.get_ticks_msec()
+	return float(end_msec - adaptive_start_msec) / 1000.0
+
+## The six numbers a completed session contributes to the comparative study:
+##   average_pretest_score         mean % across the pretest items
+##   average_posttest_score        mean % across the post-test items
+##   performance_improvement_rate  relative gain over the pretest baseline (%)
+##   predictive_accuracy           hit-rate of the algorithm actually used (%)
+##   adaptive_learning_seconds     start of learning -> algorithm says mastered
+##   knowledge_state_accuracy      end-of-learning snapshot vs real post test (%)
+func get_study_metrics() -> Dictionary:
+	var pretest := _calculate_test_results(pretest_answers)
+	var posttest := _calculate_test_results(posttest_answers)
+	var avg_pre: float = pretest["percentage"]
+	var avg_post: float = posttest["percentage"]
+
+	# Performance Improvement Rate: relative gain over the pretest baseline.
+	var improvement_rate := 0.0
+	if avg_pre > 0.0:
+		improvement_rate = (avg_post - avg_pre) / avg_pre * 100.0
+	elif avg_post > 0.0:
+		improvement_rate = 100.0
+
+	# Predictive Accuracy of the algorithm actually used this session.
+	var algo_key := "HMM"
+	match selected_algorithm:
+		KnowledgeTracer.AlgorithmType.BKT:
+			algo_key = "BKT"
+		KnowledgeTracer.AlgorithmType.KST:
+			algo_key = "KST"
+	var comparison: Dictionary = knowledge_tracer.get_algorithm_comparison()
+	var predictive_accuracy := 0.0
+	if comparison.has(algo_key):
+		predictive_accuracy = float(comparison[algo_key].get("accuracy", 0.0))
+
+	var ksa := _knowledge_state_accuracy(posttest)
+	return {
+		"average_pretest_score": avg_pre,
+		"average_posttest_score": avg_post,
+		"performance_improvement_rate": improvement_rate,
+		"predictive_accuracy": predictive_accuracy,
+		"predictive_accuracy_algorithm": algo_key,
+		"adaptive_learning_seconds": get_adaptive_completion_seconds(),
+		"knowledge_state_accuracy": ksa["accuracy"],
+		"knowledge_state_detail": ksa,
+		"posttest_seconds": get_posttest_seconds(),
+	}
+
+## Knowledge State Accuracy: was the learner ACTUALLY knowledgeable when the
+## algorithm stopped teaching? Compares the end-of-learning snapshot against
+## the real post-test result for every skill, skill by skill.
+func _knowledge_state_accuracy(posttest: Dictionary) -> Dictionary:
+	var per_skill := {}
+	var matches := 0
+	var compared := 0
+	var skill_results: Dictionary = posttest["skill_results"]
+	for skill in knowledge_tracer.SKILL_ORDER:
+		var s := str(skill)
+		if not skill_results.has(s):
+			continue  # Skill never reached the post test - nothing to verify.
+		var predicted: bool = bool(predicted_knowledge_state.get(s, false))
+		var actual_pct: float = float(skill_results[s]["percentage"])
+		var actually_known: bool = actual_pct >= KNOWLEDGE_CONFIRM_THRESHOLD
+		compared += 1
+		if predicted == actually_known:
+			matches += 1
+		per_skill[s] = {
+			"predicted_learned": predicted,
+			"posttest_percentage": actual_pct,
+			"actually_known": actually_known,
+			"match": predicted == actually_known,
+		}
+	var accuracy := float(matches) / float(compared) * 100.0 if compared > 0 else 0.0
+	return {"accuracy": accuracy, "matches": matches, "compared": compared, "per_skill": per_skill}
+
+## Append this completed test to the student's own JSON file under
+## user://results/<name>.json. One file per student, one record per run, so a
+## comparative study can read every learner straight from a single folder.
+## Idempotent per session: the second call returns the same path without
+## appending a duplicate record. Returns the path written.
+func save_student_results() -> String:
+	if _student_results_saved and _student_results_path != "":
+		return _student_results_path
+	var profile: Dictionary = profile_manager.get_profile()
+	var student_name := str(profile.get("name", "")).strip_edges()
+	if student_name == "":
+		student_name = "student"
+	var safe := ""
+	for i in range(student_name.length()):
+		var c := student_name[i]
+		if "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_".contains(c):
+			safe += c
+		elif not safe.ends_with("_"):
+			safe += "_"
+	if safe.strip_edges() == "" or safe == "_":
+		safe = "student"
+	var dir := "user://results"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := "%s/%s.json" % [dir, safe]
+	# Keep every earlier run of the SAME student (longitudinal comparison).
+	var sessions: Array = []
+	if FileAccess.file_exists(path):
+		var existing := FileAccess.open(path, FileAccess.READ)
+		if existing:
+			var json := JSON.new()
+			if json.parse(existing.get_as_text()) == OK and json.data is Dictionary \
+					and json.data.has("sessions") and json.data["sessions"] is Array:
+				sessions = json.data["sessions"]
+			existing.close()
+	sessions.append({
+		"timestamp": Time.get_datetime_string_from_system(),
+		"algorithm": get_algorithm_label(),
+		"algorithm_id": selected_algorithm,
+		"metrics": get_study_metrics(),
+		"pretest": _calculate_test_results(pretest_answers),
+		"posttest": _calculate_test_results(posttest_answers),
+		"pretest_answers": pretest_answers,
+		"posttest_answers": posttest_answers,
+		"predicted_knowledge_state": predicted_knowledge_state,
+		"knowledge_tracer": knowledge_tracer.to_dict(),
+		"workshop_attempts": workshop_attempts,
+	})
+	_write_json(path, {"student": profile, "session_count": sessions.size(), "sessions": sessions})
+	_student_results_saved = true
+	_student_results_path = path
+	return path
+
 ## Get the current question
 func _current_question() -> void:
 	var questions: Array = pretest_questions if state == SessionState.PRETEST else posttest_questions
@@ -510,6 +720,12 @@ func save_session_data() -> void:
 		file.close()
 	_write_json("user://pretest_data.json", {"profile": profile_manager.get_profile(), "answers": pretest_answers})
 	_write_json("user://posttest_data.json", {"profile": profile_manager.get_profile(), "answers": posttest_answers})
+	# Once the session is COMPLETE (post test finished), also append the full
+	# comparative-study record to this student's own results file
+	# (user://results/<name>.json). save_student_results() is idempotent per
+	# session, so this cannot duplicate the record.
+	if state == SessionState.COMPLETE:
+		save_student_results()
 
 func _write_json(path: String, data: Dictionary) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)

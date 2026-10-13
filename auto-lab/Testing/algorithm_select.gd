@@ -36,6 +36,12 @@ var _desktop_mouse_down := false
 var _lasers := {}
 
 func _ready() -> void:
+	# The algorithm-select flow now lives INSIDE the Testing Grounds: the learner
+	# is briefed on how each algorithm learns FIRST, then picks one. Forward here
+	# so any legacy route still lands on that briefing-first flow instead of a
+	# duplicate selection screen.
+	get_tree().change_scene_to_file.call_deferred("res://Testing/TestingGrounds.tscn")
+	return
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
 	if overlay_rect:

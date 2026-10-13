@@ -14,9 +14,12 @@ extends Node3D
 var _last_mouse_pos := Vector2(-1, -1)
 var _is_pressed := false
 var _lasers := {}  # XRController3D -> MeshInstance3D
+var _settings_popup: Control = null
+const SETTINGS_PATH := "user://settings.cfg"
 var _desktop_mouse_down := false
 
 func _ready() -> void:
+	_load_settings()
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
 	if overlay_rect:
@@ -55,16 +58,26 @@ func _update_mode_button_text(btn: Button) -> void:
 	btn.text = "Controls: %s" % ("AR / VR" if InputMode.is_vr() else "Keyboard + Mouse (WASD)")
 
 func _on_mode_toggle_pressed() -> void:
-	# Toggle between Keyboard+Mouse and AR/VR. `toggle_mode()` internally tries
+	# Toggle between Keyboard+Mouse and AR/VR. `set_mode()` internally tries
 	# to initialize OpenXR when switching into VR and falls back to Desktop if
 	# no headset is detected (staying on Keyboard + Mouse).
-	InputMode.toggle_mode()
+	_apply_input_mode(not InputMode.is_vr())
+	_save_settings()
 	# Refresh the label (and if we just entered the menu the button exists).
 	var mode_button: Button = viewport.get_node_or_null("Root/Center/Panel/VBox/ModeButton")
 	if mode_button:
 		_update_mode_button_text(mode_button)
 	# Reload the current scene so the player is re-created in the chosen mode.
 	get_tree().reload_current_scene()
+
+
+## Ask InputMode for `want_vr` and report whether that mode is really active.
+## VR needs a connected headset - when none answers the mode stays PC and the
+## previous preference is kept (nothing is silently locked to PC), so callers
+## can react (e.g. snap the Settings switch back).
+func _apply_input_mode(want_vr: bool) -> bool:
+	InputMode.set_mode(want_vr)
+	return InputMode.is_vr() == want_vr
 
 func _update_pointer() -> void:
 	if InputMode.is_desktop():
@@ -304,14 +317,139 @@ func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
 
 func _on_testing_pressed() -> void:
-	# Algorithm selection happens BEFORE the Testing Grounds opens: the learner
-	# picks which knowledge-tracing algorithm will drive the session (and reads
-	# how it learns) before any pretest data is collected.
-	get_tree().change_scene_to_file("res://Testing/AlgorithmSelect.tscn")
+	# Enter the Testing Grounds directly. The learner is first BRIEFED on how
+	# each algorithm learns, THEN picks one (selection happens after the
+	# briefing), before any pretest data is collected.
+	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")
 
 func _on_settings_pressed() -> void:
-	# TODO: Implement settings menu
-	pass
+	# In-panel Options popup. It is built INSIDE the SubViewport so it is clickable
+	# in BOTH desktop (mouse ray) and VR (controller laser), like the rest of this
+	# panel. Pressing Settings while it is open closes it.
+	if _settings_popup and is_instance_valid(_settings_popup):
+		_settings_popup.queue_free()
+		_settings_popup = null
+		return
+
+	var root: Control = viewport.get_node("Root")
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.add_child(center)
+
+	var panel := PanelContainer.new()
+	var pb := StyleBoxFlat.new()
+	pb.bg_color = Color(0.07, 0.09, 0.16, 0.98)
+	pb.corner_radius_top_left = 16
+	pb.corner_radius_top_right = 16
+	pb.corner_radius_bottom_right = 16
+	pb.corner_radius_bottom_left = 16
+	pb.content_margin_left = 44
+	pb.content_margin_right = 44
+	pb.content_margin_top = 30
+	pb.content_margin_bottom = 30
+	panel.add_theme_stylebox_override("panel", pb)
+	panel.custom_minimum_size = Vector2(820, 0)
+	center.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 18)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "OPTIONS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 36)
+	title.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	vbox.add_child(title)
+
+	# VR / PC play mode - the same InputMode the main-menu Controls button uses,
+	# but reachable from Settings and persisted to user://settings.cfg.
+	var vr_mode := CheckButton.new()
+	vr_mode.text = "VR mode (headset) - OFF = PC (Keyboard + Mouse)"
+	vr_mode.button_pressed = InputMode.is_vr()
+	vr_mode.add_theme_font_size_override("font_size", 24)
+	vbox.add_child(vr_mode)
+
+	var vr_hint := Label.new()
+	vr_hint.text = "ON = VR (headset + controllers). OFF = PC (keyboard + mouse). The scene reloads to apply the change; without a headset the game stays in PC mode."
+	vr_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vr_hint.add_theme_font_size_override("font_size", 17)
+	vr_hint.add_theme_color_override("font_color", Color(0.72, 0.82, 0.98, 1))
+	vbox.add_child(vr_hint)
+
+	vr_mode.toggled.connect(func(on: bool):
+		if _apply_input_mode(on):
+			_save_settings()
+			# Reload so the player / camera is re-created for the chosen mode
+			# (the popup closes with the scene, like the Controls button).
+			get_tree().reload_current_scene()
+		else:
+			# No headset attached: snap the switch back and stay on PC.
+			vr_mode.set_pressed_no_signal(false)
+			vr_hint.text = "No headset detected - staying in PC mode."
+			_save_settings())
+
+	var collect := CheckButton.new()
+	collect.text = "Collect profile data (name / age / gender)"
+	collect.button_pressed = not SessionBridge.skip_profile_collection
+	collect.add_theme_font_size_override("font_size", 24)
+	collect.toggled.connect(func(on: bool):
+		SessionBridge.skip_profile_collection = not on
+		_save_settings())
+	vbox.add_child(collect)
+
+	var hint := Label.new()
+	hint.text = "OFF = skip Profile Setup, so the flow becomes: Algorithm briefing -> Pretest (dev / no personal data is written)."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.add_theme_font_size_override("font_size", 17)
+	hint.add_theme_color_override("font_color", Color(0.72, 0.82, 0.98, 1))
+	vbox.add_child(hint)
+
+	var verbose := CheckButton.new()
+	verbose.text = "Verbose stats board (per-skill detail)"
+	verbose.button_pressed = SessionBridge.verbose_board
+	verbose.add_theme_font_size_override("font_size", 24)
+	verbose.toggled.connect(func(on: bool):
+		SessionBridge.verbose_board = on
+		_save_settings())
+	vbox.add_child(verbose)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(320, 58)
+	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close_btn.add_theme_font_size_override("font_size", 24)
+	close_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	close_btn.pressed.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+		_settings_popup = null)
+	vbox.add_child(close_btn)
+
+	_settings_popup = dim
+
+func _save_settings() -> void:
+	# Start from the existing file so a preference that must not change right
+	# now (e.g. vr_mode while the mode is still AUTO) survives the rewrite.
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("options", "skip_profile_collection", SessionBridge.skip_profile_collection)
+	cfg.set_value("options", "verbose_board", SessionBridge.verbose_board)
+	if InputMode.mode_pref != InputMode.Pref.AUTO:
+		cfg.set_value("options", "vr_mode", InputMode.mode_pref == InputMode.Pref.VR)
+	cfg.save(SETTINGS_PATH)
+
+func _load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		SessionBridge.skip_profile_collection = bool(cfg.get_value("options", "skip_profile_collection", SessionBridge.skip_profile_collection))
+		SessionBridge.verbose_board = bool(cfg.get_value("options", "verbose_board", SessionBridge.verbose_board))
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()

@@ -23,6 +23,8 @@ var test_mode := "pretest"  # "pretest" | "posttest"
 var awaiting_handson := false
 
 func _ready() -> void:
+	# Persistent screen-overlay phase progress HUD (shows Pretest / Post Test here).
+	add_child(load("res://Testing/phase_hud.gd").new())
 	session = SessionBridge.get_session()
 	test_mode = SessionBridge.test_mode
 	if test_mode != "posttest":
@@ -32,9 +34,19 @@ func _ready() -> void:
 	if test_mode == "posttest":
 		if session.state != SessionManager.SessionState.POST_TEST:
 			session.start_posttest()
+		else:
+			# Re-entry mid-test: keep the seconds already spent counting.
+			session.resume_posttest_timer()
 	else:
 		if session.state != SessionManager.SessionState.PRETEST:
 			session.start_pretest()
+
+	# The post-test stopwatch overlay. It renders the session's own clock
+	# (started by session.start_posttest()), so the number on screen always
+	# matches what the per-student study JSON records.
+	var overlay := CountingTimerOverlay.new()
+	overlay.mode = "posttest"
+	add_child(overlay)
 
 	if test_panel:
 		test_panel.set_mode(test_mode)
@@ -136,6 +148,10 @@ func _finish_test() -> void:
 		workshop.set_active(false)
 	if test_panel:
 		test_panel.visible = false
+	# The stopwatch stops the instant the test ends (state -> COMPLETE happens
+	# in advance_question); freeze it here as a safety net for Back routing.
+	if session and test_mode == "posttest":
+		session.stop_posttest_timer()
 	# Return to the Testing Grounds; its _ready detects the session state and
 	# shows Knowledge Analysis (pretest) or Results (post-test).
 	get_tree().change_scene_to_file("res://Testing/TestingGrounds.tscn")

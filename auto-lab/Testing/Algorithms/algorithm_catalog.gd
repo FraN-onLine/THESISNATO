@@ -21,29 +21,30 @@ const ALGORITHMS := {
 		"type": TYPE_HMM,
 		"name": "HMM (Hidden Markov Model)",
 		"callout": "HMM",
-		"tagline": "Bayesian filtering over a hidden 'knows / doesn't know' state per skill.",
+		"tagline": "Bayesian filtering over hidden mastery states (Beginner / Developing / Mastered) per skill.",
 		"accent": Color(0.35, 0.8, 1.0, 1.0),
-		"how_works": "Each DFA skill is its own small Hidden Markov Model with two HIDDEN states: 'knows' and 'doesn't know'. The learner's answers (right / wrong) are the only VISIBLE states. Every answer runs one step of the forward algorithm:\n  1. TRANSITION — a small learning probability P(T) can flip 'doesn't know -> knows' and a forgetting probability P(F) can flip 'knows -> doesn't know'.\n  2. LIKELIHOOD — the answer is explained by P(slip) when the learner knows and P(guess) when they do not.\n  3. BAYES UPDATE — the posterior P(knows | answer) is computed with Bayes' rule, so a correct answer raises the estimate and a wrong one lowers it.\nThe hidden state is never observed directly - the model can only infer it from answers, which is exactly what a real 'is the user learning?' tracker must do.",
-		"formula": "P(knows_t) = P(knows_{t-1})*(1 - P_forget) + (1 - P(knows_{t-1})) * P_learn\nP(answer=correct) = P(knows_t)*(1 - P_slip) + (1 - P(knows_t))*P_guess\nP(knows_t | answer) = ( P(answer | knows_t) * P(knows_t) ) / P(answer)",
+		"how_works": "Each DFA skill is its own small Hidden Markov Model with three HIDDEN mastery states: Beginner, Developing, Mastered. The learner's answers (right / wrong) are the only VISIBLE states. Every answer runs one vector step of the forward algorithm:\n  1. TRANSITION — the 3x3 transition matrix A shifts belief between Beginner, Developing and Mastered (a learning step lifts it, a small forgetting step lowers it).\n  2. LIKELIHOOD — the answer is scored by the emission matrix B: the chance of a correct or wrong answer from each of the three states.\n  3. BAYES UPDATE — the belief vector is re-weighted by that likelihood and normalized, so a correct answer pushes mass toward Mastered and a wrong one pulls it back toward Beginner.\nThe hidden state is never observed directly - the model can only infer it from answers, which is exactly what a real 'is the user learning?' tracker must do.",
+		"formula": "alpha(j) = sum_i alpha(i) * A(i->j)   [predict with 3x3 transition matrix A]\nB_j(obs) = P(obs | state j)   [3x2 emission matrix, obs = correct/wrong]\nalpha_new(j) = alpha'(j) * B_j(obs) / sum_k alpha'(k) * B_k(obs)   [Bayes reweight + normalize]",
 		"params": [
-			{"symbol": "P(learn)", "name": "Learning rate", "short": "chance a non-knower becomes a knower after one practice",
+			{"symbol": "P(learn)", "name": "Learning rate", "short": "chance belief steps UP a state (Beginner->Developing, Developing->Mastered)",
 			 "meaning": "Chance a 'doesn't know' hidden state becomes 'knows' after one practice."},
-			{"symbol": "P(forget)", "name": "Forgetting rate", "short": "chance a knower slips back to not knowing",
+			{"symbol": "P(forget)", "name": "Forgetting rate", "short": "chance belief steps DOWN a state (Mastered->Developing, Developing->Beginner)",
 			 "meaning": "Chance a 'knows' hidden state slips back to 'doesn't know'."},
-			{"symbol": "P(guess)", "name": "Guessing", "value": 0.25, "short": "chance of a correct answer without knowing",
+			{"symbol": "P(guess)", "name": "Guessing", "value": 0.25, "short": "chance of a correct answer from the Beginner state (emission matrix)",
 			 "meaning": "Default chance of a correct answer despite not knowing; configurable per model."},
-			{"symbol": "P(slip)", "name": "Slipping", "short": "chance of a wrong answer while knowing",
+			{"symbol": "P(slip)", "name": "Slipping", "short": "chance of a wrong answer from the Mastered state (emission matrix)",
 			 "meaning": "Chance of a wrong answer despite knowing."},
 			{"symbol": "Skip", "name": "Skip penalty", "short": "cost of skipping a board task = part of what is still unknown",
 			 "meaning": "Using 'Skip task' removes P(strength) x (1 - mastery) of the skill, so skipping while weak hurts far more than skipping while strong."},
 		],
-		"best_for": "Explainable, per-skill probability estimates that behave smoothly even with very little data (an ideal fit for a 6-skill DFA pretest).",
+		"best_for": "Explainable per-skill mastery STATES (Beginner / Developing / Mastered) that behave smoothly even with very little data (an ideal fit for a 6-skill DFA pretest).",
 		"limit": "Assumes each skill is independent: it cannot learn that building skill also improves the set_builder skill unless observations for both are seen.",
+		"states": "Beginner 0-25% / Developing 25-85% / Mastered 85-100% (from posterior mastery; inferred state shown on the board).",
 		"needs": {
-			"inputs": "PRETEST answers ONLY. Each pretest answer is a single observation (skill, right/wrong) and is the ONLY starting input given to the model.",
-			"learning": "Interactive learning answers are analysed one by one; every new answer re-filters the hidden state.",
-			"termination": "The skill is judged mastered when P(knows) >= 70% after at least 3 learning observations. Learning for that skill terminates immediately.",
-			"proof": "The post test runs WITHOUT feedback. If the post-test behaviour matches what the model predicted, the model's theory of the learner is confirmed.",
+			"inputs": "PRETEST answers ONLY. Each pretest answer is a single observation (skill, right/wrong) and seeds the initial state distribution PI per skill (Laplace-smoothed).",
+			"learning": "Interactive learning answers run vector forward-filtering per skill: predict with the 3x3 transition matrix A, then reweight by the emission matrix B. Correct answers shift belief toward Mastered, wrong answers shift it back toward Beginner.",
+			"termination": "The skill is judged Mastered when mastery >= 85% after at least 3 learning observations. Learning for that skill terminates immediately.",
+			"proof": "The post test runs WITHOUT feedback. HMM state predictions and expected accuracy are logged per observation, so accuracy on unseen answers is the proof of the trace.",
 		},
 		"pipeline": [
 			{"stage": 1, "name": "PRETEST — only input", "icon": "1",
@@ -77,6 +78,7 @@ const ALGORITHMS := {
 		],
 		"best_for": "A small, explainable model with only 4 parameters per skill; its parameters are already the language of education research.",
 		"limit": "Parameters are fixed up front (no per-learner fit in this prototype) and it treats guesses/slips as constant per skill.",
+		"states": "Developing until P(learned) >= 70% (with >= 3 observations), then Mastered; Beginner below that.",
 		"needs": {
 			"inputs": "PRETEST answers ONLY. P(L0) is the pretest-informed start and every pretest answer is folded into the posterior as starting evidence.",
 			"learning": "Each interactive practice answer is one more Bayesian update — the posteriors after the pretest continue to be refined live.",
@@ -113,6 +115,7 @@ const ALGORITHMS := {
 		],
 		"best_for": "Modelling the DFA curriculum as a STRUCTURE: one correct board build lifts an entire neighbourhood of skills at once, mirroring how automata topics build on each other.",
 		"limit": "Quality depends on the prerequisite lattice being right; if two DFA skills are truly independent, KST propagates evidence that is not really there.",
+		"states": "A skill is 'ready' once every prerequisite is mastered; closure lifts prerequisites toward Mastered as dependants are answered correctly.",
 		"needs": {
 			"inputs": "PRETEST answers ONLY. Per-skill pretest accuracy becomes the starting knowledge state (the KST prior).",
 			"learning": "Each interactive answer updates the observed skill, then the closure pass re-derives the whole space.",
@@ -210,3 +213,27 @@ static func catalog_how_learns_flavor(algo_type: int) -> String:
 	n.get("termination", ""),
 	n.get("proof", ""),
 ]
+
+## NEW FORMAT briefing shared by EVERY screen (Testing Grounds briefing-first
+## flow, Algorithm Select, and the confirm panel). One block per algorithm:
+##   NAME - tagline
+##   HOW IT LEARNS (3 phases: INPUT / LEARNING / PROVE)
+##   PARAMS | BEST FOR | LIMIT | STATES
+static func catalog_briefing(algo_type: int) -> String:
+	var info: Dictionary = catalog_info(algo_type)
+	var n: Dictionary = catalog_needs(algo_type)
+	var out: Array[String] = []
+	out.append("%s - %s" % [str(info.get("name", "")), str(info.get("tagline", ""))])
+	out.append("HOW IT LEARNS (3 phases):")
+	out.append("  1. INPUT (pretest only): %s" % str(n.get("inputs", "")))
+	out.append("  2. LEARNING (analyse + terminate): %s %s" % [str(n.get("learning", "")), str(n.get("termination", ""))])
+	out.append("  3. PROVE (post test): %s" % str(n.get("proof", "")))
+	var param_lines: Array[String] = catalog_param_lines(algo_type)
+	if not param_lines.is_empty():
+		out.append("PARAMS: %s" % "  |  ".join(param_lines))
+	out.append("BEST FOR: %s" % str(info.get("best_for", "")))
+	out.append("LIMIT: %s" % str(info.get("limit", "")))
+	var states := str(info.get("states", ""))
+	if states != "":
+		out.append("STATES: %s" % states)
+	return "\n".join(out)

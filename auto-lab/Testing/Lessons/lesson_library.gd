@@ -413,115 +413,66 @@ static func workshop_tasks(skill: String) -> Array:
 static func _module_definition() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"THE PARTS OF A DFA",
-		"A DFA is described completely by five pieces, called the 5-tuple (Q, Sigma, delta, q0, F). Nothing else is needed - if you know these five, you know the machine.",
+		"WHAT IS A DFA?",
+		"A Deterministic Finite Automaton reads one symbol at a time, moves along labelled arrows, and accepts or rejects when the string ends.",
 		[
-			"Q - the finite set of states.",
-			"Sigma(Σ) - the input alphabet (the symbols the machine may read).",
-			"delta(δ) - the transition function: delta(state, symbol) -> state.",
-			"q0 - the start state, where the run begins.",
-			"F - the set of accepting (final) states, drawn as double circles.",
+			"States (Q) — circles; start has an incoming arrow; accepting states use a double circle (F).",
+			"Alphabet (Sigma) — symbols on the arrows.",
+			"Deterministic — exactly one arrow per symbol from each state.",
 		],
-		"F is a SUBSET of Q. It may be empty, it may hold one state, or even all of them - any subset is legal."
+		"Formal name: 5-tuple (Q, Sigma, delta, q0, F). On the diagram you mainly read states, start, accept, and arrows."
 	))
-	steps.append(_info(
-		"THE 5-TUPLE IN PRACTICE",
-		"Here is a real machine written out formally. It accepts strings over {a,b} that end with 'a'.",
-		[
-			"Q = {q0, q1}",
-			"Sigma(Σ) = {a, b}",
-			"q0 = q0",
-			"F = {q1}",
-			"delta(q0,a)=q1   delta(q0,b)=q0   delta(q1,a)=q1   delta(q1,b)=q0",
-		],
-		"A double circle in a diagram means exactly 'this state is in F'."
-	))
-	steps.append(_info(
-		"THREE WAYS TO WRITE THE SAME MACHINE",
-		"A DFA can be represented as a transition table, as a transition diagram, or as a formal 5-tuple. All three describe the same machine, so you can move between them freely.",
-		[
-			"Table: rows are states, columns are symbols, cells are next states.",
-			"Diagram: circles are states, arrows are transitions; the arrow with no source marks q0.",
-			"5-tuple: the compact mathematical description.",
-		],
-		"Exam questions usually give one representation and ask for another."
-	))
-	steps.append(_mc("def_parts_1", "Which of the following represents the five components of a finite automaton?",
+	steps.append(_mc("def_parts_1", "Which tuple lists the five standard parts of a finite automaton?",
 		["(Q, Σ, δ, q0, F)", "(Q, delta, F, Sigma, q)", "(Sigma, q0, F, S, delta)", "(Q, Sigma, S, delta, q1)"],
 		0,
-		"A finite automaton is the 5-tuple (Q, Sigma, delta, q0, F): states, alphabet, transition function, start state, accepting states.",
-		"Alphabet comes second, delta third, start state fourth, final states last."))
-	steps.append(_mc("def_parts_2", "What does Q represent in a finite automaton?",
-		["Input alphabet", "Set of states", "Transition function", "Set of final states"],
+		"(Q, Sigma, delta, q0, F): states, alphabet, moves, start, accepting states.",
+		"Alphabet second, moves third, start fourth, finals last."))
+	steps.append(_mc("def_parts_2", "What does a double circle on a state mean?",
+		["It is the start state", "It is in the accepting set F", "It is a trap state", "The alphabet is empty"],
 		1,
-		"Q is the finite set of states the machine may occupy.",
-		"Sigma is the alphabet, delta the transition function, F the final states - so Q is what is left."))
-	steps.append(_mc("def_parts_3", "What does F represent, and how is it usually drawn?",
-		["Input symbols, drawn as arrows", "Transition function, drawn as a table", "Starting state, drawn with an incoming arrow", "Set of final states, drawn with a double circle"],
-		3,
-		"F is the set of final (accepting) states and is drawn with a double circle.",
-		"Think of a bullseye: double ring means accepting."))
-	steps.append(_mc("def_parts_4", "What is the purpose of the transition function delta?",
-		["It determines how the automaton moves between states", "It identifies the final states", "It defines the alphabet", "It selects the starting state"],
-		0,
-		"delta(state, symbol) returns the state the machine enters when it reads that symbol.",
-		"delta is the wiring between the circles."))
+		"Double circle = accepting (final) state.",
+		"Start uses an arrow from nowhere, not a double ring."))
+	steps.append(_mc("def_parts_3", "Two arrows labelled 'a' leave the same state to different targets. What is wrong for a DFA?",
+		["Nothing — that is normal", "The machine is not deterministic", "F must be empty", "Sigma must be {a}"],
+		1,
+		"A DFA allows only one next state per (state, symbol).",
+		"Deterministic = one outcome per symbol."))
 	return _finish_definition(steps)
 
 ## Second half of module 1: the whiteboard demo, real-life panel and the
 ## reusable remedy / practice pools.
 static func _finish_definition(steps: Array) -> Dictionary:
 	steps.append(_board(
-		"SEE A DFA AT THE WHITEBOARD",
-		"This reference machine is already built for you. It accepts strings ending in 'a' and rejects strings ending in 'b'. Read the arrows: q0 is the start state, q1 carries the double ring so it belongs to F, and every state has exactly one arrow per symbol - that is what makes it deterministic.",
-		{"instruction": "A reference DFA is loaded. Press Check task to confirm you can read it, then change a transition and check again.", "seed": true, "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}
+		"READ A DFA",
+		"Sample machine: accepts strings over {a,b} that end in 'a'. q0 starts; q1 is accepting; one arrow per symbol.",
+		{"instruction": "Reference DFA loaded. Press Check task, then tweak one arrow and check again.", "seed": true, "accept": ["a", "ba", "aba", "bba"], "reject": ["b", "ab", "bb", "aab"]}
 	))
-	steps.append(_info(
-		"DFAs IN REAL LIFE",
-		"Finite automata are not only exam material - they run inside the software you use every day.",
-		[
-			"Lexical analysers: a compiler's scanner recognises identifiers, numbers and keywords with DFAs.",
-			"Regular expressions: engines translate a pattern into a DFA and then simulate it.",
-			"Network filters: firewall rules compile into machines that accept or drop traffic.",
-			"Elevators, traffic lights and vending machines: controllers whose behaviour depends only on the current state.",
-		],
-		"Whenever a rule depends only on the current situation, a DFA is the natural model."
-	))
-	steps.append(_mc("def_real_1", "A compiler's scanner decides whether a sequence of letters is a keyword, an identifier or a number. Which model does it use?",
-		["A Turing Machine for each token", "A finite automaton per token pattern", "A context-free grammar walker", "No machine, just regular expressions"],
-		1,
-		"Compilers recognise tokens with finite automata, usually a DFA built from a regular expression.",
-		"Token rules depend only on the characters read so far - the definition of a finite-state rule."))
 
 	return {
 		"skill": "definition",
 		"order": 1,
-		"title": "DFA DEFINITION & PARTS",
-		"subtitle": "What a DFA is, the 5-tuple, and how machines are written down.",
+		"title": "DFA BASICS",
+		"subtitle": "States, alphabet, start, accept — read a diagram.",
 		"accent": "#78b4ff",
 		"intro": _info(
-			"TOPIC 1 - DFA DEFINITION & PARTS",
-			"A Deterministic Finite Automaton (DFA) is the simplest machine model in Automata Theory: it reads a string one symbol at a time and, after the last symbol, either accepts or rejects it. It has no memory beyond the state it currently stands in.",
+			"TOPIC 1 — DFA BASICS",
+			"A DFA accepts or rejects a whole string by walking one symbol at a time. All it remembers is which state it is in now.",
 			[
-				"Deterministic: for each state and symbol there is exactly ONE next state.",
-				"Finite: the number of states is fixed and small.",
-				"No epsilon moves: every move consumes exactly one symbol.",
+				"One arrow per (state, symbol).",
+				"Accept iff you stop in an accepting state.",
 			],
-			"Everything else you learn about automata builds on this one idea."
+			"Learn to read the picture first; formal notation comes later."
 		),
 		"steps": steps,
 		"remedy": [
 			_info(
-				"LET'S GO SLOWLY",
-				"Read the 5-tuple in order and say each part out loud: Q (states) - Sigma (alphabet) - delta (moves) - q0 (start) - F (finals). Then read the diagram: circles are Q, the arrow with no source is q0, double circles are members of F, labelled arrows are delta.",
+				"READ THE DIAGRAM",
+				"Circle = state. Arrow from nowhere = start. Double circle = accept. Label on arrow = symbol read.",
 				[
-					"Q: list every state you can see.",
-					"Sigma: list every label used on the arrows.",
-					"q0: find the arrow that comes from nowhere.",
-					"F: find every double circle.",
-					"delta: read each arrow as delta(from, symbol) = to.",
+					"List states and which are accepting.",
+					"From each state, count arrows per symbol — must be exactly one for a DFA.",
 				],
-				"Use the whiteboard to test yourself: add a state, make it accepting, and watch the double ring appear."
+				"Use the whiteboard: toggle accepting on a state and watch the double ring."
 			),
 		],
 		"practice": [
@@ -553,24 +504,14 @@ static func _mc_img(id: String, prompt: String, image: String, options: Array, c
 static func _module_identification() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"DFA OR NFA? READ THE STRUCTURE",
-		"The three machine types look similar in a diagram. The difference is only in how the arrows behave, so you can classify any machine by checking the arrows - you never have to run it.",
+		"IS IT A DFA?",
+		"Classify from the drawing only — check arrows, do not run the string yet.",
 		[
-			"DFA: exactly one arrow per symbol from every state. No epsilon arrows.",
-			"NFA: a state may have several arrows on the same symbol, or none at all.",
-			"epsilon-NFA: it also has arrows labelled epsilon that consume no input.",
+			"DFA: exactly one outgoing arrow per symbol from each state; no epsilon arrows.",
+			"NFA: duplicate labels or missing symbols from a state.",
+			"epsilon-NFA: arrows labelled epsilon (no input consumed).",
 		],
-		"Two 'a' arrows leaving the same circle is the fastest give-away that you are looking at an NFA."
-	))
-	steps.append(_info(
-		"THE THREE REPRESENTATIONS OF A DFA",
-		"A diagram, a transition table and a 5-tuple can describe the exact same machine. Being able to switch between them is what 'identifying a DFA' really means in practice.",
-		[
-			"Diagram -> table: read every labelled arrow into a cell.",
-			"Table -> 5-tuple: collect the state names, the column labels, the start row and the rows whose final column is marked.",
-			"5-tuple -> diagram: draw one circle per state, then one arrow per delta entry.",
-		],
-		"Check completeness: in a complete DFA every state/symbol cell in the table is filled."
+		"Two arrows with the same label from one state ⇒ not a DFA."
 	))
 	steps.append(_mc("idn_basic_1", "A machine has states {q0, q1, q2} with delta(q0,a)=q1, delta(q0,b)=q2, delta(q1,a)=q0, delta(q1,b)=q1, delta(q2,a)=q2, delta(q2,b)=q0 and no epsilon arrows. What is it?",
 		["A DFA", "An NFA", "An epsilon-NFA", "Cannot be determined"],
@@ -595,11 +536,6 @@ static func _module_identification() -> Dictionary:
 		3,
 		"F is a subset of Q and may contain one state, several states, or even all of them. Having several accepting states - or all states accepting - is completely legal for a DFA.",
 		"Nothing in the definition limits how many states are in F."))
-	steps.append(_mc("idn_incomplete_1", "A complete DFA over Sigma = {0,1} has three states. How many transitions must its delta contain?",
-		["3", "6", "9", "It depends on the accepting states"],
-		1,
-		"Every state needs one transition per symbol: 3 states x 2 symbols = 6 transitions.",
-		"Multiply the number of states by the size of the alphabet."))
 	return _finish_identification(steps)
 
 # ===== 3. SIMULATION =======================================================
@@ -607,25 +543,13 @@ static func _module_identification() -> Dictionary:
 static func _module_simulation() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"WHAT SIMULATION MEANS",
-		"Simulating a DFA means running a string through it. You start at q0, read the string one symbol at a time, take the arrow labelled with that symbol, and when the string runs out you look at the state you stopped in. In F means accepted; outside F means rejected.",
+		"SIMULATE A STRING",
+		"Start at q0. For each symbol, follow the matching arrow once. When the string ends, accept iff you are in F.",
 		[
-			"Write the run as a chain: q0 --a--> q1 --b--> q0 ...",
-			"One symbol, one arrow, no skipping and no guessing.",
-			"Decision rule: final state in F = ACCEPTED, otherwise REJECTED.",
+			"Trace: q0 --a--> q1 --b--> ...",
+			"No skipping symbols; missing arrow ⇒ reject.",
 		],
-		"Simulation is the only way to prove that a machine really accepts the language you designed it for."
-	))
-	steps.append(_info(
-		"WATCH A FULL TRACE",
-		"Machine: over {a,b}, accepts strings ending in 'b'. Transitions: delta(q0,a)=q0, delta(q0,b)=q1, delta(q1,a)=q0, delta(q1,b)=q1. Start q0, accepting {q1}.",
-		[
-			"Trace 'abab': q0 --a--> q0 --b--> q1 --a--> q0 --b--> q1",
-			"Final state q1 is accepting -> 'abab' is ACCEPTED.",
-			"Trace 'abba': q0 --a--> q0 --b--> q1 --b--> q1 --a--> q0",
-			"Final state q0 is not accepting -> 'abba' is REJECTED.",
-		],
-		"Say each step out loud: state, symbol, next state. That habit prevents almost every simulation mistake."
+		"Maze rooms = states, corridors = symbols, exit = accepting state."
 	))
 	steps.append(_mc("sim_purpose", "Given a DFA, what is the purpose of simulating an input string?",
 		["To change the DFA's states permanently", "To determine the state reached after processing the input", "To add new transitions", "To remove final states"],
@@ -641,20 +565,10 @@ static func _module_simulation() -> Dictionary:
 		DFA_ENDS_01, 1,
 		"Every corridor carries one symbol, so a walk through the maze IS a simulation. The exit room is an accepting state, so you only escape if the string you collected is accepted.",
 		"Watch the string you are building as you move: the last two symbols must be 0 then 1."))
-	steps.append(_info(
-		"WHY THE MAZE IS A DFA",
-		"Rooms are states, corridors are transitions, and the exit is an accepting state. Walking the maze and simulating a string are the very same activity - that is why automata are such a good model for search, navigation and control problems.",
-		[
-			"Each corridor label is one symbol of the input.",
-			"A dead end means delta is undefined for that symbol: the machine stalls and rejects.",
-			"The exit door is F: reaching it means the string is accepted.",
-		],
-		"If you can walk the maze, you can simulate the machine on paper."
-	))
 	steps.append(_board(
 		"SIMULATE ON THE WHITEBOARD",
-		"Now it is your turn. Build a machine for the language 'strings over {0,1} that end in 01', then use the simulate box on the board to test strings. Watch the board highlight each step as it consumes one symbol at a time.",
-		{"instruction": "Build a DFA over {0,1} that ACCEPTS strings ending in '01' and REJECTS all others, then simulate '1101' and '00110'.", "accept": ["01", "1101", "101"], "reject": ["1", "0", "10", "110", "00110"]}
+		"Build a DFA for strings over {0,1} ending in '01', then use Simulate on '1101' and '00110'.",
+		{"instruction": "Build ending-in-01 DFA; simulate '1101' and '00110'.", "accept": ["01", "1101", "101"], "reject": ["1", "0", "10", "110", "00110"]}
 	))
 	return _finish_simulation(steps)
 
@@ -663,25 +577,14 @@ static func _module_simulation() -> Dictionary:
 static func _module_building() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"THE DESIGN RECIPE",
-		"Building a DFA is not guessing: it is a four-step procedure. Follow it and the machine falls out of the language description.",
+		"BUILD FROM THE LANGUAGE",
+		"Turn the English rule into states = what you must remember, then wire one arrow per symbol.",
 		[
-			"1. Write down the language in words: 'strings over {a,b} that end in ab'.",
-			"2. Decide what the machine must REMEMBER after reading a prefix. Memory = states.",
-			"3. One state per distinct memory; mark the memory that means 'accepted so far' as accepting.",
-			"4. Complete delta: give every state one arrow per symbol, adding a trap state if you need to forget.",
+			"Name each state by its memory (e.g. 'ends in a', 'even count').",
+			"Mark accepting where the rule is already satisfied.",
+			"Add a trap state when a bad prefix can never recover.",
 		],
-		"Finally test your design with strings you are sure about: one accepted, one rejected, and one tricky case."
-	))
-	steps.append(_info(
-		"THE TRAP (DEAD) STATE",
-		"Some languages reject a prefix forever - once you see 'b', no continuation can ever be valid. Such a machine needs a TRAP state: a non-accepting state whose arrows all point back to itself.",
-		[
-			"For a+: q0 reads 'a' into q1 (accepting); any 'b' goes to the trap state.",
-			"The trap state is where the machine 'gives up' but keeps running, which keeps the DFA complete.",
-			"A DFA without a trap state is still valid as long as delta is defined for every pair.",
-		],
-		"Trap state = a parking place for hopeless input."
+		"Test: one accept, one reject, one near-miss."
 	))
 	steps.append(_mc("bld_trap_1", "A DFA has states q0, q1, q2 where q2 is accepting, and delta(q2, 'b') is missing. What must be added to make this a complete DFA?",
 		["Remove q2 from F so it has no missing arrows", "Add a new start state", "Change the alphabet to {a}", "Add a transition from the accepting state on 'b'"],
@@ -717,24 +620,14 @@ static func _module_building() -> Dictionary:
 static func _module_set_builder() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"SET-BUILDER NOTATION",
-		"Set-builder notation describes a language by a CONDITION instead of by a pattern: {w in Sigma* : condition}. Read it as 'the set of all strings w in Sigma* such that the condition is true'.",
+		"LANGUAGES AS CONDITIONS",
+		"Set-builder form: {w in Sigma* : condition}. Pick the smallest memory that decides the condition.",
 		[
-			"{w in {0,1}* : w contains '00'} - the substring 00 appears somewhere.",
-			"{w in {0,1}* : the number of 1s in w is even} - a counting condition.",
-			"{w in {a,b}* : |w| is even} - a length condition (|w| means the length of w).",
+			"'contains 00' → track how much of 00 you have seen.",
+			"'even number of 1s' → two states: even / odd.",
+			"'|w| even' → toggle length parity each symbol.",
 		],
-		"Everything before the colon says which strings are candidates; everything after says which ones survive."
-	))
-	steps.append(_info(
-		"COUNTING BECOMES MEMORY",
-		"Conditions about counting look impossible for a machine with no memory - until you notice that you only need to remember the part of the count that changes the answer.",
-		[
-			"Parity of the number of 1s: two states (even, odd). Counting to a million would be impossible; counting 'odd or even' needs one bit.",
-			"Contains '00': remember 'how much of the pattern I have matched so far' - nothing, one 0, or matched.",
-			"Length is even: two states, toggled by every symbol.",
-		],
-		"The art of set-builder DFAs is choosing the smallest memory that still answers the condition."
+		"States = memories, not individual strings."
 	))
 	steps.append(_mc("set_read_1", "Which strings belong to {w in {0,1}* : w contains '00'}?",
 		["Only '00' itself", "'00', '100', '1001' and '000' - any string with two consecutive 0s", "Only strings that start with 00", "Any string with at least two 0s anywhere"],
@@ -780,14 +673,12 @@ static func _finish_set_builder(steps: Array) -> Dictionary:
 		"subtitle": "Turn a condition {w : ...} into a machine by choosing the right memory.",
 		"accent": "#c39bff",
 		"intro": _info(
-			"TOPIC 5 - SET-BUILDER NOTATION",
-			"A set-builder description is the most mathematical way to give a language, and also the most compact. Your job is to find the memory that answers the condition - often much smaller than the condition suggests.",
+			"TOPIC 5 — CONDITIONS",
+			"Read {w : condition} and choose states that track just enough to decide.",
 			[
-				"Sigma* means any string over the alphabet, including the empty string.",
-				"Counting conditions usually reduce to parity or to 'have I seen it yet'.",
-				"Substring conditions reduce to 'how much of the pattern matches so far'.",
+				"Parity and substring checks need small memories.",
 			],
-			"Ask 'what is the least I must remember to answer the condition for every continuation?' and the states appear."
+			"Condition → memory → diagram."
 		),
 		"steps": steps,
 		"remedy": [
@@ -828,25 +719,14 @@ static func _finish_set_builder(steps: Array) -> Dictionary:
 static func _module_list() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
-		"LANGUAGES HIDDEN IN A LIST",
-		"A list of accepted strings hides a language: your job is to find the rule that generates ALL of them, then build a machine for that rule - not just for the strings shown.",
+		"INFER THE RULE FROM EXAMPLES",
+		"A finite list hints at an infinite language. Find the pattern, then build one DFA for the rule.",
 		[
-			"{a, aa, aaa, ...} -> one or more a's -> a+ (the dots mean the pattern continues forever).",
-			"{ab, aab, aaab, ...} -> some a's followed by one b -> a+b.",
-			"{b, ab, aab, ...} -> zero or more a's then a b -> a*b.",
+			"{ab, aab, aaab, ...} → one or more a's, then one b (a+b).",
+			"{b, ab, aab, ...} → zero or more a's, then one b (a*b).",
+			"Check the shortest example first (empty string? single symbol?).",
 		],
-		"Always read the shortest string first: it usually reveals whether the pattern allows 'nothing' (the empty string)."
-	))
-	steps.append(_info(
-		"THE FOUR QUESTIONS",
-		"Run this checklist on any list before you draw a single circle.",
-		[
-			"1. Shortest string: is the empty string or a single symbol included? That tells you if q0 is accepting.",
-			"2. Length: does only the LENGTH matter (odd/even), or the symbols?",
-			"3. Repetition: which symbol may repeat, and how often (zero times, one or more)?",
-			"4. Termination: must the string END with a particular symbol?",
-		],
-		"If your answer to all four matches the list, the machine design is almost automatic."
+		"Reject strings that look like the list but break the rule."
 	))
 	steps.append(_mc("lst_read_1", "What language does the list {ab, aab, aaab, ...} describe?",
 		["All strings containing at least one ab", "One or more a's followed by exactly one b", "Any number of a's, then any number of b's", "Strings with more a's than b's"],
@@ -902,15 +782,13 @@ static func _finish_list(steps: Array) -> Dictionary:
 		"subtitle": "Infer the hidden rule behind a list of accepted strings.",
 		"accent": "#7fe0dc",
 		"intro": _info(
-			"TOPIC 6 - FROM A LIST TO A MACHINE",
-			"A list shows finitely many accepted strings, but the language behind it is infinite. Inferring the RULE is the skill: once you know the rule, the machine follows from the memory it needs.",
+			"TOPIC 6 — FROM LISTS",
+			"Examples suggest a rule; build one machine for that rule, not for the list alone.",
 			[
-				"Read the shortest string first - it reveals whether 'nothing' is allowed.",
-				"Look for repetition: 'one or more', 'zero or more', or 'exactly once'.",
-				"Look for a required ending symbol.",
-				"Then test your machine against strings OUTSIDE the list, including near-misses.",
+				"Shortest string tells you about empty / single-symbol cases.",
+				"Test near-miss strings outside the list.",
 			],
-			"Too few states and the machine accepts the wrong strings; too many and you have lost track of the rule."
+			"Rule first, then states."
 		),
 		"steps": steps,
 		"remedy": [
@@ -966,15 +844,13 @@ static func _finish_building(steps: Array) -> Dictionary:
 		"subtitle": "Design machines from a language description and prove them correct.",
 		"accent": "#ff9f7a",
 		"intro": _info(
-			"TOPIC 4 - BUILDING DFAs",
-			"Now you design the machine instead of reading it. The trick is to think in terms of MEMORY: a DFA state records everything the machine must remember about the input so far. If two prefixes need the same decision for every possible continuation, they share a state.",
+			"TOPIC 4 — BUILD",
+			"Design states as memories, wire arrows, test with accept/reject strings.",
 			[
-				"States = distinct pieces of memory",
-				"Accepting states = memories where the string seen so far is in the language",
-				"Trap state = a memory from which nothing is ever accepted",
-				"Every build is judged by testing strings, not by how it looks",
+				"Any correct diagram passes the whiteboard.",
+				"Trap state when a prefix is hopeless.",
 			],
-			"The whiteboard accepts ANY correct construction - your machine does not have to match the reference one."
+			"Memory-first, not picture-first."
 		),
 		"steps": steps,
 		"remedy": [
@@ -1036,14 +912,13 @@ static func _finish_simulation(steps: Array) -> Dictionary:
 		"subtitle": "Walk strings through a machine and decide accept or reject - on paper and in the maze.",
 		"accent": "#ffd479",
 		"intro": _info(
-			"TOPIC 3 - SIMULATING A DFA",
-			"Simulation is the skill examiners test most, because it proves you can read a machine. The good news: it is completely mechanical. Start at q0, consume one symbol per arrow, and check the final state against F.",
+			"TOPIC 3 — SIMULATE",
+			"Walk the string: start at q0, one arrow per symbol, then check F.",
 			[
-				"Write the chain of states; do not jump ahead.",
-				"One symbol = one arrow. Never skip, never reuse the same arrow twice for two symbols.",
-				"Final state in F -> ACCEPT, otherwise REJECT.",
+				"Final state in F ⇒ accept.",
+				"Maze = same walk in 3D.",
 			],
-			"The maze checkpoint in this topic is the same computation with your feet: rooms are states, corridors are symbols."
+			"Mechanical tracing — no guessing."
 		),
 		"steps": steps,
 		"remedy": [
@@ -1080,36 +955,25 @@ static func _finish_simulation(steps: Array) -> Dictionary:
 
 static func _finish_identification(steps: Array) -> Dictionary:
 	steps.append(_board(
-		"MAKE AN INCOMPLETE MACHINE INTO A COMPLETE DFA",
-		"A DFA over {0,1} is only complete when EVERY state has an arrow for '0' and for '1'. On this board, check each state: if a symbol has no arrow, the machine is not a valid DFA yet. Add the missing arrows and give every symbol somewhere to go.",
-		{"instruction": "Build a complete DFA over {0,1} that ACCEPTS strings ending in '1' (every state needs an arrow for 0 and for 1).", "accept": ["1", "01", "011", "1001"], "reject": ["0", "10", "110", "000"]}
+		"COMPLETE THE DIAGRAM",
+		"Every state needs one '0' and one '1' arrow. Build a DFA over {0,1} for strings ending in '1'.",
+		{"instruction": "Complete DFA: accepts strings ending in '1'.", "accept": ["1", "01", "011", "1001"], "reject": ["0", "10", "110", "000"]}
 	))
-	steps.append(_mc("idn_rep_1", "Which representation below always shows every transition of a DFA in one place, making missing arrows obvious?",
-		["The 5-tuple", "The transition table", "The accepting-state list", "The alphabet"],
-		1,
-		"The transition table has one cell per (state, symbol) pair, so a missing arrow shows up as an empty cell.",
-		"Think of which form has a row for each state and a column for each symbol."))
-	steps.append(_mc("idn_rep_2", "A transition table for Sigma = {0,1} has an empty cell in row q2, column 0. What does that mean?",
-		["delta(q2,0) is undefined, so the machine is not a complete DFA", "q2 is an accepting state", "0 is not part of the alphabet", "The machine is an epsilon-NFA"],
-		0,
-		"An empty cell means no transition for that state/symbol pair: the machine is incomplete and stalls on that input.",
-		"Every cell must be filled for a complete DFA."))
 
 	return {
 		"skill": "identification",
 		"order": 2,
-		"title": "IDENTIFICATION OF DIAGRAM",
-		"subtitle": "Tell DFAs from NFAs and epsilon-NFAs, and read any representation.",
+		"title": "SPOT A DFA",
+		"subtitle": "Tell a DFA from an NFA using the diagram only.",
 		"accent": "#8ce0b0",
 		"intro": _info(
-			"TOPIC 2 - IDENTIFYING DFAs FROM DIAGRAMS",
-			"Before you can simulate or build a machine you must be sure it really is a DFA. Identification is a fifteen-second visual check: count the arrows leaving each state for each symbol, and look for epsilon labels.",
+			"TOPIC 2 — SPOT A DFA",
+			"Quick check: from each state, at most one arrow per symbol; no epsilon arrows.",
 			[
-				"One arrow per symbol, from every state: DFA.",
-				"Several arrows on the same symbol, or missing arrows: NFA (or incomplete).",
-				"An arrow labelled epsilon: epsilon-NFA by definition.",
+				"Duplicate labels from one state ⇒ NFA.",
+				"All states accepting is still allowed.",
 			],
-			"A machine with all states accepting is still a valid DFA - F may equal Q."
+			"You do not need to simulate to classify the picture."
 		),
 		"steps": steps,
 		"remedy": [
@@ -1130,15 +994,10 @@ static func _finish_identification(steps: Array) -> Dictionary:
 				2,
 				"Only epsilon-NFAs may have epsilon transitions, so the machine is an epsilon-NFA.",
 				"Any epsilon arrow automatically changes the classification."),
-			_mc("idn_practice_2", "The transition table for Sigma = {a,b} has 4 states and every cell filled. Is it a DFA?",
-				["Yes - 4 states x 2 symbols = 8 defined transitions", "No, tables cannot describe DFAs", "Only if F is empty", "Only if one state is accepting"],
+			_mc("idn_practice_2", "Every state has exactly one 'a' and one 'b' arrow, and there are no epsilon moves. What is it?",
+				["A DFA", "An NFA", "An epsilon-NFA", "Not an automaton"],
 				0,
-				"A complete table with exactly one entry per state/symbol pair describes a DFA.",
-				"A filled table means exactly one next state per pair."),
-			_mc("idn_practice_3", "Why is the number of transitions in a complete DFA always |Q| x |Sigma|?",
-				["Because delta is defined for every state/symbol pair", "Because F is a subset of Q", "Because q0 is fixed", "Because DFAs are finite"],
-				0,
-				"delta must be defined for every state and every input symbol, giving |Q| x |Sigma| transitions.",
-				"One transition per pair, and there are |Q| x |Sigma| pairs."),
+				"One arrow per symbol from each state and no epsilon ⇒ DFA.",
+				"Count arrows per label from each circle."),
 		],
 	}

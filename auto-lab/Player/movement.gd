@@ -22,11 +22,27 @@ var _yaw := 0.0
 var _pitch := 0.0
 
 func _ready() -> void:
+	if not InputMode.mode_changed.is_connected(_apply_control_scheme):
+		InputMode.mode_changed.connect(_apply_control_scheme)
+	_apply_control_scheme(InputMode.is_vr())
+
+func _apply_control_scheme(_is_vr: bool = InputMode.is_vr()) -> void:
 	if InputMode.is_desktop():
-		_setup_desktop_camera()
-	elif xr_origin:
-		_origin_initial_x = xr_origin.position.x
-		_origin_initial_z = xr_origin.position.z
+		if xr_origin:
+			xr_origin.visible = false
+		if desktop_camera == null:
+			_setup_desktop_camera()
+	else:
+		if desktop_camera:
+			desktop_camera.queue_free()
+			desktop_camera = null
+		if xr_origin:
+			xr_origin.visible = true
+			var cam := xr_origin.get_node_or_null("XRCamera3D") as XRCamera3D
+			if cam:
+				cam.current = true
+			_origin_initial_x = xr_origin.position.x
+			_origin_initial_z = xr_origin.position.z
 
 func _is_desktop() -> bool:
 	return InputMode.is_desktop()

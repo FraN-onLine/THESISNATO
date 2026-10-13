@@ -37,4 +37,6 @@ renderer/rendering_method.mobile="gl_compatibility"
 
 [xr]
 
+openxr/enabled=true
+startup_alert=false
 shaders/enabled=true
