@@ -80,6 +80,10 @@ var connection_edits := 0
 var skip_count := 0
 var task_done := false
 var free_build_mode := false
+## Display-only machine (loaded by load_machine_spec): the board shows a DFA for
+## the learner to READ while a quiz question refers to it. Check/Skip do not
+## grade anything in this mode - there is no task, only a reference diagram.
+var reference_mode := false
 var task_started_msec := 0
 var active_seconds := 0.0
 var _last_time := 0
@@ -171,6 +175,7 @@ func _wipe_graph() -> void:
 	last_transition_from = ""
 	last_transition_to = ""
 	task_done = false
+	reference_mode = false
 	last_attempt_stats = {
 		"attempts": 0,
 		"wrong_attempts": 0,
@@ -220,7 +225,7 @@ func _apply_instruction_text() -> void:
 	var heading := get_node_or_null("VBoxContainer/InstructionLabel") as Label
 	if heading:
 		var hint := "\nTAP A NODE to select it, then drag it to move. To draw an arrow: tap a symbol below, tap Connect, then tap the source node and the target node. \"Set as Start\" picks the single start state; double-tap an empty spot to add a node there."
-		if allow_skip and not free_build_mode:
+		if allow_skip and not free_build_mode and not reference_mode:
 			hint += " Stuck? \"Skip task\" records a skip instead of a build (and it costs knowledge)."
 		heading.text = task_instruction + hint
 
@@ -494,6 +499,76 @@ func seed_reference_graph() -> void:
 		{"from": "q1", "to": "q0", "symbols": ["b"]},
 		{"from": "q1", "to": "q1", "symbols": ["a"]},
 	]
+	_apply_instruction_text()
+	_refresh()
+
+## Load an ARBITRARY machine (authored in the lesson library) onto the board so
+## quiz questions can point at it: "Refer to the DFA on the whiteboard...".
+##
+## `spec` uses the library machine shape:
+##   {"states": [...], "alphabet": [...], "start": "q0", "accepting": [...],
+##    "transitions": {"q0|a": "q1", ..., "q0|0->q2": "q2"}}
+## The "->target" suffix inside a key only disambiguates duplicate
+## (state, symbol) pairs in reference NFAs: the key gives source + symbol, the
+## value gives the target.
+##
+## How the machine is laid out: the states are placed left to right in a row,
+## evenly spaced inside the board, so ANY machine (2 to 6 states) reads clearly.
+## The board runs in display-only mode (reference_mode): Check and Skip do not
+## grade, and Simulate can still be used to try strings against the diagram.
+func load_machine_spec(spec: Dictionary, banner := "") -> void:
+	_wipe_graph()
+	reference_mode = true
+	task_done = true
+	var names: Array = spec.get("states", [])
+	if names.is_empty():
+		names = ["q0"]
+	var accepting: Array = spec.get("accepting", [])
+	var bounds := _board_rect()
+	var margin := _board_margin()
+	var row_y: float = bounds.size.y * 0.5
+	for index in names.size():
+		var state_name := str(names[index])
+		var x: float = bounds.size.x * 0.5
+		if names.size() > 1:
+			var usable: float = maxf(bounds.size.x - margin * 2.0, 1.0)
+			x = margin + usable * float(index) / float(names.size() - 1)
+		states[state_name] = {"position": Vector2(x, row_y), "accepting": accepting.has(state_name)}
+	start_state = str(spec.get("start", names[0]))
+	if not states.has(start_state):
+		start_state = str(names[0])
+	selected_state = start_state
+	next_state_id = names.size()
+	var alphabet: Array = spec.get("alphabet", [])
+	active_symbol = str(alphabet[0]) if not alphabet.is_empty() else "a"
+	# Merge transitions that share the same (from, to) pair into ONE arrow with
+	# several symbol labels, exactly like the hand-built graph shape.
+	var grouped := {}
+	var raw: Dictionary = spec.get("transitions", {})
+	for key in raw:
+		var parts: PackedStringArray = str(key).split("|")
+		if parts.size() != 2:
+			continue
+		var from_state := parts[0]
+		var symbol := parts[1]
+		if symbol.contains("->"):
+			symbol = symbol.split("->")[0]
+		var to_state := str(raw[key])
+		if not states.has(from_state) or not states.has(to_state):
+			continue
+		var pair := from_state + "|" + to_state
+		var symbols: Array = grouped.get(pair, [])
+		if not symbols.has(symbol):
+			symbols.append(symbol)
+		grouped[pair] = symbols
+	transitions.clear()
+	for pair in grouped:
+		var ends: PackedStringArray = str(pair).split("|")
+		transitions.append({"from": ends[0], "to": ends[1], "symbols": grouped[pair]})
+	if banner != "":
+		task_instruction = banner
+	if skip_button:
+		skip_button.visible = false
 	_apply_instruction_text()
 	_refresh()
 
@@ -995,6 +1070,11 @@ func _simulate(value: String) -> bool:
 
 func _check_task() -> void:
 	_cancel_simulation()
+	# Reference mode: the board shows a machine for the learner to READ while a
+	# quiz question refers to it. There is no task, so nothing is graded.
+	if reference_mode:
+		status_label.text = "Reference machine — display only. Use Simulate to test any string against it, then answer the question on the panel."
+		return
 	# Free-build sandbox has no fixed accept/reject set: only Simulate applies,
 	# so the learner can test THEIR OWN strings against THEIR OWN machine.
 	if free_build_mode:
@@ -1036,13 +1116,16 @@ func _check_task() -> void:
 func set_skip_enabled(enabled: bool) -> void:
 	allow_skip = enabled
 	if skip_button:
-		skip_button.visible = enabled and not free_build_mode
+		skip_button.visible = enabled and not free_build_mode and not reference_mode
 
 ## SKIP TASK. The learner stops working on this build. Nothing is answered and no
 ## machine is graded: the board just reports the skip, and the HOST applies the
 ## knowledge penalty (heavier the less the learner already knew) and advances.
 func _skip_task() -> void:
 	_cancel_simulation()
+	if reference_mode:
+		status_label.text = "This is a reference machine to read — there is nothing to skip."
+		return
 	if not allow_skip:
 		status_label.text = "Skipping is not allowed in this test. Build the machine and press Check task."
 		return

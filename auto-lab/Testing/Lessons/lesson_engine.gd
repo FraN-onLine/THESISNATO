@@ -129,6 +129,18 @@ func advance() -> bool:
 	_announce_current()
 	return true
 
+## Step the cursor one step back, so the room's Back button can walk a learner
+## up the lesson without restarting it. Deliberately SILENT: nothing is
+## re-announced, re-rewarded or re-graded, because a re-read is not progress.
+## Returns false at the start of the lesson (nothing to go back to).
+func back() -> bool:
+	if position <= 0:
+		return false
+	position -= 1
+	current_result = {}
+	step_changed.emit(current(), position, step_count())
+	return true
+
 func finished() -> bool:
 	return finished_module or position >= queue.size()
 

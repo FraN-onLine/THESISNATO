@@ -420,6 +420,22 @@ func _on_settings_pressed() -> void:
 		_save_settings())
 	vbox.add_child(verbose)
 
+	var voice := CheckButton.new()
+	voice.text = "Lesson voice (recorded clips, text-to-speech fallback)"
+	voice.button_pressed = SessionBridge.voice_enabled
+	voice.add_theme_font_size_override("font_size", 24)
+	voice.toggled.connect(func(on: bool):
+		SessionBridge.voice_enabled = on
+		_save_settings())
+	vbox.add_child(voice)
+
+	var voice_hint := Label.new()
+	voice_hint.text = "Panel lines with a recorded clip play the clip; lines without one are read aloud by the system text-to-speech voice. Captions always show."
+	voice_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	voice_hint.add_theme_font_size_override("font_size", 17)
+	voice_hint.add_theme_color_override("font_color", Color(0.72, 0.82, 0.98, 1))
+	vbox.add_child(voice_hint)
+
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.custom_minimum_size = Vector2(320, 58)
@@ -441,6 +457,7 @@ func _save_settings() -> void:
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value("options", "skip_profile_collection", SessionBridge.skip_profile_collection)
 	cfg.set_value("options", "verbose_board", SessionBridge.verbose_board)
+	cfg.set_value("options", "voice_enabled", SessionBridge.voice_enabled)
 	if InputMode.mode_pref != InputMode.Pref.AUTO:
 		cfg.set_value("options", "vr_mode", InputMode.mode_pref == InputMode.Pref.VR)
 	cfg.save(SETTINGS_PATH)
@@ -450,6 +467,7 @@ func _load_settings() -> void:
 	if cfg.load(SETTINGS_PATH) == OK:
 		SessionBridge.skip_profile_collection = bool(cfg.get_value("options", "skip_profile_collection", SessionBridge.skip_profile_collection))
 		SessionBridge.verbose_board = bool(cfg.get_value("options", "verbose_board", SessionBridge.verbose_board))
+		SessionBridge.voice_enabled = bool(cfg.get_value("options", "voice_enabled", SessionBridge.voice_enabled))
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()

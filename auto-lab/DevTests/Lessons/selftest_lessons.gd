@@ -468,8 +468,7 @@ func _check_voice() -> void:
 # ===== 5. Checkpoint card and maze panel ===================================
 
 func _check_card_layout() -> void:
-	var mc: Dictionary = Library.get_module("definition").get("steps", [])[3]
-	var cp: Dictionary = mc.get("checkpoint", {})
+	var cp: Dictionary = _first_checkpoint_of_kind("definition", Checkpoint.KIND_MC)
 	_card.show_checkpoint(cp)
 	var buttons := _buttons_in(_card)
 	var too_small: Array[String] = []
@@ -488,8 +487,7 @@ func _check_card_layout() -> void:
 	_note(_card_response == 0, "card_option_tap_reports_index", "response=%s" % str(_card_response))
 
 	# The trace kind answers with typed text.
-	var trace_step: Dictionary = Library.get_module("simulation").get("steps", [])[3]
-	var trace_cp: Dictionary = trace_step.get("checkpoint", {})
+	var trace_cp: Dictionary = _first_checkpoint_of_kind("simulation", Checkpoint.KIND_TRACE)
 	_card.show_checkpoint(trace_cp)
 	var input: LineEdit = _card.get("_answer_input")
 	input.text = " q2 "
@@ -498,14 +496,14 @@ func _check_card_layout() -> void:
 	_note(_card_response == "q2", "card_trace_answer_is_trimmed", "response=%s" % str(_card_response))
 
 	# The build kind must explain the board task and the test strings.
-	var build_cp: Dictionary = Library.get_module("building").get("steps", [])[3].get("checkpoint", {})
+	var build_cp: Dictionary = _first_checkpoint_of_kind("building", Checkpoint.KIND_BUILD)
 	_card.show_checkpoint(build_cp)
 	var points: Label = _card.get("_points_label")
 	_note("ACCEPTED" in points.text and "Check task" in points.text, "card_build_explains_board_task",
 		"text=%s" % points.text.substr(0, 60))
 
 func _check_maze_walk() -> void:
-	var maze_cp: Dictionary = Library.get_module("simulation").get("steps", [])[4].get("checkpoint", {})
+	var maze_cp: Dictionary = _first_checkpoint_of_kind("simulation", Checkpoint.KIND_MAZE)
 	var spec: Dictionary = maze_cp.get("spec", {})
 	_maze.show_maze(spec, str(maze_cp.get("objective", "")), int(maze_cp.get("escapes", 1)))
 	var path := _accepted_string(spec)
@@ -534,6 +532,15 @@ func _check_maze_walk() -> void:
 		"walk='%s' escaped=%s" % [rejected if rejected != "" else "(empty)", str(_maze_response.get("escaped", false))])
 
 # ===== Reporting ===========================================================
+
+## First checkpoint of a given kind in a module, found by KIND rather than by a
+## hard step index so re-ordering lesson content never breaks the test.
+func _first_checkpoint_of_kind(skill: String, kind: String) -> Dictionary:
+	for step in Library.get_module(skill).get("steps", []):
+		var cp: Dictionary = step.get("checkpoint", {})
+		if not cp.is_empty() and Checkpoint.kind_of(cp) == kind:
+			return cp
+	return {}
 
 func _buttons_in(node: Node) -> Array:
 	var found: Array = []

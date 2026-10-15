@@ -35,6 +35,12 @@ var pending_return := ""
 ## Turn off in Options for a minimal %-only board.
 var verbose_board := true
 
+## Narrator voice for lesson panels. When true, each spoken line plays its
+## recorded clip (res://Audio/Voice/<line_id>.ogg) if one exists, and falls
+## back to the operating system's text-to-speech voice when it does not.
+## Captions always show regardless. Toggle in Options.
+var voice_enabled := true
+
 func get_session():
 	if session == null:
 		session = SessionManager.new()

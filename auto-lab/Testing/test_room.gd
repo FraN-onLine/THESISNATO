@@ -23,8 +23,15 @@ var test_mode := "pretest"  # "pretest" | "posttest"
 var awaiting_handson := false
 
 func _ready() -> void:
-	# Persistent screen-overlay phase progress HUD (shows Pretest / Post Test here).
+	# Phase progress HUD + stopwatch. DESKTOP: flat screen overlays. VR: a
+	# CanvasLayer never renders in a headset, so the same readout floats in the
+	# room above the question board instead (RoomHUD).
 	add_child(load("res://Testing/phase_hud.gd").new())
+	if InputMode.is_vr():
+		var room_hud: Node3D = load("res://Testing/room_hud.gd").new()
+		# Just above the question billboard (panel at y=2.5, 3.2 m tall).
+		room_hud.position = Vector3(-4.8, 4.55, -4)
+		add_child(room_hud)
 	session = SessionBridge.get_session()
 	test_mode = SessionBridge.test_mode
 	if test_mode != "posttest":
@@ -41,9 +48,10 @@ func _ready() -> void:
 		if session.state != SessionManager.SessionState.PRETEST:
 			session.start_pretest()
 
-	# The post-test stopwatch overlay. It renders the session's own clock
+	# Desktop post-test stopwatch overlay. It renders the session's own clock
 	# (started by session.start_posttest()), so the number on screen always
-	# matches what the per-student study JSON records.
+	# matches what the per-student study JSON records; in VR the RoomHUD above
+	# shows the same clock in the room.
 	var overlay := CountingTimerOverlay.new()
 	overlay.mode = "posttest"
 	add_child(overlay)
@@ -65,7 +73,7 @@ func _ready() -> void:
 
 func _show_intro() -> void:
 	if test_mode == "posttest":
-		test_panel.show_intro("You will now take the POST-TEST on DFA (Deterministic Finite Automata).\n\nPart 1: the same 15 multiple-choice questions from the pretest.\nPart 2: 5 hands-on tasks where you BUILD a DFA on the automata board and press \"Check task\" to submit - only a correct build continues.\n\nPress Start to begin.")
+		test_panel.show_intro("You will now take the POST-TEST on DFA (Deterministic Finite Automata).\n\nPart 1: the same 15 multiple-choice questions from the pretest.\nPart 2: 2 hands-on tasks where you BUILD a DFA on the automata board and press \"Check task\" to submit - only a correct build continues.\n\nPress Start to begin.")
 	else:
 		test_panel.show_intro("You will now take the PRETEST on DFA (Deterministic Finite Automata).\n\n15 multiple-choice questions covering all 6 skill areas. Some questions show a diagram. You cannot go back - answer carefully.\n\nPress Start to begin.")
 

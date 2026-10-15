@@ -67,6 +67,9 @@ var timer_raw_seconds: float = 0.0
 var _student_results_saved: bool = false
 ## Path of the student results file written this session (for display).
 var _student_results_path: String = ""
+## Same idempotency guard, for the shared algorithm-performance summary.
+var _algorithm_summary_saved: bool = false
+var _algorithm_summary_path: String = ""
 ## The model's learned / not-learned verdict per skill, snapshotted the instant
 ## adaptive learning ends (BEFORE any post-test answer can move the beliefs).
 ## Compared against the real post-test results for Knowledge State Accuracy.
@@ -457,7 +460,7 @@ func start_posttest() -> void:
 	current_question_index = 0
 	current_question_answered = false
 	posttest_answers.clear()
-	# Same 15 pretest items for comparison PLUS 5 hands-on DFA builds.
+	# Same 15 pretest items for comparison PLUS 2 hands-on DFA builds.
 	posttest_questions = pretest_questions.duplicate() + QuestionBank.POSTTEST_QUESTIONS
 	_current_question()
 
@@ -518,6 +521,8 @@ func _reset_study_timing() -> void:
 	predicted_knowledge_state = {}
 	_student_results_saved = false
 	_student_results_path = ""
+	_algorithm_summary_saved = false
+	_algorithm_summary_path = ""
 
 ## Stop the post-test stopwatch and freeze its value.
 func stop_posttest_timer() -> void:
@@ -678,6 +683,53 @@ func save_student_results() -> String:
 	_write_json(path, {"student": profile, "session_count": sessions.size(), "sessions": sessions})
 	_student_results_saved = true
 	_student_results_path = path
+	return path
+
+## Append this run's algorithm-performance summary to a SHARED file,
+## user://results/algorithm_summary.json: one record per completed session
+## across all students. The record holds each algorithm's prediction hit-rate
+## (HMM / BKT / KST), the accuracy of the one that was actually used, and which
+## algorithm performed best this run - so evidence for "which model should the
+## POC ship" accumulates over the whole study. Idempotent per session, exactly
+## like save_student_results(). Returns the path written.
+func save_algorithm_summary() -> String:
+	if _algorithm_summary_saved and _algorithm_summary_path != "":
+		return _algorithm_summary_path
+	var dir := "user://results"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := "%s/algorithm_summary.json" % dir
+	var comparison: Dictionary = knowledge_tracer.get_algorithm_comparison()
+	var best_key := ""
+	var best_acc := -1.0
+	for key in ["HMM", "BKT", "KST"]:
+		var stats: Dictionary = comparison.get(key, {})
+		if stats.is_empty():
+			continue
+		if float(stats.get("accuracy", 0.0)) > best_acc:
+			best_acc = float(stats.get("accuracy", 0.0))
+			best_key = key
+	var profile: Dictionary = profile_manager.get_profile()
+	var records: Array = []
+	if FileAccess.file_exists(path):
+		var existing := FileAccess.open(path, FileAccess.READ)
+		if existing:
+			var json := JSON.new()
+			if json.parse(existing.get_as_text()) == OK and json.data is Dictionary \
+					and json.data.has("records") and json.data["records"] is Array:
+				records = json.data["records"]
+			existing.close()
+	records.append({
+		"timestamp": Time.get_datetime_string_from_system(),
+		"student": str(profile.get("name", "student")),
+		"algorithm_id": selected_algorithm,
+		"algorithm_label": get_algorithm_label(),
+		"comparison": comparison,
+		"predictive_accuracy": get_study_metrics()["predictive_accuracy"],
+		"recommended": best_key,
+	})
+	_write_json(path, {"records": records})
+	_algorithm_summary_saved = true
+	_algorithm_summary_path = path
 	return path
 
 ## Get the current question

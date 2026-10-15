@@ -7,6 +7,7 @@ const QuestionBank = preload("res://Testing/Data/question_bank.gd")
 const AlgorithmCatalog = preload("res://Testing/Algorithms/algorithm_catalog.gd")
 const LessonEngine = preload("res://Testing/Lessons/lesson_engine.gd")
 const LessonLibrary = preload("res://Testing/Lessons/lesson_library.gd")
+const LessonVoice = preload("res://Testing/Lessons/lesson_voice.gd")
 
 # Every algorithm description now lives in ONE place: AlgorithmCatalog
 # (Testing/Algorithms/algorithm_catalog.gd). The briefing, the selection buttons
@@ -70,6 +71,10 @@ var _results: Dictionary = {}
 var _in_dfa_lesson := false
 var _dfa_lesson_index := 0
 var _lesson_engine: LessonEngine
+## Narrator for lesson panels. Lines with a recorded clip (res://Audio/Voice/
+## <line_id>.ogg) play that clip; lines WITHOUT one fall back to the OS
+## text-to-speech voice, so every panel is audible out of the box.
+var _lesson_voice: LessonVoice
 var _dfa_practice_index := 0
 var _dfa_practice_skill := "simulation"
 var _dfa_practice_answered := false
@@ -77,6 +82,10 @@ var _dfa_practice_board_active := false
 var _dfa_board_practice_index := 0
 var _dfa_board_practice_active := false
 var _dfa_board_practice_skill := "simulation"
+## Signature (instruction + accepted/rejected) of the task currently loaded on
+## the whiteboard. Re-pushing the same task is a no-op, so navigating Back and
+## forward again never wipes a build the learner is halfway through.
+var _board_task_signature := ""
 
 # Workshop (automata builder) task navigation during a skill's interactive phase
 var _workshop_phase := false
@@ -88,6 +97,11 @@ var _adaptive_board_paired := false
 # --- Free-build sandbox (custom automata during learning) ---
 var _in_free_build := false
 var _free_build_from_lesson := false
+## True while a TEST screen (pretest / post-test / algorithm select / results)
+## is the active panel. In VR the whiteboard stays visible in the room during
+## those screens, so this flag keeps its Check task a harmless sandbox: nothing
+## built on it may reach the knowledge tracer or the session record.
+var _test_screen_active := false
 # --- Algorithm-driven mastery termination ---
 var _terminated_by_algorithm := false
 var _mastered_skills: Array = []
@@ -112,6 +126,10 @@ var _challenge_queue: Array = []
 var _challenge_queue_pos := 0
 ## How many times the whole weak-skill set has been revisited end to end.
 var _weak_sweeps := 0
+## Set when Back is pressed on the remedy screen: the learner re-reads the
+## lecture and Next must flow STRAIGHT back into the targeted re-ask, without
+## running the phase-6 decision (and its remedy counter) a second time.
+var _resume_reask := false
 
 ## Re-explain/re-ask rounds allowed per skill before the room moves on.
 const MAX_REMEDY_ROUNDS := 3
@@ -123,12 +141,18 @@ const MASTERY_GATE_SKILLS := 5
 const MAX_WEAK_SKILL_SWEEPS := 2
 
 func _ready() -> void:
-	# Persistent screen-overlay phase progress HUD (Pretest -> Learning ->
-	# Adaptive -> Post Test). Added first so it survives the early returns below.
+	# Phase progress (Pretest -> Learning -> Adaptive -> Post Test) and the
+	# adaptive-learning stopwatch. Added first so they survive the early returns
+	# below. DESKTOP: flat screen overlays. VR: a CanvasLayer never renders in a
+	# headset, so the same readout floats in the room above the main panel
+	# instead (RoomHUD).
 	add_child(load("res://Testing/phase_hud.gd").new())
-	# Adaptive-learning stopwatch overlay: counts from the first skill taught
-	# until the algorithm declares mastery (Adaptive Learning Completion Time).
 	add_child(load("res://Testing/Lessons/counting_timer_overlay.gd").new())
+	if InputMode.is_vr():
+		var room_hud: Node3D = load("res://Testing/room_hud.gd").new()
+		# Just above the main panel billboard (panel at y=2, 3 m tall).
+		room_hud.position = Vector3(0, 3.95, -4)
+		add_child(room_hud)
 	# The same UI is always displayed on the in-room billboard in both desktop and VR.
 	if viewport and sprite:
 		sprite.texture = viewport.get_texture()
@@ -148,6 +172,13 @@ func _ready() -> void:
 		workshop.evaluated.connect(_on_workshop_evaluated)
 		workshop.skipped.connect(_on_workshop_skipped)
 		workshop.set_active(false)
+
+	# Narrator: a recorded clip wins per line; when a line has NO clip the OS
+	# text-to-speech voice reads it instead, so no panel is silently voiceless.
+	_lesson_voice = LessonVoice.new(self)
+	_lesson_voice.clip_root = "res://Audio/Voice"
+	_lesson_voice.system_tts = true
+	_lesson_voice.enabled = SessionBridge.voice_enabled
 
 	# The SessionBridge owns the single live session shared with the separate
 	# Pretest / Post-test room, so returning here keeps all answers and states.
@@ -777,11 +808,13 @@ func _begin_dfa_lesson() -> void:
 	_in_dfa_lesson = true
 	_dfa_lesson_index = 0
 	_lesson_engine = LessonEngine.new(LessonLibrary.course_steps())
+	_lesson_engine.voice = _lesson_voice
 	_lesson_engine.start()
 	_dfa_practice_index = 0
 	_dfa_board_practice_index = 0
 	_dfa_board_practice_active = false
 	_dfa_board_practice_skill = "simulation"
+	_forget_board_task()
 	_show_dfa_lesson_step()
 
 func _advance_lesson_step() -> void:
@@ -802,6 +835,8 @@ func _open_free_build(from_lesson: bool) -> void:
 	_in_free_build = true
 	_free_build_from_lesson = from_lesson
 	_enter_learning_room()
+	# The sandbox wipes the graph itself; the next real task must load fresh.
+	_forget_board_task()
 	workshop.builder.call("reset_for_free_build")
 	workshop.builder.set("sandbox_exit_callback", func(): _close_free_build())
 	workshop.set_active(true)
@@ -838,6 +873,7 @@ func _show_dfa_lesson_step() -> void:
 	_unfreeze_player()
 	if _lesson_engine == null:
 		_lesson_engine = LessonEngine.new(LessonLibrary.course_steps())
+		_lesson_engine.voice = _lesson_voice
 	if _lesson_engine.finished():
 		_finish_dfa_lesson()
 		return
@@ -911,9 +947,19 @@ func _show_dfa_content(step: Dictionary) -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "DFA Lesson  ·  %s  ·  press Next to continue" % QuestionBank.get_skill_name(step["skill"])
-	back_button.visible = false
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 	next_button.visible = true
 	next_button.text = "Next >>"
+	# Narrate the FULL panel: recorded clip if one exists for this line, or the
+	# OS text-to-speech voice if not — no audio file means the panel is still
+	# spoken. Captions show the same text.
+	var spoken := str(step.get("title", "")) + ". " + lead
+	if not points.is_empty():
+		spoken += " " + " ".join(points).replace("•", "")
+	if callout != "":
+		spoken += " Remember: " + callout
+	_narrate_panel(spoken)
 
 var _dfa_pending_explain: Dictionary = {}
 var _dfa_pending_skill: Dictionary = {}
@@ -939,26 +985,17 @@ func _show_dfa_explanation(step: Dictionary) -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "DFA Lesson  ·  first understand, then build"
-	back_button.visible = false
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 	next_button.visible = true
 	next_button.text = "Build it on the Whiteboard"
+	_narrate_panel(str(step.get("explain", "")))
 
 func _activate_dfa_board(step: Dictionary) -> void:
 	var task: Dictionary = step.get("task", {})
 	_dfa_pending_skill = {}
 	if workshop.builder is Control and not task.is_empty():
-		if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
-			workshop.builder.call("reset_for_task_lists",
-				task.get("instruction", "Build the DFA on the whiteboard."),
-				task["accept"], task["reject"])
-		else:
-			workshop.builder.call("reset_for_task",
-				task.get("instruction", "Build the DFA on the whiteboard."),
-				task.get("accepted", "aa"),
-				task.get("rejected", "ab"))
-		# Optional reference graph to show a complete example.
-		if task.get("seed", false):
-			workshop.builder.call("seed_reference_graph")
+		_apply_board_task(task)
 	_enter_learning_room()
 	workshop.set_active(true)
 	title_label.text = "DFA LESSON — %s" % step["title"]
@@ -967,7 +1004,8 @@ func _activate_dfa_board(step: Dictionary) -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "DFA Lesson  ·  Whiteboard"
-	back_button.visible = false
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 	next_button.visible = false
 
 func _show_dfa_practice(step: Dictionary) -> void:
@@ -983,11 +1021,19 @@ func _show_dfa_practice(step: Dictionary) -> void:
 		_show_dfa_lesson_step()
 		return
 	var current: Dictionary = challenges[_dfa_practice_index]
-	# Pair the whiteboard with this question so the learner can build/test while
-	# answering. The board task matches the skill AND the question number.
-	var paired := _pair_practice_board(_dfa_practice_skill, _dfa_practice_index)
+	# Pair the whiteboard with this question. A question may carry its OWN
+	# reference machine ("read the DFA on the board"); otherwise fall back to a
+	# build task that matches the skill AND the question number.
+	var has_reference := _pair_reference_board(current)
+	var paired := false
+	if not has_reference:
+		paired = _pair_practice_board(_dfa_practice_skill, _dfa_practice_index)
 	_dfa_practice_board_active = paired
-	var hint := "\n\nUse the whiteboard to build and test the automaton before choosing your answer." if paired else ""
+	var hint := ""
+	if has_reference:
+		hint = "\n\nRefer to the DFA shown on the whiteboard to answer."
+	elif paired:
+		hint = "\n\nUse the whiteboard to build and test the automaton before choosing your answer."
 	question_label.text = "Practice %d / %d\n\n%s%s" % [_dfa_practice_index + 1, challenges.size(), current["question"], hint]
 	question_label.visible = true
 	_clear_options()
@@ -1008,8 +1054,13 @@ func _show_dfa_practice(step: Dictionary) -> void:
 		options_box.add_child(btn)
 	feedback_label.text = ""
 	progress_label.text = "DFA Lesson  ·  %s  ·  %s" % [QuestionBank.get_skill_name(_dfa_practice_skill), "whiteboard active — build/check freely, then answer" if paired else "answer the question"]
-	back_button.visible = false
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 	next_button.visible = false
+	if has_reference:
+		_narrate_panel("Refer to the DFA on the whiteboard. " + str(current["question"]))
+	else:
+		_narrate_panel(str(current["question"]))
 
 ## Activate the whiteboard with a task matching the practice skill + question.
 func _pair_practice_board(skill: String, index: int) -> bool:
@@ -1019,15 +1070,42 @@ func _pair_practice_board(skill: String, index: int) -> bool:
 	if tasks.is_empty():
 		return false
 	var task: Dictionary = tasks[index % tasks.size()]
-	_reset_board_for_task(task)
+	_apply_board_task(task)
 	workshop.set_active(true)
 	_set_player_paused(true)
 	return true
 
-## Shared helper: push a library-authored task into the builder.
-func _reset_board_for_task(task: Dictionary) -> void:
+## Board-referenced questions: a question may carry a "board" machine spec
+## (authored in the lesson library). The whiteboard then displays that machine
+## and the learner must READ it to answer ("Refer to the DFA on the board").
+## The board runs display-only (the builder's reference mode): Check and Skip
+## grade nothing, Simulate still works for experimentation.
+## Returns true when a reference machine was loaded.
+func _pair_reference_board(question: Dictionary) -> bool:
 	if workshop == null or workshop.builder is not Control:
-		return
+		return false
+	var spec: Dictionary = question.get("board", {})
+	if spec.is_empty():
+		# A previous question's reference machine must not linger on the board.
+		if bool(workshop.builder.get("reference_mode")):
+			workshop.set_active(false)
+		return false
+	workshop.builder.call("load_machine_spec", spec,
+		"REFERENCE DFA — read the machine on this board to answer the question.")
+	workshop.set_active(true)
+	return true
+
+## Push a library-authored task into the builder — but ONLY when it is a new
+## task. Back -> re-read -> Next must not wipe the machine the learner is
+## halfway through, so the reset is guarded by a task signature (its instruction
+## + accepted/rejected strings). Returns true when the board was (re)loaded.
+func _apply_board_task(task: Dictionary) -> bool:
+	if workshop == null or workshop.builder is not Control:
+		return false
+	var signature := "%s|%s|%s" % [str(task.get("instruction", "")), str(task.get("accept", [])), str(task.get("reject", []))]
+	if signature == _board_task_signature:
+		return false
+	_board_task_signature = signature
 	if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
 		workshop.builder.call("reset_for_task_lists",
 			task.get("instruction", "Build the DFA on the whiteboard."),
@@ -1039,6 +1117,12 @@ func _reset_board_for_task(task: Dictionary) -> void:
 			task.get("rejected", "ab"))
 	if task.get("seed", false):
 		workshop.builder.call("seed_reference_graph")
+	return true
+
+## Forget the current task signature (the next task resets the board even if it
+## repeats an earlier instruction). Called when a lesson / skill / sandbox starts.
+func _forget_board_task() -> void:
+	_board_task_signature = ""
 
 func _close_paired_board() -> void:
 	_dfa_practice_board_active = false
@@ -1054,11 +1138,7 @@ func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 	_dfa_board_practice_skill = skill
 	var skill_tasks: Array = LessonLibrary.workshop_tasks(skill)
 	_enter_learning_room()
-	if workshop.builder is Control:
-		if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
-			workshop.builder.call("reset_for_task_lists", task["instruction"], task["accept"], task["reject"])
-		else:
-			workshop.builder.call("reset_for_task", task["instruction"], task["accepted"], task["rejected"])
+	_apply_board_task(task)
 	workshop.set_active(true)
 	_set_player_paused(true)
 	question_label.text = "Whiteboard practice %d / %d - %s\n\n%s\n\nBuild the DFA on the board, then press Check task. Any correct construction is accepted; wrong attempts stay here until the build passes." % [_dfa_board_practice_index + 1, skill_tasks.size(), QuestionBank.get_skill_name(skill), task["instruction"]]
@@ -1066,7 +1146,8 @@ func _open_dfa_board_practice(skill: String, task: Dictionary) -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "DFA Lesson · Whiteboard practice · %s" % QuestionBank.get_skill_name(skill)
-	back_button.visible = false
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 	next_button.visible = false
 
 func _on_dfa_practice_answer(selected_index: int) -> void:
@@ -1081,6 +1162,7 @@ func _on_dfa_practice_answer(selected_index: int) -> void:
 	session.knowledge_tracer.record_learning_observation(_dfa_practice_skill, correct)
 	feedback_label.text = ("Correct! " if correct else "Incorrect. ") + current.get("explanation", "")
 	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
+	_narrate_panel(feedback_label.text)
 	_dfa_practice_index += 1
 	if _dfa_practice_index >= challenges.size():
 		next_button.visible = true
@@ -1088,7 +1170,10 @@ func _on_dfa_practice_answer(selected_index: int) -> void:
 	else:
 		next_button.visible = true
 		next_button.text = "Next Question >>"
-	back_button.visible = false
+	# Back stays available: the learner may walk back through the questions of
+	# this round (each one is shown unanswered again), or further into the lesson.
+	back_button.visible = _lesson_engine != null and _lesson_engine.position > 0
+	back_button.text = "Back"
 
 func _handle_dfa_lesson_next() -> void:
 	# Transition from the "explanation" step screen into the whiteboard build.
@@ -1145,6 +1230,8 @@ func _begin_learning_skill(skill: String) -> void:
 	_workshop_phase = false
 	_challenge_queue.clear()
 	_challenge_queue_pos = 0
+	_resume_reask = false
+	_forget_board_task()
 	session.start_adaptive_learning(_learning_skill)
 	_show_learning_phase(0)
 
@@ -1251,9 +1338,17 @@ func _show_remedy_round() -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "Adaptive re-teach  ·  %s  ·  %s" % [QuestionBank.get_skill_name(skill), session.get_algorithm_label()]
-	back_button.visible = false
+	back_button.visible = true
+	back_button.text = "Back"
 	next_button.visible = true
 	next_button.text = "Re-ask the ones I missed >>"
+	# Spoken version of the remedy panel: headline + the short recap, so the
+	# re-teach is audible without reading the whole list aloud.
+	var spoken := "Still learning %s. Round %d of %d." % [
+		QuestionBank.get_skill_name(skill), rounds, MAX_REMEDY_ROUNDS]
+	if recap != "":
+		spoken += " " + recap
+	_narrate_panel(spoken)
 
 func _show_learning_phase(phase: int) -> void:
 	var skill_name: String = QuestionBank.get_skill_name(_learning_skill)
@@ -1288,13 +1383,24 @@ func _show_learning_content(content: String, next_text: String) -> void:
 	question_label.text = content
 	question_label.visible = true
 	_clear_options()
+	_narrate_panel(content)
 
 	feedback_label.text = ""
 	progress_label.text = "Skill: %s" % QuestionBank.get_skill_name(_learning_skill)
-	back_button.visible = true
+	# Panel 0 is the entry panel of the skill: there is nothing earlier to reach.
+	back_button.visible = session.get_learning_phase() > 0
 	back_button.text = "Back"
 	next_button.visible = true
 	next_button.text = next_text
+
+## Read one panel line aloud through the narrator service: a recorded clip
+## (res://Audio/Voice/<line_id>.ogg) when one exists for the line, otherwise the
+## OS text-to-speech voice. Captions always show the full text; this only adds
+## the voice, so a missing audio file never leaves a panel silent.
+func _narrate_panel(text: String) -> void:
+	if _lesson_voice == null:
+		return
+	_lesson_voice.speak(str(text).strip_edges(), "narration")
 
 func _show_challenge() -> void:
 	title_label.text = "INTERACTIVE CHALLENGE - %s" % QuestionBank.get_skill_name(_learning_skill)
@@ -1325,11 +1431,19 @@ func _show_challenge() -> void:
 	_current_challenge = challenges[question_index]
 	_challenge_answered = false
 
-	# Pair the whiteboard with this challenge so the learner can build/test while
-	# choosing an answer (only for skills that have a build task).
-	var paired := _pair_practice_board(_learning_skill, _challenge_index)
+	# Pair the whiteboard with this challenge. A question may carry its OWN
+	# reference machine ("read the DFA on the board"); otherwise fall back to a
+	# build task (only for skills that have one).
+	var has_reference := _pair_reference_board(_current_challenge)
+	var paired := false
+	if not has_reference:
+		paired = _pair_practice_board(_learning_skill, _challenge_index)
 	_adaptive_board_paired = paired
-	var hint := "\n\nUse the whiteboard to build and test the automaton before choosing your answer." if paired else ""
+	var hint := ""
+	if has_reference:
+		hint = "\n\nRefer to the DFA shown on the whiteboard to answer."
+	elif paired:
+		hint = "\n\nUse the whiteboard to build and test the automaton before choosing your answer."
 	question_label.text = "Question %d/%d\n\n%s%s" % [_challenge_queue_pos + 1, _challenge_queue.size(), _current_challenge["question"], hint]
 	question_label.visible = true
 	_clear_options()
@@ -1352,8 +1466,10 @@ func _show_challenge() -> void:
 
 	feedback_label.text = ""
 	progress_label.text = "Skill: %s | Question %d/%d%s" % [QuestionBank.get_skill_name(_learning_skill), _challenge_queue_pos + 1, _challenge_queue.size(), "  ·  whiteboard active — build/check, then answer" if _adaptive_board_paired else ""]
-	back_button.visible = false
+	back_button.visible = true
+	back_button.text = "Back"
 	next_button.visible = false
+	_narrate_panel(str(_current_challenge.get("question", "")))
 
 func _on_challenge_answer(selected_index: int) -> void:
 	if _challenge_answered:
@@ -1365,6 +1481,12 @@ func _on_challenge_answer(selected_index: int) -> void:
 	var correct: bool = selected_index == _current_challenge["correct"]
 	if correct:
 		_challenge_correct += 1
+		# Fixed it: drop this item from the re-ask list so the remedy round only
+		# covers questions that are STILL wrong, not ones already answered right
+		# on a later attempt.
+		var fixed: Array = _wrong_challenges.get(_learning_skill, [])
+		fixed.erase(_current_challenge_index())
+		_wrong_challenges[_learning_skill] = fixed
 	else:
 		# Remember WHICH item was missed so the re-ask round can target it
 		# instead of repeating the whole practice set.
@@ -1377,24 +1499,22 @@ func _on_challenge_answer(selected_index: int) -> void:
 	feedback_label.text = "Correct!" if correct else "Incorrect."
 	feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 	feedback_label.text += "\n\n" + _current_challenge["explanation"]
+	_narrate_panel("%s %s" % [feedback_label.text.split("\n")[0], _current_challenge["explanation"]])
 
 	# Show next button. The label says whether another question is queued or
 	# whether this was the last one, so the learner always knows what pressing
 	# it does.
 	next_button.visible = true
 	next_button.text = "Next Question >>" if _challenge_queue_pos + 1 < _challenge_queue.size() else "See My Result >>"
-	back_button.visible = false
+	back_button.visible = true
+	back_button.text = "Back"
 
 func _open_builder_task(task: Dictionary) -> void:
 	_workshop_phase = true
 	_adaptive_board_paired = false
 	_enter_learning_room()
 	if workshop:
-		if workshop.builder is Control:
-			if task.has("accept") and task.has("reject") and not task["accept"].is_empty():
-				workshop.builder.call("reset_for_task_lists", task.get("instruction", "Build the DFA on the whiteboard."), task["accept"], task["reject"])
-			else:
-				workshop.builder.call("reset_for_task", task.get("instruction", "Build the DFA on the whiteboard."), task.get("accepted", "aa"), task.get("rejected", "ab"))
+		_apply_board_task(task)
 		workshop.set_active(true)
 	_set_player_paused(true)
 	question_label.text = "Whiteboard task: build the DFA, then press Check task. Any correct construction is accepted.\n\n%s" % task.get("instruction", "")
@@ -1402,10 +1522,18 @@ func _open_builder_task(task: Dictionary) -> void:
 	_clear_options()
 	feedback_label.text = ""
 	progress_label.text = "Interactive Challenge  ·  %s  ·  press Check task to verify" % QuestionBank.get_skill_name(_learning_skill)
-	back_button.visible = false
+	back_button.visible = true
+	back_button.text = "Back"
 	next_button.visible = false
 
 func _on_workshop_evaluated(correct: bool, message: String) -> void:
+	# VR keeps the whiteboard standing in the room during test screens. There it
+	# is a pure sandbox: verify freely, but nothing is graded or recorded.
+	if _test_screen_active:
+		feedback_label.text = ("Whiteboard check: " if correct else "Whiteboard check failed: ") + message \
+			+ "\n\n(Practice only - the board is not graded while a test screen is open.)"
+		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
+		return
 	# --- DFA lesson whiteboard phase ---
 	if _in_dfa_lesson:
 		var course_steps := LessonLibrary.course_steps()
@@ -1447,7 +1575,15 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		_show_dfa_lesson_step()
 		return
 	# --- Adaptive skill builder phase ---
-	if _challenge_answered or workshop == null:
+	# Only the challenge phase (5) GRADES board builds. On any other adaptive
+	# screen (lecture panels, feedback, and in VR the board stays in view) a
+	# Check task is sandbox feedback and must not touch the session.
+	if workshop == null or _challenge_answered:
+		return
+	if session.get_learning_phase() != 5:
+		feedback_label.text = ("Whiteboard check: " if correct else "Whiteboard check failed: ") + message \
+			+ "\n\n(Sandbox check - press Next to continue, or answer the challenge to record progress.)"
+		feedback_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6, 1) if correct else Color(1, 0.5, 0.5, 1))
 		return
 	# Record EVERY attempt (count, wrong tries, connection edits, time) so the
 	# knowledge-tracing algorithms can use richer evidence than right/wrong alone.
@@ -1502,6 +1638,9 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 func _on_workshop_skipped(_message: String) -> void:
 	if workshop == null:
 		return
+	if _test_screen_active:
+		# Sandbox board during a test screen: a skip costs nothing and does nothing.
+		return
 	var stats: Dictionary = workshop.builder.call("get_attempt_stats") if workshop.builder is Control else {}
 	# --- DFA lesson whiteboard phase ---
 	if _in_dfa_lesson:
@@ -1532,6 +1671,10 @@ func _on_workshop_skipped(_message: String) -> void:
 		return
 	# --- Adaptive skill builder phase ---
 	if _challenge_answered:
+		return
+	# A skip only means something during the challenge phase; anywhere else the
+	# board is a sandbox and skipping costs nothing.
+	if session.get_learning_phase() != 5:
 		return
 	_show_skip_feedback(_learning_skill, session.record_workshop_skip(_learning_skill, stats))
 	if _adaptive_board_paired:
@@ -1617,13 +1760,26 @@ func _show_learning_end() -> void:
 		var next_knowledge: float = session.knowledge_tracer.get_mastery_percentage(next_skill)
 		question_label.text += "\n\nNext topic to cover: %s (current knowledge %.1f%%)" % [QuestionBank.get_skill_name(next_skill), next_knowledge]
 		next_button.text = "Next Topic"
+	elif _ready_for_posttest():
+		# Mastery gate ALREADY passed: go straight to the post test. Checking
+		# this BEFORE the review pass is what stops a fully-mastered run from
+		# being dragged through a redundant second pass of every topic.
+		var gate_note := "%s considers you knowledgeable enough: %d of 6 topics learned." % [
+			session.get_algorithm_label(), _mastered_skill_count()]
+		question_label.text += "\n\nAll six topics have been covered.\n" + gate_note
+		next_button.text = "Proceed to Post Test"
 	elif not _adaptive_review_pass:
 		_adaptive_review_pass = true
-		_analysis_skills = session.get_skills_by_weakness()
+		# Revisit ONLY the topics the tracer still calls unlearned (weakest
+		# first) - re-running skills that already hit mastery is the
+		# repetition this gate exists to prevent.
+		_analysis_skills = _weak_skills()
 		_analysis_skill_index = 0
-		question_label.text += "\n\nThe ordered DFA lesson is complete. Now adaptive review will revisit topics in pretest weakness order."
+		if _analysis_skills.is_empty():
+			_analysis_skills = session.get_skills_by_weakness()
+		question_label.text += "\n\nThe ordered DFA lesson is complete. Adaptive review will revisit the topics that still need work, weakest first: %s." % ", ".join(_skill_names(_analysis_skills))
 		next_button.text = "Start Adaptive Review"
-	elif not _ready_for_posttest() and _weak_sweeps < MAX_WEAK_SKILL_SWEEPS:
+	elif _weak_sweeps < MAX_WEAK_SKILL_SWEEPS:
 		# The post test stays LOCKED until the algorithm considers the learner
 		# knowledgeable enough. Below the gate, go back to the skills that are
 		# still unlearned (weakest first) for another full pass - including their
@@ -1638,8 +1794,8 @@ func _show_learning_end() -> void:
 		question_label.text += "\nWeaker topics: %s" % ", ".join(_skill_names(weak))
 		next_button.text = "Review My Weak Topics >>"
 	else:
-		# Gate passed (or the sweeps are spent): the learner knows enough, so the
-		# post test unlocks. The report below says honestly what the model thinks.
+		# The sweeps are spent without reaching the gate: go to the post test
+		# anyway and report honestly what the model thinks.
 		var gate_note := "%s considers you knowledgeable enough: %d of 6 topics learned." % [
 			session.get_algorithm_label(), _mastered_skill_count()]
 		if not _ready_for_posttest():
@@ -1649,8 +1805,9 @@ func _show_learning_end() -> void:
 
 	feedback_label.text = ""
 	progress_label.text = "Adaptive Learning Progress  ·  %d / %d topics learned" % [_mastered_skill_count(), MASTERY_GATE_SKILLS]
-	back_button.visible = true
-	back_button.text = "Back"
+	# No Back here on purpose: rendering this screen already commits the "next
+	# topic" bookkeeping, so a re-read must not re-run it. Next drives forward.
+	back_button.visible = false
 	next_button.visible = true
 
 ## Display names for a list of skill ids (used by the weak-topic report).
@@ -1665,6 +1822,17 @@ func _on_learning_next() -> void:
 
 	match phase:
 		0, 1, 2, 3, 4:
+			if phase == 4 and _resume_reask:
+				# Back was pressed on the remedy screen: this Next re-enters the
+				# targeted re-ask directly (the same work the phase-8 branch
+				# below does), so no decision runs twice.
+				_resume_reask = false
+				_build_challenge_queue(true)
+				_challenge_correct = 0
+				_challenge_total = 0
+				session.learning_phase = 5
+				_show_challenge()
+				return
 			session.advance_learning_phase()
 			_show_learning_phase(phase + 1)
 		5: # Challenge phase - next question in this round's order, then feedback
@@ -1759,6 +1927,8 @@ func _show_results() -> void:
 	# (user://results/<name>.json) and show the six study metrics.
 	var study_metrics: Dictionary = session.get_study_metrics()
 	var student_results_path: String = session.save_student_results()
+	# Shared per-machine algorithm summary (all students, all runs).
+	var algorithm_summary_path: String = session.save_algorithm_summary()
 
 	var pretest: Dictionary = _results["pretest"]
 	var posttest: Dictionary = _results["posttest"]
@@ -1804,6 +1974,7 @@ func _show_results() -> void:
 				best_acc = s["accuracy"]
 				best_key = key
 		text += "\n★ Recommended for the POC: %s (highest prediction accuracy)\n" % best_key
+		text += "Algorithm summary saved to: %s\n" % algorithm_summary_path
 
 	# --- Whiteboard build analytics ---
 	var wdata3: Dictionary = session.get_workshop_attempts()
@@ -1845,12 +2016,91 @@ func _on_back_pressed() -> void:
 		get_tree().change_scene_to_file("res://World/World.tscn")
 		return
 
+	# In-session back-routing comes FIRST: while a lesson or the adaptive review
+	# is running, Back must walk the learner up the lesson - never kick them out
+	# to the algorithm menu mid-session.
+	if _in_dfa_lesson:
+		_back_in_dfa_lesson()
+		return
+	if session != null and session.state == SessionManager.SessionState.ADAPTIVE_LEARNING:
+		_back_in_adaptive_learning()
+		return
+
 	# Menu back-routing follows the briefing-first flow: confirm -> select ->
 	# briefing -> (Back to Lab) World.
 	if _menu_stage == "explain":
 		_show_algorithm_select()
 		return
 	_show_algorithm_briefing()
+
+## Back inside the guided DFA lesson: retrace the lesson without restarting it.
+## Most local retreat first, so the learner never loses more progress than one
+## press:
+##   * mid-practice question  -> the previous question of the same skill
+##   * demo build screen      -> the same step's explanation panel (if any)
+##   * anything else          -> one lesson step back (engine cursor; silent)
+func _back_in_dfa_lesson() -> void:
+	if _lesson_engine == null:
+		return
+	var step: Dictionary = _lesson_engine.current()
+	var kind := str(step.get("m", ""))
+
+	# (a) Inside a practice round: step back question by question. The question
+	# is shown unanswered again so it can be re-read (and re-answered).
+	if kind == "practice" and not _dfa_board_practice_active and _dfa_practice_index > 0:
+		_dfa_practice_index -= 1
+		_dfa_practice_answered = false
+		_show_dfa_practice(step)
+		return
+
+	# (b) On a demo step's build screen: re-read its explanation first.
+	if kind == "demo" and _dfa_pending_skill.is_empty() and str(step.get("explain", "")) != "":
+		_dfa_pending_skill = step
+		_show_dfa_explanation(step)
+		return
+
+	# (c) General retreat: one step back through the lesson cursor. Any pending
+	# "explain then build" state is dropped so Next follows the new position.
+	_dfa_pending_skill = {}
+	_dfa_pending_explain = {}
+	_dfa_board_practice_active = false
+	_dfa_practice_board_active = false
+	_dfa_practice_answered = false
+	_close_paired_board()
+	if _lesson_engine.back():
+		_dfa_lesson_index = _lesson_engine.position
+		_show_dfa_lesson_step()
+
+## Back inside the adaptive learning phase: retrace the lecture of the current
+## skill WITHOUT losing the quiz state. The challenge cursor (`_challenge_queue`
+## and its position) is deliberately untouched, so pressing Next after the
+## detour resumes at the exact same question. Nothing is re-graded or
+## re-announced on the way back.
+func _back_in_adaptive_learning() -> void:
+	if _learning_skill == "":
+		return
+	var phase := session.get_learning_phase()
+
+	# Lecture panels (0..4): step back one panel at a time.
+	if phase >= 1 and phase <= 4:
+		session.learning_phase = phase - 1
+		_show_learning_phase(phase - 1)
+		return
+
+	# Quiz (5), feedback (6) or remedy (8): retreat to the summary panel. The
+	# round is re-entered from there with the cursor where it stood.
+	if phase == 5 or phase == 6 or phase == 8:
+		if phase == 8:
+			# The targeted re-ask has not been built yet: rebuild it on the way
+			# back in, instead of running the phase-6 decision a second time.
+			_resume_reask = true
+		_adaptive_board_paired = false
+		_workshop_phase = false
+		session.learning_phase = 4
+		_show_learning_phase(4)
+		return
+
+	# Phase 0 (entry panel) and 7 (skill end) have nothing earlier to show.
 
 func _on_next_pressed() -> void:
 	if _in_dfa_lesson:
@@ -1896,8 +2146,12 @@ func _clear_options() -> void:
 
 func _enter_learning_room() -> void:
 	# Learning happens in the walkable room. Only testing screens use the desktop overlay.
+	_test_screen_active = false
 	if workshop:
 		workshop.set_persistent_overlay(true)
+		if workshop.builder is Control:
+			# Board tasks are part of learning again: the Skip option is back.
+			workshop.builder.call("set_skip_enabled", true)
 	if overlay_layer:
 		overlay_layer.visible = false
 	if sprite:
@@ -1907,16 +2161,35 @@ func _enter_learning_room() -> void:
 		player.set_physics_process(true)
 		player.set_process(true)
 
+## Test screens (algorithm select / briefing / pretest / post-test / results).
+##
+## DESKTOP: the panel is drawn as a fullscreen CanvasLayer overlay and the
+## player body is frozen, because the overlay IS the interface.
+##
+## VR: there is no flat overlay to look at - a CanvasLayer does not exist in
+## the headset. The SAME panel content is shown on the in-room billboard
+## Sprite3D instead, the player stays free to walk up to it, and the algorithm
+## select / briefing / pretest are all reachable as a floating room panel. This
+## is the fix for "in VR the testing grounds shows no algorithm select and
+## never reaches the pretest": the old code hid the sprite and showed a
+## CanvasLayer that the headset can never see.
 func _enter_test_panel() -> void:
+	var vr := InputMode.is_vr()
+	_test_screen_active = true
 	if workshop:
-		workshop.set_persistent_overlay(false)
-		workshop.set_active(false)
+		# In VR the whiteboard stays standing in the room even during tests.
+		workshop.set_persistent_overlay(vr)
+		if not vr:
+			workshop.set_active(false)
+		if workshop.builder is Control:
+			# A sandbox must not offer "Skip task": there is no task to skip.
+			workshop.builder.call("set_skip_enabled", false)
 	if overlay_layer:
-		overlay_layer.visible = true
+		overlay_layer.visible = not vr
 	if sprite:
-		sprite.visible = false
+		sprite.visible = true
 	var player := get_node_or_null("../CharacterBody3D")
-	if player:
+	if player and not vr:
 		player.set_physics_process(false)
 		player.set_process(false)
 

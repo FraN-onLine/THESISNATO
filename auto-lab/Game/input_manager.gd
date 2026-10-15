@@ -11,6 +11,8 @@ extends Node
 ##   - The user can also force the mode from the main-menu Controls button or
 ##     the Settings popup; an explicit choice is saved to user://settings.cfg
 ##     ([options] vr_mode) and respected on later boots.
+##   - Headless runs (tests / CI) always stay in Keyboard+Mouse mode: with no
+##     display there is nothing for XR to render into.
 
 enum Mode { DESKTOP, VR }
 
@@ -44,9 +46,10 @@ const PROBE_MAX := 15
 
 func _ready() -> void:
 	_load_preference()
-	if mode_pref == Pref.PC:
-		# The user explicitly chose PC mode: stay on desktop and skip the probe
-		# so a connected headset cannot flip the game back into VR.
+	if mode_pref == Pref.PC or _is_headless():
+		# The user explicitly chose PC mode - or there is no display at all
+		# (headless test/CI runs). Stay on desktop: skip the probe so OpenXR is
+		# never raised, which would otherwise crash or alert inside such runs.
 		_set_running_mode(Mode.DESKTOP)
 		return
 	# Desktop by default; probe for a headset shortly after boot.
@@ -93,8 +96,10 @@ func get_xr_interface() -> XRInterface:
 ## - If an interface exists but is not initialized yet, try ONE gentle
 ##   initialization. When no headset is attached this fails silently and the
 ##   game simply keeps running in keyboard/mouse mode.
+## - Never in a headless run: there is no XR display, so requesting OpenXR
+##   would only crash the process or pop the "OpenXR failed to start" alert.
 func _detect_vr() -> void:
-	if mode_pref == Pref.PC:
+	if mode_pref == Pref.PC or _is_headless():
 		_set_running_mode(Mode.DESKTOP)
 		return
 	var xr := get_xr_interface()
@@ -121,6 +126,10 @@ func _set_running_mode(new_mode: int) -> void:
 		return
 	mode = new_mode
 	mode_changed.emit(is_vr())
+
+## True when the engine runs without any display (`--headless` test runs).
+func _is_headless() -> bool:
+	return DisplayServer.get_name() == "headless"
 
 func _boot_probe_active() -> bool:
 	return _probe_count < PROBE_MAX
