@@ -16,6 +16,10 @@ const TYPE_HMM := 0
 const TYPE_BKT := 1
 const TYPE_KST := 2
 
+## Preloaded only for its mastery-gate CONSTANTS: the learner-facing briefing
+## quotes the gate the room really applies, so the two can never drift apart.
+const Tracer = preload("res://Testing/Algorithms/knowledge_tracer.gd")
+
 const ALGORITHMS := {
 	TYPE_HMM: {
 		"type": TYPE_HMM,
@@ -43,7 +47,7 @@ const ALGORITHMS := {
 		"needs": {
 			"inputs": "PRETEST answers ONLY. Each pretest answer is a single observation (skill, right/wrong) and seeds the initial state distribution PI per skill (Laplace-smoothed).",
 			"learning": "Interactive learning answers run vector forward-filtering per skill: predict with the 3x3 transition matrix A, then reweight by the emission matrix B. Correct answers shift belief toward Mastered, wrong answers shift it back toward Beginner.",
-			"termination": "The skill is judged Mastered when mastery >= 85% after at least 3 learning observations. Learning for that skill terminates immediately.",
+			"termination": "The topic terminates the moment the gate below calls it LEARNED — the posterior belief has moved into the Mastered band and practice on that skill stops immediately.",
 			"proof": "The post test runs WITHOUT feedback. HMM state predictions and expected accuracy are logged per observation, so accuracy on unseen answers is the proof of the trace.",
 		},
 		"pipeline": [
@@ -78,18 +82,18 @@ const ALGORITHMS := {
 		],
 		"best_for": "A small, explainable model with only 4 parameters per skill; its parameters are already the language of education research.",
 		"limit": "Parameters are fixed up front (no per-learner fit in this prototype) and it treats guesses/slips as constant per skill.",
-		"states": "Developing until P(learned) >= 70% (with >= 3 observations), then Mastered; Beginner below that.",
+		"states": "Beginner while P(learned) is low, Mastered once the gate below is met — the band shown on the board is the model's own posterior, not the gate.",
 		"needs": {
 			"inputs": "PRETEST answers ONLY. P(L0) is the pretest-informed start and every pretest answer is folded into the posterior as starting evidence.",
 			"learning": "Each interactive practice answer is one more Bayesian update — the posteriors after the pretest continue to be refined live.",
-			"termination": "Mastery means P(Learned) >= 70% sustained over at least 3 interactive observations; the topic terminates the instant that holds.",
+			"termination": "The topic terminates the instant the gate below calls it LEARNED; P(Learned) is the number that gate reads.",
 			"proof": "The post test is a hold-out: its answers were never tuned on, so matching post-test behaviour verifies the BKT theory of the learner.",
 		},
 		"pipeline": [
 			{"stage": 1, "name": "PRETEST — only input", "icon": "1",
 			 "text": "BKT seeds P(L0) and consumes every pretest answer as starting posterior evidence. Nothing else initialises the model."},
 			{"stage": 2, "name": "INTERACTIVE LEARNING — analyse & terminate", "icon": "2",
-			 "text": "Every practice observation reweights P(Learned). When the model sees >= 3 observations and P(Learned) >= 70% it terminates the topic."},
+			 "text": "Every practice observation reweights P(Learned). As soon as the mastery gate is met the topic terminates and the room moves on."},
 			{"stage": 3, "name": "POST TEST — prove the theory", "icon": "3",
 			 "text": "Post-test answers, never used for fitting, are predicted before being seen and scored to confirm the model."},
 		],
@@ -119,7 +123,7 @@ const ALGORITHMS := {
 		"needs": {
 			"inputs": "PRETEST answers ONLY. Per-skill pretest accuracy becomes the starting knowledge state (the KST prior).",
 			"learning": "Each interactive answer updates the observed skill, then the closure pass re-derives the whole space.",
-			"termination": "A skill is terminated as learnt when its mastery probability >= 70% after >= 3 learning observations.",
+			"termination": "A skill terminates as learnt the moment the gate below says so — after the closure pass has had its chance to lift the prerequisites that answer implies.",
 			"proof": "The post test runs WITHOUT feedback; matching the model state predictions proves the space captured the learner.",
 		},
 		"pipeline": [
@@ -192,6 +196,19 @@ static func catalog_pipeline(algo_type: int) -> Array:
 static func catalog_needs(algo_type: int) -> Dictionary:
 	return catalog_info(algo_type).get("needs", {})
 
+## The room's real "you are knowledgeable" rule in learner-facing words, built
+## from KnowledgeTracer's constants. Both roads are quoted because the models
+## converge slower than a learner improves: the recent-streak road is what stops
+## someone who has clearly got the topic from being held back by a lagging
+## estimate (most visible with KST, whose wrong answers pull the estimate down
+## hard).
+static func mastery_gate_text() -> String:
+	return "GATE (same for all three algorithms): a topic counts as LEARNED once %s puts its knowledge at %.0f%% or better with at least %d interactive answers seen — or as soon as the last %d answers on it are all correct. The live mastery report under each question names the road that decided it." % [
+		"the active model",
+		Tracer.MASTERY_THRESHOLD * 100.0,
+		Tracer.MIN_EVIDENCE,
+		Tracer.RECENT_WINDOW]
+
 static func catalog_all_types() -> Array:
 	return [TYPE_HMM, TYPE_BKT, TYPE_KST]
 
@@ -207,10 +224,11 @@ static func catalog_pipeline_summary(algo_type: int) -> String:
 
 static func catalog_how_learns_flavor(algo_type: int) -> String:
 	var n: Dictionary = catalog_needs(algo_type)
-	return "HOW THIS ALGORITHM LEARNS THROUGH THE 3 PHASES\n1. INPUT (pretest only)\n%s\n\n2. LEARNING (analyse + terminate)\n%s\n%s\n\n3. POST TEST (prove the theory)\n%s" % [
+	return "HOW THIS ALGORITHM LEARNS THROUGH THE 3 PHASES\n1. INPUT (pretest only)\n%s\n\n2. LEARNING (analyse + terminate)\n%s\n%s\n%s\n\n3. POST TEST (prove the theory)\n%s" % [
 	n.get("inputs", ""),
 	n.get("learning", ""),
 	n.get("termination", ""),
+	mastery_gate_text(),
 	n.get("proof", ""),
 ]
 
@@ -227,6 +245,7 @@ static func catalog_briefing(algo_type: int) -> String:
 	out.append("HOW IT LEARNS (3 phases):")
 	out.append("  1. INPUT (pretest only): %s" % str(n.get("inputs", "")))
 	out.append("  2. LEARNING (analyse + terminate): %s %s" % [str(n.get("learning", "")), str(n.get("termination", ""))])
+	out.append("     %s" % mastery_gate_text())
 	out.append("  3. PROVE (post test): %s" % str(n.get("proof", "")))
 	var param_lines: Array[String] = catalog_param_lines(algo_type)
 	if not param_lines.is_empty():

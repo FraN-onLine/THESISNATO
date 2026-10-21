@@ -17,7 +17,8 @@ extends SceneTree
 ##   6. ACTIVE-MODEL DISCIPLINE - the tracer feeds ONLY the selected algorithm
 ##                    (so two runs can be compared fairly on the stats board).
 ##   7. PRETEST PRIORS - the pretest seeds HMM, BKT and KST together.
-##   8. MASTERY GATE  - is_learned needs both the probability AND >= 3 answers.
+##   8. MASTERY GATE  - is_learned: probability over the threshold with MIN_EVIDENCE
+##      answers seen, OR a flawless run of the last RECENT_WINDOW adaptive answers.
 ##   9. SKIP PENALTY  - a skipped board task costs a LOT at low mastery and almost
 ##                    nothing at high mastery, never raises knowledge, and is
 ##                    counted per skill.
@@ -297,15 +298,33 @@ func _check_pretest_priors() -> void:
 func _check_mastery_gate() -> void:
 	var tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.BKT)
 	tracer.bkt_models["building"].p_learned = 0.95
-	tracer.learning_stats["building"] = {"correct": 0, "total": 2}
-	_note(not tracer.is_learned("building"), "mastery_needs_three_observations",
-		"total=2 p=0.95 -> learned=false")
-	tracer.learning_stats["building"] = {"correct": 3, "total": 3}
+	tracer.learning_stats["building"] = {"correct": 0, "total": 1, "recent": [true]}
+	_note(not tracer.is_learned("building"), "mastery_needs_two_observations",
+		"total=1 p=0.95 -> learned=false")
+	tracer.learning_stats["building"] = {"correct": 2, "total": 2, "recent": [true, true]}
 	_note(tracer.is_learned("building"), "mastery_unlocks_with_enough_evidence",
-		"total=3 p=0.95 -> learned=true")
+		"total=2 p=0.95 -> learned=true")
+	# Below the probability target AND no clean streak -> still not learned.
 	tracer.bkt_models["building"].p_learned = 0.4
-	_note(not tracer.is_learned("building"), "mastery_needs_the_probability_too",
-		"total=3 p=0.40 -> learned=false")
+	tracer.learning_stats["building"] = {"correct": 1, "total": 2, "recent": [false, true]}
+	_note(not tracer.is_learned("building"), "mastery_needs_the_probability_or_a_streak",
+		"total=2 p=0.40 recent=[false,true] -> learned=false")
+	# Recent-performance road: the model lags below the threshold but the learner
+	# just answered the last RECENT_WINDOW adaptive questions correctly.
+	tracer.learning_stats["building"] = {"correct": 3, "total": 4, "recent": [true, true]}
+	_note(tracer.is_learned("building"), "mastery_via_recent_streak",
+		"total=4 p=0.40 recent all correct -> learned=true")
+	tracer.learning_stats["building"] = {"correct": 3, "total": 5, "recent": [true, false]}
+	_note(not tracer.is_learned("building"), "streak_broken_by_a_wrong_answer",
+		"total=5 p=0.40 recent ends wrong -> learned=false")
+	# The learner-facing report names the target, the deciding road and the verdict.
+	var report: String = tracer.get_mastery_report("building")
+	_note(report.contains("verdict") and report.contains("50%"), "mastery_report_is_human_readable",
+		report)
+	tracer.learning_stats["building"] = {"correct": 4, "total": 4, "recent": [true, true]}
+	var learned_report: String = tracer.get_mastery_report("building")
+	_note(learned_report.contains("LEARNED"), "mastery_report_names_the_pass",
+		learned_report)
 
 
 # ===== 9. Skip penalty =====================================================

@@ -9,9 +9,10 @@ extends Node3D
 ##   - mc / image : answered on the floating panel (image questions show a
 ##                  diagram first). One click records and advances.
 ##   - handson    : the question panel shows the task and the automata board is
-##                  activated with that task. The learner must build the DFA and
-##                  press "Check task" on the board to submit. Only a correct
-##                  build is accepted and advances the test.
+##                  activated with that task. The learner builds the DFA and
+##                  presses "Check task" on the board to submit. A verified
+##                  build scores the item; "Skip task" gives up on it and
+##                  records it as INCORRECT — a stuck learner is never trapped.
 
 const SessionManager = preload("res://Testing/session_manager.gd")
 
@@ -65,15 +66,16 @@ func _ready() -> void:
 		_show_intro()
 	if workshop:
 		workshop.evaluated.connect(_on_workshop_evaluated)
-		# A test is a PROOF of learning, so the board must not offer a way past the
-		# build: the Skip option is switched off for the whole test room.
+		workshop.skipped.connect(_on_workshop_skipped)
+		# Skip stays off while the board is a passive sandbox; it is switched on
+		# per hands-on question in _show_current_question().
 		if workshop.builder is Control:
 			workshop.builder.call("set_skip_enabled", false)
 		workshop.set_active(false)
 
 func _show_intro() -> void:
 	if test_mode == "posttest":
-		test_panel.show_intro("You will now take the POST-TEST on DFA (Deterministic Finite Automata).\n\nPart 1: the same 15 multiple-choice questions from the pretest.\nPart 2: 2 hands-on tasks where you BUILD a DFA on the automata board and press \"Check task\" to submit - only a correct build continues.\n\nPress Start to begin.")
+		test_panel.show_intro("You will now take the POST-TEST on DFA (Deterministic Finite Automata).\n\nPart 1: the same 15 multiple-choice questions from the pretest.\nPart 2: 2 hands-on tasks where you BUILD a DFA on the automata board and press \"Check task\" to submit - a verified build scores the item, and \"Skip task\" gives up on it (recorded as wrong).\n\nPress Start to begin.")
 	else:
 		test_panel.show_intro("You will now take the PRETEST on DFA (Deterministic Finite Automata).\n\n15 multiple-choice questions covering all 6 skill areas. Some questions show a diagram. You cannot go back - answer carefully.\n\nPress Start to begin.")
 
@@ -93,6 +95,10 @@ func _show_current_question() -> void:
 		awaiting_handson = true
 		if workshop:
 			workshop.set_active(true)
+			if workshop.builder is Control:
+				# Give-up hatch: skipping a test build records it as INCORRECT
+				# instead of trapping a learner who cannot finish it.
+				workshop.builder.call("set_skip_enabled", true)
 			var task: Dictionary = session.get_current_hands_on_task()
 			if workshop.builder is Control and not task.is_empty():
 				workshop.builder.call("reset_for_task_lists",
@@ -103,6 +109,8 @@ func _show_current_question() -> void:
 	else:
 		if workshop:
 			workshop.set_active(false)
+			if workshop.builder is Control:
+				workshop.builder.call("set_skip_enabled", false)
 		test_panel.show_question(question, number, total)
 
 func _on_answer_selected(selected_index: int) -> void:
@@ -134,7 +142,23 @@ func _on_workshop_evaluated(correct: bool, message: String) -> void:
 		test_panel.show_next_button("Next >>")
 	else:
 		# Wrong build: stay on the board so the learner can fix and resubmit.
-		test_panel.set_feedback(message + "\n\nAdjust the DFA on the board and press \"Check task\" again to submit.", false)
+		test_panel.set_feedback(message + "\n\nAdjust the DFA on the board and press \"Check task\" again to submit - or press \"Skip task\" on the board to give up on this build (recorded as wrong).", false)
+
+## A hands-on build the learner gave up on. Skipping must never stall the test:
+## the item is recorded as INCORRECT (a skip never earns the point) and the test
+## moves on exactly like any other submitted answer.
+func _on_workshop_skipped(message: String) -> void:
+	if not awaiting_handson:
+		return
+	var result: Dictionary = session.submit_hands_on(false, message)
+	if not result.get("accepted", true):
+		return
+	if result.get("complete", false):
+		test_panel.set_feedback("Task skipped - recorded as incorrect. Test complete!", false)
+		test_panel.show_next_button("Finish")
+		return
+	test_panel.set_feedback("Task skipped - this build counts as incorrect. Continue when ready.", false)
+	test_panel.show_next_button("Next >>")
 
 func _on_next_pressed() -> void:
 	# The answer was recorded when it was given (and the item locked); pressing

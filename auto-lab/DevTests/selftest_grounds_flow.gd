@@ -4,7 +4,7 @@ extends SceneTree
 ##   Godot_v4.7-stable_win64_console.exe --path <project> --headless \
 ##     --script res://DevTests/selftest_grounds_flow.gd
 ##
-## It covers the three behaviours changed in the room controller:
+## It covers the behaviours changed in the room controller:
 ##   1. NO FROZEN PLAYER - no lesson or adaptive screen may leave the player
 ##      with physics/process disabled. This is the reported "the trap / dead
 ##      state part of the lesson freezes the player" bug: the board steps used
@@ -15,6 +15,9 @@ extends SceneTree
 ##   3. POST-TEST GATE - "Proceed to Post Test" stays locked until the
 ##      algorithm considers the learner knowledgeable enough (or the review
 ##      sweeps are spent, so the session always terminates).
+##   4. NO REPETITION - a topic the model already calls LEARNED is never taught,
+##      queued or asked again: the weak list excludes it, the pass skips it when
+##      moving between topics, and a round ends the moment mastery flips.
 
 const Library = preload("res://Testing/Lessons/lesson_library.gd")
 ## Autoloads are not visible as identifiers in --script mode, so the shared
@@ -82,6 +85,7 @@ func _process(_delta: float) -> bool:
 	_check_player_never_frozen()
 	_check_adaptive_reteach()
 	_check_posttest_gate()
+	_check_no_repetition()
 	_report()
 	return true
 
@@ -154,6 +158,10 @@ func _check_player_never_frozen() -> void:
 	seen += 1
 	if not _player_is_free():
 		offenders.append("builder task")
+	_grounds.call("_show_all_topics_learned", "selftest: nothing left to teach")
+	seen += 1
+	if not _player_is_free():
+		offenders.append("all-topics-learned")
 
 	_note(offenders.is_empty(), "player_never_frozen_on_any_screen",
 		"screens=%d offenders=%s" % [seen, str(offenders)])
@@ -262,6 +270,73 @@ func _check_posttest_gate() -> void:
 				tracer.record_learning_observation(str(skill), true)
 	_note(bool(_grounds.call("_ready_for_posttest")), "posttest_unlocks_once_knowledgeable",
 		"mastered=%d need=%d" % [int(_grounds.call("_mastered_skill_count")), _grounds.MASTERY_GATE_SKILLS])
+
+
+# ===== 4. No repetition of mastered material ==============================
+
+## Runs after the gate check, so every topic starts out LEARNED. Resetting a
+## topic's evidence window (begin_learning) is how a "still needs work" topic is
+## produced on demand.
+func _check_no_repetition() -> void:
+	var tracer = _grounds.session.knowledge_tracer
+	var next_button: Button = _grounds.get("next_button")
+
+	# (a) The weak list must be EMPTY here. The old fallback refilled it with all
+	#     six topics, which is what re-taught everything from scratch.
+	var weak: Array = _grounds.call("_weak_skills")
+	_note(weak.is_empty(), "weak_list_excludes_mastered_topics", "weak=%s" % str(weak))
+
+	# (b) A fully mastered learner goes straight to the post test: no topic is
+	#     started, so nothing accepted by the model is shown twice.
+	var teaching_before: String = _grounds.get("_learning_skill")
+	_grounds.set("_analysis_skills", tracer.get_skills_by_weakness())
+	_grounds.call("_start_adaptive_learning")
+	_note(next_button.text == "Proceed to Post Test" \
+			and String(_grounds.get("_learning_skill")) == teaching_before,
+		"fully_mastered_run_skips_the_adaptive_pass", "next=\"%s\"" % next_button.text)
+
+	# (c) Mixed state: the pass queues ONLY the unlearned topics and starts on one
+	#     of them, weakest first.
+	tracer.begin_learning("building")
+	tracer.begin_learning("set_builder")
+	_grounds.call("_start_adaptive_learning")
+	var plan: Array = _grounds.get("_analysis_skills")
+	var repeats_mastered := false
+	for skill in plan:
+		if tracer.is_learned(str(skill)):
+			repeats_mastered = true
+	_note(plan.size() == 2 and not repeats_mastered \
+			and not tracer.is_learned(String(_grounds.get("_learning_skill"))),
+		"adaptive_pass_starts_on_an_unlearned_topic",
+		"plan=%s teaching=%s" % [str(plan), String(_grounds.get("_learning_skill"))])
+
+	# (d) Mastery flipping MID-ROUND ends the round: the questions still queued
+	#     for that topic are dropped instead of being asked anyway.
+	var round_skill := "definition"
+	_grounds.call("_begin_learning_skill", round_skill)
+	_grounds.session.learning_phase = 5
+	_grounds.call("_show_challenge")
+	var queued: int = _grounds.get("_challenge_queue").size()
+	for i in range(tracer.MIN_EVIDENCE):
+		tracer.record_learning_observation(round_skill, true)
+	_note(tracer.is_learned(round_skill), "topic_can_be_mastered_mid_round",
+		"learned=%s" % tracer.is_learned(round_skill))
+	_grounds.call("_on_learning_next")
+	_note(int(_grounds.session.learning_phase) == 6 and int(_grounds.get("_challenge_total")) == 0,
+		"mastered_topic_ends_the_round_early", "phase=%d asked=%d of %d queued" % [
+			int(_grounds.session.learning_phase), int(_grounds.get("_challenge_total")), queued])
+
+	# (e) Moving between topics skips any that became LEARNED meanwhile -
+	#     re-entering one would repeat it AND wipe the evidence that proved it.
+	tracer.begin_learning(round_skill)
+	tracer.begin_learning("simulation")
+	_grounds.set("_analysis_skills", [round_skill, "list", "simulation"])
+	_grounds.set("_analysis_skill_index", 0)
+	_grounds.session.learning_phase = 7
+	_grounds.call("_show_learning_end")
+	_note(int(_grounds.get("_analysis_skill_index")) == 2 and next_button.text == "Next Topic",
+		"skill_end_skips_mastered_topics", "index=%d next=\"%s\"" % [
+			int(_grounds.get("_analysis_skill_index")), next_button.text])
 
 
 func _report() -> void:

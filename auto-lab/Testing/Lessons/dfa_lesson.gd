@@ -34,6 +34,13 @@ const DFA_ENDS_A := {
 	"transitions": {"q0|a": "q1", "q0|b": "q0", "q1|a": "q1", "q1|b": "q0"},
 }
 
+## Complete DFA over {a,b} whose states are ALL accepting (F = Q) — a legal DFA
+## used to test whether the learner knows F may be any subset of Q.
+const DFA_ALL_ACCEPT := {
+	"states": ["q0", "q1"], "alphabet": ["a", "b"], "start": "q0", "accepting": ["q0", "q1"],
+	"transitions": {"q0|a": "q1", "q0|b": "q0", "q1|a": "q0", "q1|b": "q1"},
+}
+
 ## Accepts strings over {0,1} that END with '01'.
 const DFA_ENDS_01 := {
 	"states": ["q0", "q1", "q2"], "alphabet": ["0", "1"], "start": "q0", "accepting": ["q2"],
@@ -520,12 +527,6 @@ static func _finish_definition(steps: Array) -> Dictionary:
 
 # ===== 2. IDENTIFICATION OF DIAGRAM ========================================
 
-## Checkpoint with a diagram attached (images live under the topic folder, e.g. res://Images/dfa/).
-static func _mc_img(id: String, prompt: String, image: String, options: Array, correct: int, explain := "", hint := "") -> Dictionary:
-	var step := _mc(id, prompt, options, correct, explain, hint)
-	step["checkpoint"]["image"] = image
-	return step
-
 static func _module_identification() -> Dictionary:
 	var steps: Array = []
 	steps.append(_info(
@@ -553,7 +554,8 @@ static func _module_identification() -> Dictionary:
 		2,
 		"An epsilon transition consumes no input symbol, which only epsilon-NFAs may have.",
 		"Which kind of move lets the machine advance without reading anything?"))
-	steps.append(_mc_img("idn_diagram_1", "Is the diagram below a valid DFA? Why, or why not?", "res://Images/dfa/q11.png",
+	steps.append(_mc_board("idn_diagram_1", "Refer to the DFA on the whiteboard. BOTH states are drawn with a double ring (both are accepting). Is this machine a valid DFA?",
+		DFA_ALL_ACCEPT,
 		["No: there should not be more than one accepting state in F",
 		"Yes, because DFAs must have more than one accepting state",
 		"No: there is no non-accepting state, since F should not equal Q",

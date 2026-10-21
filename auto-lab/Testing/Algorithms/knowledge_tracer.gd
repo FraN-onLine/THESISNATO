@@ -19,6 +19,31 @@ enum AlgorithmType { HMM, BKT, KST }
 ## skill you have not learnt costs a lot.
 const SKIP_PENALTY := 0.5
 
+## Mastery policy. A skill is LEARNED when EITHER
+##   * the ACTIVE model's probability clears MASTERY_THRESHOLD after at least
+##     MIN_EVIDENCE adaptive answers, OR
+##   * the learner just answered the last RECENT_WINDOW adaptive questions on
+##     that skill correctly.
+## The second path exists because the models converge SLOWER than a learner
+## improves: someone who misses the pretest and then answers everything
+## correctly can sit just under the threshold forever, which used to lock them
+## out of the post test (most visible with KST, whose wrong answers pull the
+## estimate down hard).
+##
+## The numbers are deliberately generous — the study measures how the three
+## tracers PREDICT, not how hard the gate is, and a learner who answers two
+## questions correctly on a topic has demonstrated it well enough to move on.
+## The models' own parameters are untouched so the algorithm comparison stays
+## valid; leniency lives entirely here.
+const MASTERY_THRESHOLD := 0.5
+const MIN_EVIDENCE := 2
+const RECENT_WINDOW := 2
+
+## How many of the six skills must be LEARNED before the post test unlocks. Lives
+## here with the rest of the criteria so every record of a run can quote the exact
+## gate that was in force, and the Testing Grounds only aliases it.
+const MASTERY_GATE_SKILLS := 4
+
 ## Short, learner-facing description of every parameter the ACTIVE algorithm
 ## shows on the stats board. Kept next to the models so the board legend and the
 ## Algorithm Catalog can never drift apart.
@@ -229,10 +254,18 @@ func record_learning_observation(skill: String, correct: bool) -> void:
 	state_hint = "learning"
 	record_observation(skill, correct)
 	if not learning_stats.has(skill):
-		learning_stats[skill] = {"correct": 0, "total": 0}
+		learning_stats[skill] = {"correct": 0, "total": 0, "recent": []}
 	learning_stats[skill]["total"] += 1
 	if correct:
 		learning_stats[skill]["correct"] += 1
+	# Keep only the last RECENT_WINDOW outcomes: the recent-performance mastery
+	# path asks exactly "were the last RECENT_WINDOW answers on this skill all
+	# correct?".
+	var recent: Array = learning_stats[skill].get("recent", [])
+	recent.append(correct)
+	while recent.size() > RECENT_WINDOW:
+		recent.pop_front()
+	learning_stats[skill]["recent"] = recent
 
 ## Record a SKIPPED whiteboard task on one skill. Used by the automata board's
 ## Skip option: the learner chose not to build the machine, which is a real
@@ -295,12 +328,46 @@ func get_knowledge_probability(skill: String) -> float:
 func get_mastery_percentage(skill: String) -> float:
 	return get_knowledge_probability(skill) * 100.0
 
-## Check if a skill is learned
-func is_learned(skill: String, threshold: float = 0.7) -> bool:
-	# A correct response alone is not mastery. Require repeated adaptive evidence
-	# while still using the pretest observations as the model's starting point.
+## Check if a skill is learned. Two roads to "learned" (see MASTERY_THRESHOLD):
+## the model's probability clearing the threshold with enough evidence, or a
+## flawless run of the most recent answers — model convergence lags behind a
+## learner who has clearly got it.
+func is_learned(skill: String, threshold: float = MASTERY_THRESHOLD) -> bool:
 	var evidence: Dictionary = learning_stats.get(skill, {"total": 0})
-	return evidence.get("total", 0) >= 3 and get_knowledge_probability(skill) >= threshold
+	if int(evidence.get("total", 0)) < MIN_EVIDENCE:
+		return false
+	if get_knowledge_probability(skill) >= threshold:
+		return true
+	var recent: Array = evidence.get("recent", [])
+	return recent.size() >= RECENT_WINDOW and not recent.has(false)
+
+## One line the learning screens print so the learner can always see HOW the
+## "am I knowledgeable?" decision is made for the current skill: the active
+## model's probability against the target, the evidence count, the recent
+## streak, the verdict, and WHICH of the two roads produced that verdict.
+func get_mastery_report(skill: String) -> String:
+	var evidence: Dictionary = learning_stats.get(skill, {"total": 0})
+	var recent: Array = evidence.get("recent", [])
+	var streak := 0
+	for i in range(recent.size() - 1, -1, -1):
+		if bool(recent[i]):
+			streak += 1
+		else:
+			break
+	var total := int(evidence.get("total", 0))
+	var learned := is_learned(skill)
+	var reason := "needs %d answers first" % MIN_EVIDENCE if total < MIN_EVIDENCE else "below target and streak broken"
+	if learned:
+		reason = "knowledge target met" if get_knowledge_probability(skill) >= MASTERY_THRESHOLD \
+			else "last %d answers all correct" % RECENT_WINDOW
+	return "%s mastery check — knowledge %.0f%% of the %.0f%% target · answers seen %d · current streak %d correct · verdict: %s (%s)" % [
+		get_algorithm_callout(),
+		get_knowledge_probability(skill) * 100.0,
+		MASTERY_THRESHOLD * 100.0,
+		total,
+		streak,
+		"LEARNED" if learned else "not learned yet",
+		reason]
 
 ## Get the expected accuracy for a skill
 func get_expected_accuracy(skill: String) -> float:

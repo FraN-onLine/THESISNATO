@@ -58,16 +58,26 @@ var workshop_attempts: Dictionary = {}
 ## knowledgeable enough for the post test. (Adaptive Learning Completion Time)
 var adaptive_start_msec: int = 0
 var adaptive_end_msec: int = 0
+## Whole-session stopwatch: starts when this session object comes into existence
+## (the learner entering the Testing Grounds, or an explicit reset_session()) and
+## freezes when the post test is completed. This is the headline "start to
+## finish" number; the adaptive and post-test clocks below are phases inside it.
+var session_start_msec: int = 0
+var session_end_msec: int = 0
+## Pretest phase window — the only phase not otherwise timed, so with the two
+## clocks below the total can be accounted for phase by phase.
+var pretest_start_msec: int = 0
+var pretest_end_msec: int = 0
 ## Post-test stopwatch, mirrored by CountingTimerOverlay. These two fields are
 ## the single source of truth; the overlay only renders them.
 var timer_started: float = 0.0
 var timer_raw_seconds: float = 0.0
-## True once this completed session has been appended to the student's
-## results file, so repeated save_session_data() calls cannot duplicate it.
+## True once this completed session has been written into its own results folder,
+## so repeated save_session_data() calls cannot duplicate it.
 var _student_results_saved: bool = false
-## Path of the student results file written this session (for display).
+## Path of the session record written this run (for display).
 var _student_results_path: String = ""
-## Same idempotency guard, for the shared algorithm-performance summary.
+## Same idempotency guard, for the per-run algorithm-performance summary.
 var _algorithm_summary_saved: bool = false
 var _algorithm_summary_path: String = ""
 ## The model's learned / not-learned verdict per skill, snapshotted the instant
@@ -79,6 +89,7 @@ func _init() -> void:
 	profile_manager = ProfileManager.new()
 	knowledge_tracer = KnowledgeTracer.new(KnowledgeTracer.AlgorithmType.HMM)
 	gamification = Gamification.new()
+	_start_session_clock()
 
 ## Set the algorithm type (HMM, BKT, or KST)
 func set_algorithm_type(algo_type: int) -> void:
@@ -107,6 +118,7 @@ func start_session() -> void:
 	workshop_attempts.clear()
 	_recorded_lesson_observations.clear()
 	_reset_study_timing()
+	_start_session_clock()
 	# A new session must re-seed the models from ITS OWN pretest, otherwise the
 	# previous learner's priors keep driving the estimates (old bug: the priors
 	# were only ever applied once per process).
@@ -160,6 +172,8 @@ func save_profile(name: String, gender: String, age: int, familiar: bool) -> voi
 ## Start the pretest
 func start_pretest() -> void:
 	state = SessionState.PRETEST
+	if pretest_start_msec == 0:
+		pretest_start_msec = Time.get_ticks_msec()
 	current_question_index = 0
 	current_question_answered = false
 	pretest_answers.clear()
@@ -248,9 +262,11 @@ func advance_question() -> Dictionary:
 	if current_question_index >= questions.size():
 		if state == SessionState.PRETEST:
 			state = SessionState.ANALYSIS
+			_close_pretest_window()
 		elif state == SessionState.POST_TEST:
 			state = SessionState.COMPLETE
 			stop_posttest_timer()
+			_close_session_window()
 		current_question = {}
 		current_question_answered = false
 		return {"accepted": true, "complete": true, "correct": false, "skill": ""}
@@ -336,21 +352,14 @@ func start_adaptive_learning(skill: String) -> void:
 ## Skills to visit in this learner's weakness order, SKIPPING the ones already
 ## mastered. The old flow re-taught mastered skills, which wasted the learner's
 ## time and diluted the evidence for the skills that actually needed work.
+## An EMPTY result means every topic is accepted: the caller must then end the
+## pass rather than fall back to the full order and repeat it all.
 func learning_plan() -> Array:
-	var order: Array = knowledge_tracer.get_skills_by_weakness()
 	var plan: Array = []
-	for skill in order:
+	for skill in knowledge_tracer.get_skills_by_weakness():
 		if not knowledge_tracer.is_learned(str(skill)):
 			plan.append(str(skill))
-	if plan.is_empty():
-		plan = order.duplicate()
 	return plan
-
-## Skill to teach at `index` of a plan, or "" when the plan is exhausted.
-func plan_skill_at(plan: Array, index: int) -> String:
-	if index < 0 or index >= plan.size():
-		return ""
-	return str(plan[index])
 
 ## Record exactly ONE adaptive observation per lesson checkpoint. `source_id`
 ## makes the call idempotent: re-showing the same graded checkpoint (after a
@@ -453,6 +462,7 @@ func start_posttest() -> void:
 	# The post test is the algorithm's verdict that the learner IS knowledgeable:
 	# freeze the adaptive clock (if still running), snapshot the model's
 	# knowledge state, and start the post-test stopwatch.
+	_close_pretest_window()
 	_close_adaptive_window()
 	if timer_started <= 0.0:
 		timer_started = Time.get_unix_time_from_system()
@@ -509,13 +519,20 @@ func _calculate_test_results(answers: Array) -> Dictionary:
 # ===== Comparative-study metrics & per-student storage ====================
 
 ## A skill counts as "actually known" on the post test at or above this
-## percentage - the same 0.7 bar the tracer uses for its own is_learned().
+## percentage — the independent bar used to check the model's end-of-learning
+## verdict against real behaviour (Knowledge State Accuracy). It is deliberately
+## NOT the mastery gate: the gate decides when teaching stops, this one decides
+## whether that decision turned out to be right.
 const KNOWLEDGE_CONFIRM_THRESHOLD := 70.0
 
 ## Reset every study clock / snapshot for a brand-new learner.
 func _reset_study_timing() -> void:
 	adaptive_start_msec = 0
 	adaptive_end_msec = 0
+	session_start_msec = 0
+	session_end_msec = 0
+	pretest_start_msec = 0
+	pretest_end_msec = 0
 	timer_started = 0.0
 	timer_raw_seconds = 0.0
 	predicted_knowledge_state = {}
@@ -523,6 +540,10 @@ func _reset_study_timing() -> void:
 	_student_results_path = ""
 	_algorithm_summary_saved = false
 	_algorithm_summary_path = ""
+	# A new learner gets a NEW run folder: reusing the cached one would file two
+	# different runs under the same algorithm/student/second name.
+	_run_results_dir = ""
+	_results_indexed = false
 
 ## Stop the post-test stopwatch and freeze its value.
 func stop_posttest_timer() -> void:
@@ -561,13 +582,51 @@ func get_adaptive_completion_seconds() -> float:
 	var end_msec := adaptive_end_msec if adaptive_end_msec > 0 else Time.get_ticks_msec()
 	return float(end_msec - adaptive_start_msec) / 1000.0
 
-## The six numbers a completed session contributes to the comparative study:
+## Start the whole-session clock. Idempotent, so the first start wins and no
+## later phase can reset the total.
+func _start_session_clock() -> void:
+	if session_start_msec == 0:
+		session_start_msec = Time.get_ticks_msec()
+
+## Freeze the total at post-test completion. Idempotent, so re-entering the
+## results screen cannot stretch the recorded duration.
+func _close_session_window() -> void:
+	if session_end_msec == 0 and session_start_msec > 0:
+		session_end_msec = Time.get_ticks_msec()
+
+func _close_pretest_window() -> void:
+	if pretest_end_msec == 0 and pretest_start_msec > 0:
+		pretest_end_msec = Time.get_ticks_msec()
+
+## TOTAL time from entering the system until the post test was completed
+## (live while the run is still in progress).
+func get_total_session_seconds() -> float:
+	if session_start_msec <= 0:
+		return 0.0
+	var end_msec := session_end_msec if session_end_msec > 0 else Time.get_ticks_msec()
+	return float(end_msec - session_start_msec) / 1000.0
+
+## Seconds spent inside the pretest itself.
+func get_pretest_seconds() -> float:
+	if pretest_start_msec <= 0:
+		return 0.0
+	var end_msec := pretest_end_msec if pretest_end_msec > 0 else Time.get_ticks_msec()
+	return float(end_msec - pretest_start_msec) / 1000.0
+
+## "M:SS" rendering of a duration, for the results screen and the PDF report.
+static func format_duration(seconds: float) -> String:
+	var total := int(round(seconds))
+	return "%d:%02d" % [int(total / 60.0), total % 60]
+
+## The numbers a completed session contributes to the comparative study:
 ##   average_pretest_score         mean % across the pretest items
 ##   average_posttest_score        mean % across the post-test items
 ##   performance_improvement_rate  relative gain over the pretest baseline (%)
 ##   predictive_accuracy           hit-rate of the algorithm actually used (%)
 ##   adaptive_learning_seconds     start of learning -> algorithm says mastered
 ##   knowledge_state_accuracy      end-of-learning snapshot vs real post test (%)
+##   total_session_seconds         entering the system -> post test completed
+##   pretest_seconds / posttest_seconds  the two remaining phases of that total
 func get_study_metrics() -> Dictionary:
 	var pretest := _calculate_test_results(pretest_answers)
 	var posttest := _calculate_test_results(posttest_answers)
@@ -603,6 +662,8 @@ func get_study_metrics() -> Dictionary:
 		"adaptive_learning_seconds": get_adaptive_completion_seconds(),
 		"knowledge_state_accuracy": ksa["accuracy"],
 		"knowledge_state_detail": ksa,
+		"total_session_seconds": get_total_session_seconds(),
+		"pretest_seconds": get_pretest_seconds(),
 		"posttest_seconds": get_posttest_seconds(),
 	}
 
@@ -633,44 +694,149 @@ func _knowledge_state_accuracy(posttest: Dictionary) -> Dictionary:
 	var accuracy := float(matches) / float(compared) * 100.0 if compared > 0 else 0.0
 	return {"accuracy": accuracy, "matches": matches, "compared": compared, "per_skill": per_skill}
 
-## Append this completed test to the student's own JSON file under
-## user://results/<name>.json. One file per student, one record per run, so a
-## comparative study can read every learner straight from a single folder.
-## Idempotent per session: the second call returns the same path without
-## appending a duplicate record. Returns the path written.
-func save_student_results() -> String:
-	if _student_results_saved and _student_results_path != "":
-		return _student_results_path
-	var profile: Dictionary = profile_manager.get_profile()
-	var student_name := str(profile.get("name", "")).strip_edges()
-	if student_name == "":
-		student_name = "student"
+# ===== Per-run results folders ==============================================
+
+## Root that holds every recorded run.
+const RESULTS_ROOT := "user://results"
+## Cross-run index: one entry per completed run, so the study can group runs by
+## algorithm / learner / input mode without opening a single folder.
+const RESULTS_INDEX := "user://results/index.json"
+## The files written inside a run folder: the full session record, the algorithm
+## comparison, and the printable profile report.
+const SESSION_FILE := "session.json"
+const SUMMARY_FILE := "algorithm_summary.json"
+const REPORT_FILE := "profile_report.pdf"
+
+## Folder this run writes into, cached on first use so every file of one session
+## lands in the same place even when the clock ticks over between saves.
+var _run_results_dir := ""
+## Set once this run has its entry in RESULTS_INDEX.
+var _results_indexed := false
+
+## Filesystem-safe version of a label: letters, digits, - and _ survive, every
+## other character collapses into a single underscore.
+func _safe_name(value: String, fallback: String) -> String:
 	var safe := ""
-	for i in range(student_name.length()):
-		var c := student_name[i]
+	for i in range(value.length()):
+		var c := value[i]
 		if "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_".contains(c):
 			safe += c
 		elif not safe.ends_with("_"):
 			safe += "_"
-	if safe.strip_edges() == "" or safe == "_":
-		safe = "student"
-	var dir := "user://results"
+	safe = safe.strip_edges()
+	if safe == "" or safe == "_":
+		return fallback
+	return safe
+
+## The learner's display name, or "student" when the profile was never filled in.
+func _student_name() -> String:
+	var profile: Dictionary = profile_manager.get_profile()
+	var student_name := str(profile.get("name", "")).strip_edges()
+	return student_name if student_name != "" else "student"
+
+## "VR" or "PC". Resolved through the scene tree at RUNTIME: InputMode is an
+## autoload, and naming it directly here would break the headless test runs that
+## load this script before the autoloads exist.
+func _input_mode_label() -> String:
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		var manager: Node = (loop as SceneTree).root.get_node_or_null("InputMode")
+		if manager != null and manager.has_method("is_vr"):
+			return "VR" if manager.call("is_vr") else "PC"
+	return "PC"
+
+## Every rule that decided whether THIS learner counted as knowledgeable, quoted
+## into the record and onto the results screen. The folder name says which
+## algorithm ran; this says under which criteria it ran, so a run can be re-read
+## later without trusting memory.
+func get_run_criteria() -> Dictionary:
+	var learned_at_gate := 0
+	for skill in predicted_knowledge_state:
+		if bool(predicted_knowledge_state[skill]):
+			learned_at_gate += 1
+	return {
+		"algorithm": get_algorithm_label(),
+		"algorithm_callout": get_algorithm_callout(),
+		"algorithm_id": selected_algorithm,
+		"input_mode": _input_mode_label(),
+		"mastery_threshold": KnowledgeTracer.MASTERY_THRESHOLD,
+		"min_evidence": KnowledgeTracer.MIN_EVIDENCE,
+		"recent_window": KnowledgeTracer.RECENT_WINDOW,
+		"mastery_gate_skills": KnowledgeTracer.MASTERY_GATE_SKILLS,
+		"skills_total": KnowledgeTracer.SKILL_ORDER.size(),
+		"skills_learned_at_gate": learned_at_gate,
+		"skip_penalty": KnowledgeTracer.SKIP_PENALTY,
+		"skipped_tasks": knowledge_tracer.get_skip_stats(),
+		"knowledge_confirm_threshold": KNOWLEDGE_CONFIRM_THRESHOLD,
+	}
+
+## Folder for THIS run: <ALGO>__<Student>__<MODE>__<YYYY-MM-DD_HHMMSS>. The name
+## carries the factors the comparative study groups by, so runs stay tellable
+## apart from the file system alone; a numeric suffix separates two runs started
+## in the same second.
+func _results_run_dir() -> String:
+	if _run_results_dir != "":
+		return _run_results_dir
+	DirAccess.make_dir_recursive_absolute(RESULTS_ROOT)
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("T", "_")
+	var base := "%s__%s__%s__%s" % [
+		get_algorithm_callout(), _safe_name(_student_name(), "student"), _input_mode_label(), stamp]
+	var dir := "%s/%s" % [RESULTS_ROOT, base]
+	var suffix := 2
+	while DirAccess.dir_exists_absolute(dir):
+		dir = "%s/%s_%d" % [RESULTS_ROOT, base, suffix]
+		suffix += 1
 	DirAccess.make_dir_recursive_absolute(dir)
-	var path := "%s/%s.json" % [dir, safe]
-	# Keep every earlier run of the SAME student (longitudinal comparison).
-	var sessions: Array = []
-	if FileAccess.file_exists(path):
-		var existing := FileAccess.open(path, FileAccess.READ)
+	_run_results_dir = dir
+	return dir
+
+## One entry per completed run in user://results/index.json — the cross-run view
+## that replaces the old single shared summary file.
+func _append_results_index() -> void:
+	if _results_indexed:
+		return
+	var dir := _results_run_dir()
+	var metrics: Dictionary = get_study_metrics()
+	metrics.erase("knowledge_state_detail")  # bulky per-skill table: lives in session.json
+	var entry := {
+		"folder": dir.get_file(),
+		"path": dir,
+		"timestamp": Time.get_datetime_string_from_system(),
+		"student": _student_name(),
+		"criteria": get_run_criteria(),
+		"metrics": metrics,
+	}
+	var runs: Array = []
+	if FileAccess.file_exists(RESULTS_INDEX):
+		var existing := FileAccess.open(RESULTS_INDEX, FileAccess.READ)
 		if existing:
 			var json := JSON.new()
 			if json.parse(existing.get_as_text()) == OK and json.data is Dictionary \
-					and json.data.has("sessions") and json.data["sessions"] is Array:
-				sessions = json.data["sessions"]
+					and json.data.has("runs") and json.data["runs"] is Array:
+				runs = json.data["runs"]
 			existing.close()
-	sessions.append({
-		"timestamp": Time.get_datetime_string_from_system(),
-		"algorithm": get_algorithm_label(),
-		"algorithm_id": selected_algorithm,
+	runs.append(entry)
+	_write_json(RESULTS_INDEX, {
+		"layout": "one folder per completed run, holding %s, %s and %s" % [SESSION_FILE, SUMMARY_FILE, REPORT_FILE],
+		"runs": runs,
+		"run_count": runs.size(),
+	})
+	_results_indexed = true
+
+## Write this completed run as <run folder>/session.json: the learner profile, the
+## criteria in force, the study metrics, both tests and their answers, the model
+## state and the whiteboard analytics. One folder per run (instead of one growing
+## file per student) keeps two runs of the same learner on DIFFERENT algorithms
+## side by side and comparable. Idempotent per session: a second call returns the
+## same path without rewriting. Returns the path written.
+func save_student_results() -> String:
+	if _student_results_saved and _student_results_path != "":
+		return _student_results_path
+	var path := "%s/%s" % [_results_run_dir(), SESSION_FILE]
+	_write_json(path, {
+		"saved_at": Time.get_datetime_string_from_system(),
+		"student": profile_manager.get_profile(),
+		"criteria": get_run_criteria(),
 		"metrics": get_study_metrics(),
 		"pretest": _calculate_test_results(pretest_answers),
 		"posttest": _calculate_test_results(posttest_answers),
@@ -680,24 +846,21 @@ func save_student_results() -> String:
 		"knowledge_tracer": knowledge_tracer.to_dict(),
 		"workshop_attempts": workshop_attempts,
 	})
-	_write_json(path, {"student": profile, "session_count": sessions.size(), "sessions": sessions})
 	_student_results_saved = true
 	_student_results_path = path
+	_append_results_index()
 	return path
 
-## Append this run's algorithm-performance summary to a SHARED file,
-## user://results/algorithm_summary.json: one record per completed session
-## across all students. The record holds each algorithm's prediction hit-rate
-## (HMM / BKT / KST), the accuracy of the one that was actually used, and which
-## algorithm performed best this run - so evidence for "which model should the
-## POC ship" accumulates over the whole study. Idempotent per session, exactly
-## like save_student_results(). Returns the path written.
+## Write this run's algorithm-performance summary as <run folder>/algorithm_summary.json:
+## each algorithm's prediction hit-rate (HMM / BKT / KST), the accuracy of the one
+## actually used, and which model performed best in this run — the evidence for
+## "which model should the POC ship". The cross-run accumulation lives in
+## user://results/index.json. Idempotent per session, exactly like
+## save_student_results(). Returns the path written.
 func save_algorithm_summary() -> String:
 	if _algorithm_summary_saved and _algorithm_summary_path != "":
 		return _algorithm_summary_path
-	var dir := "user://results"
-	DirAccess.make_dir_recursive_absolute(dir)
-	var path := "%s/algorithm_summary.json" % dir
+	var path := "%s/%s" % [_results_run_dir(), SUMMARY_FILE]
 	var comparison: Dictionary = knowledge_tracer.get_algorithm_comparison()
 	var best_key := ""
 	var best_acc := -1.0
@@ -708,28 +871,21 @@ func save_algorithm_summary() -> String:
 		if float(stats.get("accuracy", 0.0)) > best_acc:
 			best_acc = float(stats.get("accuracy", 0.0))
 			best_key = key
-	var profile: Dictionary = profile_manager.get_profile()
-	var records: Array = []
-	if FileAccess.file_exists(path):
-		var existing := FileAccess.open(path, FileAccess.READ)
-		if existing:
-			var json := JSON.new()
-			if json.parse(existing.get_as_text()) == OK and json.data is Dictionary \
-					and json.data.has("records") and json.data["records"] is Array:
-				records = json.data["records"]
-			existing.close()
-	records.append({
+	var metrics: Dictionary = get_study_metrics()
+	_write_json(path, {
 		"timestamp": Time.get_datetime_string_from_system(),
-		"student": str(profile.get("name", "student")),
+		"student": _student_name(),
+		"criteria": get_run_criteria(),
 		"algorithm_id": selected_algorithm,
 		"algorithm_label": get_algorithm_label(),
 		"comparison": comparison,
-		"predictive_accuracy": get_study_metrics()["predictive_accuracy"],
+		"predictive_accuracy": metrics["predictive_accuracy"],
+		"knowledge_state_accuracy": metrics["knowledge_state_accuracy"],
 		"recommended": best_key,
 	})
-	_write_json(path, {"records": records})
 	_algorithm_summary_saved = true
 	_algorithm_summary_path = path
+	_append_results_index()
 	return path
 
 ## Get the current question
@@ -772,10 +928,10 @@ func save_session_data() -> void:
 		file.close()
 	_write_json("user://pretest_data.json", {"profile": profile_manager.get_profile(), "answers": pretest_answers})
 	_write_json("user://posttest_data.json", {"profile": profile_manager.get_profile(), "answers": posttest_answers})
-	# Once the session is COMPLETE (post test finished), also append the full
-	# comparative-study record to this student's own results file
-	# (user://results/<name>.json). save_student_results() is idempotent per
-	# session, so this cannot duplicate the record.
+	# Once the session is COMPLETE (post test finished), also write the full
+	# comparative-study record into this run's own folder under
+	# user://results/<ALGO>__<Student>__<MODE>__<timestamp>/. save_student_results()
+	# is idempotent per session, so this cannot duplicate the record.
 	if state == SessionState.COMPLETE:
 		save_student_results()
 
@@ -785,11 +941,14 @@ func _write_json(path: String, data: Dictionary) -> void:
 		file.store_string(JSON.stringify(data, "\t"))
 		file.close()
 
-## Write a simple portable PDF report after the post-test is complete.
+## Write a simple portable PDF report after the post-test is complete. It lands in
+## THIS run's folder next to the JSON records, so every artifact of one run travels
+## together and the report names the algorithm and criteria it was produced under.
 func generate_profile_pdf() -> String:
 	var profile: Dictionary = profile_manager.get_profile()
 	var pretest := _calculate_test_results(pretest_answers)
 	var posttest := _calculate_test_results(posttest_answers)
+	var criteria := get_run_criteria()
 	var lines: Array[String] = [
 		"AUTOLAB PROFILE REPORT",
 		"Name: %s" % profile.get("name", ""),
@@ -797,8 +956,26 @@ func generate_profile_pdf() -> String:
 		"Age: %s" % profile.get("age", ""),
 		"Familiar with automata: %s" % ("Yes" if profile.get("familiar_with_automata", false) else "No"),
 		"",
+		"Algorithm: %s" % str(criteria.get("algorithm", "")),
+		"Input mode: %s" % str(criteria.get("input_mode", "")),
+		"Mastery gate: learned at %.0f%% with %d+ answers, or the last %d correct" % [
+			float(criteria.get("mastery_threshold", 0.0)) * 100.0,
+			int(criteria.get("min_evidence", 0)),
+			int(criteria.get("recent_window", 0))],
+		"Post test unlocked at %d of %d topics learned; reached %d" % [
+			int(criteria.get("mastery_gate_skills", 0)),
+			int(criteria.get("skills_total", 0)),
+			int(criteria.get("skills_learned_at_gate", 0))],
+		"Run folder: %s" % _results_run_dir().get_file(),
+		"",
 		"Pretest: %d/%d (%.1f%%)" % [pretest["correct"], pretest["total"], pretest["percentage"]],
 		"Post-test: %d/%d (%.1f%%)" % [posttest["correct"], posttest["total"], posttest["percentage"]],
+		"",
+		"Total session time: %s" % format_duration(get_total_session_seconds()),
+		"  Pretest %s / adaptive learning %s / post test %s" % [
+			format_duration(get_pretest_seconds()),
+			format_duration(get_adaptive_completion_seconds()),
+			format_duration(get_posttest_seconds())],
 		"",
 		"Skill summary:"
 	]
@@ -829,7 +1006,7 @@ func generate_profile_pdf() -> String:
 	for offset in offsets.slice(1):
 		pdf += "%010d 00000 n \n" % offset
 	pdf += "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % [objects.size() + 1, xref_offset]
-	var path := "user://profile_data.pdf"
+	var path := "%s/%s" % [_results_run_dir(), REPORT_FILE]
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_buffer(pdf.to_utf8_buffer())
